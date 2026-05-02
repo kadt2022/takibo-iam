@@ -1,0 +1,257 @@
+
+@startuml
+title Takibu TIS-Core — Modèle UML (multi-tenant, sans héritage)
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+hide empty methods
+
+'========================
+' ENUMS
+'========================
+enum PermissionEffect {
+  ALLOW
+  DENY
+}
+
+'========================
+' ENTITÉS DE BASE
+'========================
+class User {
+  +id: UUID
+  +space_id: UUID
+  +created_at: Instant
+  +updated_at: Instant
+  +version: long
+  --
+  +username: String
+  +email: String
+  +password_hash: String
+  +first_name: String
+  +last_name: String
+  +status: String  <<ACTIVE|INACTIVE|LOCKED|SUSPENDED>>
+  +last_login_at: Instant
+}
+
+class Role {
+  +id: UUID
+  +space_id: UUID
+  +created_at: Instant
+  +updated_at: Instant
+  +version: long
+  --
+  +code: String
+  +name: String
+  +description: String
+}
+
+class Permission {
+  +id: UUID
+  +space_id: UUID
+  +created_at: Instant
+  +updated_at: Instant
+  +version: long
+  --
+  +code: String
+  +name: String
+  +description: String
+}
+
+class Group {
+  +id: UUID
+  +space_id: UUID
+  +created_at: Instant
+  +updated_at: Instant
+  +version: long
+  --
+  +code: String
+  +name: String
+  +description: String
+}
+
+'========================
+' FÉDÉRATION
+'========================
+class UserIdentity {
+  +id: UUID
+  +space_id: UUID
+  +created_at: Instant
+  +updated_at: Instant
+  +version: long
+  --
+  +user_id: UUID
+  +provider: String
+  +subject: String
+}
+
+'========================
+' MFA
+'========================
+class MfaPolicy {
+  +id: UUID
+  +space_id: UUID
+  +created_at: Instant
+  +updated_at: Instant
+  +version: long
+  --
+  +name: String
+  +enforced: boolean
+  +stepup_rules: Text
+}
+
+class UserMfaFactor {
+  +id: UUID
+  +space_id: UUID
+  +created_at: Instant
+  +updated_at: Instant
+  +version: long
+  --
+  +user_id: UUID
+  +factor_type: String  <<TOTP|WEBAUTHN|SMS|EMAIL|BACKUP_CODE>>
+  +label: String
+  +payload_json: Text
+  +enabled: boolean
+  +last_used_at: Instant
+}
+
+class UserRecoveryCode {
+  +id: UUID
+  +space_id: UUID
+  +created_at: Instant
+  +updated_at: Instant
+  +version: long
+  --
+  +user_id: UUID
+  +code_hash: String
+  +used: boolean
+  +used_at: Instant
+}
+
+'========================
+' ASSOCIATIONS (tables de jonction enrichies)
+'========================
+class UserRole {
+  +id: UUID
+  +space_id: UUID
+  +created_at: Instant
+  +updated_at: Instant
+  +version: long
+  --
+  +user_id: UUID
+  +role_id: UUID
+  +assigned_at: Instant
+  +assigned_by: UUID
+}
+
+class GroupMember {
+  +id: UUID
+  +space_id: UUID
+  +created_at: Instant
+  +updated_at: Instant
+  +version: long
+  --
+  +group_id: UUID
+  +user_id: UUID
+  +assigned_at: Instant
+  +assigned_by: UUID
+}
+
+class GroupRole {
+  +id: UUID
+  +space_id: UUID
+  +created_at: Instant
+  +updated_at: Instant
+  +version: long
+  --
+  +group_id: UUID
+  +role_id: UUID
+  +assigned_at: Instant
+  +assigned_by: UUID
+}
+
+class RolePermission {
+  +id: UUID
+  +space_id: UUID
+  +created_at: Instant
+  +updated_at: Instant
+  +version: long
+  --
+  +role_id: UUID
+  +permission_id: UUID
+  +effect: PermissionEffect
+}
+
+class UserPermission {
+  +id: UUID
+  +space_id: UUID
+  +created_at: Instant
+  +updated_at: Instant
+  +version: long
+  --
+  +user_id: UUID
+  +permission_id: UUID
+  +effect: PermissionEffect
+}
+
+'========================
+' RELATIONS (multi-tenant: FK sur (space_id, id))
+'========================
+' Base
+UserIdentity "0..*" --> "1" User : (space_id,user_id) → (space_id,id)
+UserMfaFactor "0..*" --> "1" User : (space_id,user_id) → (space_id,id)
+UserRecoveryCode "0..*" --> "1" User : (space_id,user_id) → (space_id,id)
+
+' Jonctions
+UserRole "0..*" --> "1" User : (space_id,user_id) → (space_id,id)
+UserRole "0..*" --> "1" Role : (space_id,role_id) → (space_id,id)
+
+GroupMember "0..*" --> "1" Group : (space_id,group_id) → (space_id,id)
+GroupMember "0..*" --> "1" User  : (space_id,user_id)  → (space_id,id)
+
+GroupRole "0..*" --> "1" Group : (space_id,group_id) → (space_id,id)
+GroupRole "0..*" --> "1" Role  : (space_id,role_id)  → (space_id,id)
+
+RolePermission "0..*" --> "1" Role       : (space_id,role_id)       → (space_id,id)
+RolePermission "0..*" --> "1" Permission : (space_id,permission_id)  → (space_id,id)
+
+UserPermission "0..*" --> "1" User       : (space_id,user_id)        → (space_id,id)
+UserPermission "0..*" --> "1" Permission : (space_id,permission_id)   → (space_id,id)
+
+'========================
+' NOTES
+'========================
+note top of User
+  UKs:
+   - (space_id, username)
+   - (space_id, email)
+   - (space_id, id)
+end note
+
+note top of Role
+  UKs:
+   - (space_id, code)
+   - (space_id, id)
+end note
+
+note top of Permission
+  UKs:
+   - (space_id, code)
+   - (space_id, id)
+end note
+
+note top of Group
+  UKs:
+   - (space_id, code)
+   - (space_id, id)
+end note
+
+note as N1
+  Toutes les FK sont multi-tenant:
+  clé composite (space_id, <*_id>) vers (space_id, id).
+end note
+N1 .. User
+N1 .. Role
+N1 .. Permission
+N1 .. Group
+
+@enduml

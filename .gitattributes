@@ -1,0 +1,34 @@
+* text=auto
+
+# Scripts
+*.sh   text eol=lf
+gradlew text eol=lf
+*.bat  text eol=crlf
+gradlew.bat text eol=crlf
+
+# Code / config (texte)
+*.java  text diff=java
+*.kt    text
+*.gradle text
+*.md    text
+*.yml   text
+*.yaml  text
+*.properties text
+*.xml   text
+*.sql   text
+*.gitignore text
+*.gitattributes text
+.editorconfig text
+
+# Binaires
+*.jar   binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.pdf   binary
+*.zip   binary
+*.gz    binary
+*.jks   binary
+*.keystore binary
+gradle/wrapper/gradle-wrapper.jar binary

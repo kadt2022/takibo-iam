@@ -1,0 +1,221 @@
+@startuml
+!theme plain
+hide methods
+hide stereotypes
+
+entity Space {
+  * id: UUID <<PK>>
+  -- identité --
+  key: varchar(64) <<UQ>>
+  name: varchar(255)
+  status: varchar(16) // ACTIVE, SUSPENDED, DELETED
+  plan: varchar(32)? // FREE, PRO...
+  region: varchar(32)? // ca-central-1, eu-west-3...
+  suspension_reason: varchar(255)?
+  -- gestion --
+  owner_user_id: UUID // TIS-Core
+  created_at: timestamptz
+  updated_at: timestamptz
+  deleted_at: timestamptz?
+}
+
+entity SpaceMember {
+  * id: UUID <<PK>>
+  space_id: UUID <<FK>>
+  user_id: UUID        // TIS-Core
+  role: varchar(32)    // OWNER, ADMIN, VIEWER (simple)
+  added_at: timestamptz
+  unique(space_id, user_id)
+}
+
+/' Option évolutive : décommenter si on veut du multi-rôle TMS granulaire
+entity SpaceRole { * name: varchar(64) <<PK>>; description: text? }
+entity SpaceMemberRole { * member_id: UUID <<FK>>; * role_name: varchar(64) <<FK>> }
+'/
+
+entity OAuthClient {
+  * id: UUID <<PK>>
+  space_id: UUID <<FK>>
+  environment: varchar(16) // DEV, TEST, PROD
+  client_id: varchar(128) // identifiant logique (peut être globalement unique ou par env/space)
+  name: varchar(255)
+  alias: varchar(128)? // lisible par humain, unique par space+env
+  type: varchar(16) // CONFIDENTIAL, PUBLIC
+  auth_method: varchar(32) // client_secret_basic, private_key_jwt, none...
+  jwks_uri: text?
+  jwks_json: jsonb?
+  require_pkce: boolean
+  require_consent: boolean
+  logo_uri: text?
+  client_uri: text?
+  tos_uri: text?
+  policy_uri: text?
+  contacts: jsonb? // ["ops@busa.com", "idp@busa.com"]
+  status: varchar(16) // ACTIVE, DISABLED
+  is_first_party: boolean default false
+  created_by: UUID // TIS-Core
+  created_at: timestamptz
+  updated_at: timestamptz
+  deleted_at: timestamptz?
+  unique(space_id, environment, alias)
+}
+
+entity ClientSecret {
+  * id: UUID <<PK>>
+  client_id: UUID <<FK>>
+  version: int
+  secret_hash: text
+  algo: varchar(32) // ARGON2ID, PBKDF2, BCRYPT...
+  salt: bytea?
+  params: jsonb? // {iterations:..., memory:...}
+  created_at: timestamptz
+  created_by: UUID // TIS-Core
+  expires_at: timestamptz?
+  revoked_at: timestamptz?
+  is_primary: boolean // version active
+  unique(client_id, version)
+}
+
+entity RedirectUri {
+  * id: UUID <<PK>>
+  client_id: UUID <<FK>>
+  uri: text
+  kind: varchar(16) // LOGIN
+  unique(client_id, kind, uri)
+}
+
+entity PostLogoutRedirectUri {
+  * id: UUID <<PK>>
+  client_id: UUID <<FK>>
+  uri: text
+  kind: varchar(16) // POST_LOGOUT
+  unique(client_id, kind, uri)
+}
+
+entity GrantType {
+  * name: varchar(64) <<PK>>
+  description: text?
+}
+
+entity ClientGrantType {
+  * client_id: UUID <<FK>>
+  * grant_type: varchar(64) <<FK>>
+  unique(client_id, grant_type)
+}
+
+entity Scope {
+  * id: UUID <<PK>>
+  name: varchar(128)
+  description: text?
+  scope_type: varchar(16) // SYSTEM, CUSTOM
+  space_id: UUID? // null => global système
+  unique(space_id, name)
+}
+
+entity ClientScope {
+  * client_id: UUID <<FK>>
+  * scope_id: UUID <<FK>>
+  is_default: boolean
+  unique(client_id, scope_id)
+}
+
+entity CorsOrigin {
+  * id: UUID <<PK>>
+  client_id: UUID <<FK>>
+  origin: varchar(255)
+  unique(client_id, origin)
+}
+
+/' Remplace l’ancienne "Audience" par un vrai catalogue d’API '/
+entity ResourceServer {
+  * id: UUID <<PK>>
+  space_id: UUID? // null => global
+  identifier: varchar(255) // api://busa-orders  ou https://api.busa.com
+  name: varchar(255)?
+  description: text?
+  unique(space_id, identifier)
+}
+
+entity ClientAudience {
+  * client_id: UUID <<FK>>
+  * resource_id: UUID <<FK>>
+  unique(client_id, resource_id)
+}
+
+/' Profil JOSE/crypto du client '/
+entity ClientSecurityProfile {
+  * client_id: UUID <<PK>> <<FK>>
+  id_token_sign_alg: varchar(16)? // RS256, ES256, HS256...
+  id_token_enc_alg: varchar(32)?  // RSA-OAEP-256...
+  id_token_enc_enc: varchar(32)?  // A256GCM...
+  access_token_format: varchar(16) // JWT, OPAQUE
+  access_token_sign_alg: varchar(16)? // si JWT
+  userinfo_signed_response_alg: varchar(16)?
+  userinfo_encrypted_response_alg: varchar(32)?
+  userinfo_encrypted_response_enc: varchar(32)?
+}
+
+/' Politique de tokens (durées & rotation) '/
+entity ClientTokenPolicy {
+  * client_id: UUID <<PK>> <<FK>>
+  access_token_ttl_sec: int
+  refresh_token_ttl_sec: int?
+  reuse_refresh_tokens: boolean
+  rotation_mode: varchar(16)? // ABSOLUTE, SLIDING
+  rotation_grace_sec: int?
+  device_code_ttl_sec: int?
+  require_auth_time: boolean?
+  default_max_age_sec: int?
+}
+
+/' Certificats clés privés pour private_key_jwt (optionnel vs jwks_json) '/
+entity ClientCertificate {
+  * id: UUID <<PK>>
+  client_id: UUID <<FK>>
+  kid: varchar(128)?
+  cert_pem: text?
+  jwk_json: jsonb?
+  use: varchar(16)? // sig, enc
+  alg: varchar(16)?
+  not_before: timestamptz?
+  not_after: timestamptz?
+  revoked_at: timestamptz?
+}
+
+/' Outbox fiable pour publier la config vers TAS '/
+entity OutboxEvent {
+  * id: UUID <<PK>>
+  aggregate_type: varchar(64) // OAUTH_CLIENT
+  aggregate_id: UUID
+  event_type: varchar(64)     // CLIENT_CREATED, CLIENT_UPDATED, SECRET_ROTATED...
+  payload: jsonb
+  created_at: timestamptz
+  published_at: timestamptz?
+  attempt_count: int default 0
+}
+
+Space ||--o{ SpaceMember
+/' SpaceRole ' SpaceMemberRole optionnels '/
+SpaceRole ||--o{ SpaceMemberRole
+SpaceMember ||--o{ SpaceMemberRole
+'/
+
+Space ||--o{ OAuthClient
+OAuthClient ||--o{ ClientSecret
+OAuthClient ||--o{ RedirectUri
+OAuthClient ||--o{ PostLogoutRedirectUri
+GrantType ||--o{ ClientGrantType
+OAuthClient ||--o{ ClientGrantType
+Scope ||--o{ ClientScope
+OAuthClient ||--o{ ClientScope
+OAuthClient ||--o{ CorsOrigin
+
+OAuthClient ||--|| ClientTokenPolicy
+OAuthClient ||--|| ClientSecurityProfile
+OAuthClient ||--o{ ClientCertificate
+
+Space ||--o{ ResourceServer
+ResourceServer ||--o{ ClientAudience
+OAuthClient ||--o{ ClientAudience
+
+@enduml

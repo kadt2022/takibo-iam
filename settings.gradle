@@ -1,0 +1,21 @@
+rootProject.name = 'Takibo-IAM'
+
+include(
+        "takibo-identity-core",
+        "takibo-management-service",
+        "takibo-security-management",
+        "takibo-authorization-server",
+        "takibo-audit",
+        "takibo-iam-boot",
+        "takibo-security-context",
+        "takibo-security-context-spring",
+        "takibo-adp-api",
+        "takibo-adp-core",
+        "takibo-adp-spring",
+        "takibo-adp-test",
+        "takibo-outbox-core",
+        "takibo-outbox-jpa",
+        "takibo-outbox-spring",
+        "takibo-outbox-spring-starter",
+        "takibo-messaging"
+)

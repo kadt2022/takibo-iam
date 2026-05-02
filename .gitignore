@@ -1,0 +1,111 @@
+# ==============================
+# Takibu — Monolithe modulaire
+# ==============================
+
+### Gradle ###
+.gradle/
+**/.gradle/
+build/
+**/build/
+out/
+**/out/
+postman/
+
+# Keep Gradle wrapper ONLY at root
+**/gradle/wrapper/gradle-wrapper.jar
+**/gradle/wrapper/gradle-wrapper.properties
+**/gradlew
+**/gradlew.bat
+!gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
+!gradlew
+!gradlew.bat
+
+### IDEs ###
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.project
+.classpath
+.settings/
+.apt_generated
+.factorypath
+.springBeans
+.sts4-cache/
+nbproject/private/
+nbbuild/
+nbdist/
+dist/
+.nb-gradle/
+
+### Java / Général ###
+bin/
+**/bin/
+target/
+**/target/
+*.log
+**/logs/
+tmp/
+temp/
+*.tmp
+*.bak
+*.swp
+*.txt
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.svg
+*.bmp
+*.ico
+*.key
+*.pem
+*.p12
+*.jks
+*.keystore
+hs_err_pid*
+replay_pid*
+
+### OS ###
+.DS_Store
+Thumbs.db
+
+### Spring / Config locale (secrets) ###
+.env
+.env.*
+application-local.yml
+application-local.yaml
+application-*.properties.local
+application-*.yml.local
+application-secret.yml
+application-prive.yml
+application-secrets.yml
+application-private.yml
+
+### Couverture / rapports ###
+coverage/
+**/coverage/
+jacoco.exec
+**/jacoco/
+reports/
+**/reports/
+
+### Node (si tu ajoutes un front) ###
+node_modules/
+**/node_modules/
+
+### Scratch / dumps ###
+**/tout_le_code.txt
+**/commande.txt
+**/data.sql
+**/view.sql
+/docs/adr/0001-separation-account-user-identitylink.md
+/takibo-management-service/CLIENT_PROFILES.md
+/takibo-authorization-server/ERROR_RESPONSE_STRATEGY.md
+/docs/PHILOSOPHY.md
+/docs/rapport-analyse-takibo-dependances-2026-03-07.md
+/takibo-authorization-server/recit.md
+

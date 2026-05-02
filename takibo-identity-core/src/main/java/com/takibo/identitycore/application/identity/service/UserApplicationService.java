@@ -1,0 +1,32 @@
+package com.takibo.identitycore.application.identity.service;
+
+import com.takibo.identitycore.application.identity.command.CreateUserCommand;
+import com.takibo.identitycore.application.identity.mapper.UserMapper;
+import com.takibo.identitycore.integration.space.port.SpaceOwnershipGuardCase;
+import com.takibo.identitycore.application.identity.port.UserApplicationCase;
+import com.takibo.identitycore.domain.model.UserRegistrationResult;
+import com.takibo.identitycore.interfaces.rest.response.UserResponse;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.Assert;
+
+
+@Service
+@Transactional
+@RequiredArgsConstructor
+public class UserApplicationService implements UserApplicationCase {
+
+    private final UserRegistrationOrchestrator userRegistrationOrchestrator;
+    private final UserMapper userMapper;
+    private final SpaceOwnershipGuardCase spaceOwnershipGuard;
+
+    @Override
+    public UserResponse createUser(CreateUserCommand command) {
+        Assert.notNull(command, "User command must not be null");
+
+       // spaceOwnershipGuard.assertSpaceOwnership(command.spaceId());
+        UserRegistrationResult result = userRegistrationOrchestrator.registerUser(command);
+        return userMapper.toUserResponse(result.user(), result.accountEmail());
+    }
+}

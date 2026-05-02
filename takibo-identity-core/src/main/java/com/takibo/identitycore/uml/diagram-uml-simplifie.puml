@@ -1,0 +1,39 @@
+@startuml
+title TIS-Core — Modèle simplifié (User/Role/Group/Permission)
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+hide empty methods
+
+class User {
+  +id: UUID
+  +username: String
+  +email: String
+}
+
+class Role {
+  +id: UUID
+  +code: String
+  +name: String
+}
+
+class Permission {
+  +id: UUID
+  +code: String
+  +name: String
+}
+
+class Group {
+  +id: UUID
+  +code: String
+  +name: String
+}
+
+' --- Relations ---
+User "0..*" -- "0..*" Role : user_roles
+User "0..*" -- "0..*" Group : group_members
+Group "0..*" -- "0..*" Role : group_roles
+Role "0..*" -- "0..*" Permission : role_permissions
+User "0..*" -- "0..*" Permission : user_permissions
+
+@enduml
