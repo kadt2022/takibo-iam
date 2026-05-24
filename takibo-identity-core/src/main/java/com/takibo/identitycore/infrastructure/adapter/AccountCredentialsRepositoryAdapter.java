@@ -44,7 +44,7 @@ public class AccountCredentialsRepositoryAdapter implements AccountCredentialsRe
         entity.setAccountId(accountId);
 
         em.persist(entity);
-        em.flush(); // Force la synchronisation avec la BD
+        em.flush();
 
         return mapper.toDomain(entity);
     }
