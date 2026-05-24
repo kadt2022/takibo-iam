@@ -21,6 +21,9 @@ postman/
 !gradlew
 !gradlew.bat
 
+### Claude Code ###
+.claude/
+
 ### IDEs ###
 .idea/
 *.iml
