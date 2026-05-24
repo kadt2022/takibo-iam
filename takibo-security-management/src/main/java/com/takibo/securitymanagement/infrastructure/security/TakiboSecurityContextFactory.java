@@ -18,23 +18,31 @@ final class TakiboSecurityContextFactory {
 
     static TakiboSecurityContext from(Map<String, Object> claims, HttpServletRequest request) {
         UUID accountId = ClaimReader.readUuid(claims, "accountId");
-        if (accountId == null) {
-            throw new InvalidTakiboSecurityContextException("accountId claim is required");
-        }
-
         UUID userId = ClaimReader.readUuid(claims, "userId");
         String sub = ClaimReader.readString(claims, "sub");
 
-        String actorId = firstNonBlank(
-                userId != null ? userId.toString() : null,
-                sub,
-                accountId.toString()
-        );
+        SubjectNature subjectNature;
+        AuthenticationMethod authMethod;
+        String actorId;
+
+        if (accountId == null) {
+            if (sub == null || sub.isBlank()) {
+                throw new InvalidTakiboSecurityContextException("Service token must contain a non-blank subject");
+            }
+            actorId = sub;
+            subjectNature = SubjectNature.SERVICE;
+            authMethod = AuthenticationMethod.OAUTH2;
+        } else {
+            actorId = firstNonBlank(
+                    userId != null ? userId.toString() : null,
+                    sub,
+                    accountId.toString()
+            );
+            subjectNature = SubjectNature.HUMAN;
+            authMethod = AuthenticationMethod.OIDC;
+        }
 
         Set<String> roles = ClaimReader.readStringSet(claims, "roles");
-
-        SubjectNature subjectNature = SubjectNature.HUMAN;
-        AuthenticationMethod authMethod = AuthenticationMethod.OIDC;
 
         SubjectIdentity actor = new SubjectIdentity(
                 actorId,

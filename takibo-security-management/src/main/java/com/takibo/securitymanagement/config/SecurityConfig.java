@@ -70,20 +70,9 @@ public class SecurityConfig {
                         .anyRequest().authenticated()
                 );
 
-                /*
-                 Ordre CRITIQUE :
-                 - JWT doit passer AVANT AnonymousAuthenticationFilter, sinon Spring met un contexte anonyme.
-                 - JWT doit passer AVANT AuthorizationFilter, sinon les règles d’accès voient un user anonyme.
-                 - Boundary après JWT (car il a besoin du contexte) et donc avant AuthorizationFilter.
-                 */
         http
-                // JWT d'abord : construit l'Authentication (JwtAuthenticationToken)
                 .addFilterBefore(jwtAuthenticationFilter, AnonymousAuthenticationFilter.class)
-                .addFilterBefore(jwtAuthenticationFilter, AuthorizationFilter.class)
-
-                // Boundary après JWT, mais avant toute autorisation (ADP)
-                .addFilterAfter(orgBoundaryFilter, JwtAuthenticationFilter.class)
-                .addFilterBefore(orgBoundaryFilter, AuthorizationFilter.class);
+                .addFilterAfter(orgBoundaryFilter, JwtAuthenticationFilter.class);
 
         return http.build();
     }

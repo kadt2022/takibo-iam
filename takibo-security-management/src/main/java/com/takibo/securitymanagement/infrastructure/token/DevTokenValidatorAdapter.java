@@ -1,5 +1,6 @@
 package com.takibo.securitymanagement.infrastructure.token;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -10,7 +11,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 @Component
-// @Profile({"dev","local"})
+@ConditionalOnProperty(name = "takibo.security.token.validator", havingValue = "dev")
 public class DevTokenValidatorAdapter implements TokenValidatorAdapter {
 
     private static final String DEFAULT_ORG_ID = "fa9c5979-5e8e-489a-8614-52b1d1578bbe";

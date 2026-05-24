@@ -48,6 +48,12 @@ public class PkceEnforcementFilter extends OncePerRequestFilter {
             return;
         }
 
+        // PKCE only applies to authorization_code; skip all client lookup for other grants on /oauth2/token
+        if (isToken && !GRANT_TYPE_AUTHORIZATION_CODE.equals(request.getParameter("grant_type"))) {
+            chain.doFilter(request, response);
+            return;
+        }
+
         String clientId = isAuthorize
                 ? clientIdExtractor.extractForAuthorize(request)
                 : clientIdExtractor.extractForToken(request);

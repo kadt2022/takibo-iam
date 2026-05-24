@@ -65,6 +65,8 @@ security:
     history-size: 5
 
 takibo:
+  tas:
+    issuer: http://localhost:8081
   guard:
     space:
       whitelist:

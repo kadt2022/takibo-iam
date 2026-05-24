@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(jar tf *)",
+      "Bash(jar xf *)",
+      "Read(//tmp/**)",
+      "Bash(javap -p org/springframework/boot/security/oauth2/server/authorization/autoconfigure/servlet/OAuth2AuthorizationServerConfiguration.class)",
+      "Bash(javap -p org/springframework/boot/security/oauth2/server/authorization/autoconfigure/servlet/OAuth2AuthorizationServerJwtAutoConfiguration.class)",
+      "Bash(javap -p -verbose 'org/springframework/boot/security/oauth2/server/authorization/autoconfigure/servlet/OAuth2AuthorizationServerJwtAutoConfiguration$JwtDecoderConfiguration.class')",
+      "Bash(./gradlew :takibo-authorization-server:build)"
+    ]
+  }
+}
