@@ -31,7 +31,7 @@ public class AccountDomaineService {
 
     private final AccountRepository accountRepository;
     private final AccountCredentialsRepository credentialsRepository;
-    private final TakiboIdentityRepository takiboIdentityRepository; // ✅ AJOUTÉ
+    private final TakiboIdentityRepository takiboIdentityRepository;
     private final PasswordPolicyValidator passwordPolicyValidator;
     private final PasswordHashingComponent passwordHashingComponent;
     private final Clock clock;
@@ -55,7 +55,6 @@ public class AccountDomaineService {
         Account account = createAccountEntity(organizationId, emailAddress, metadata);
         provisionAccountCredentials(account, rawPassword);
 
-        // ✅ AUTO-CREATE TakiboIdentity (identity_id = account_id)
         provisionTakiboIdentity(account);
 
         return account;
@@ -69,7 +68,6 @@ public class AccountDomaineService {
 
         validateAccountOrganizationAlignment(account, organizationId);
 
-        // ✅ ENSURE TakiboIdentity exists for existing account
         ensureTakiboIdentityExists(account);
 
         return account;
@@ -111,7 +109,6 @@ public class AccountDomaineService {
         credentialsRepository.save(credentials, account.getOrgId());
     }
 
-    // ✅ NOUVELLE MÉTHODE - Créer TakiboIdentity automatiquement
     private void provisionTakiboIdentity(Account account) {
         // Ne créer que si n'existe pas déjà
         if (!takiboIdentityRepository.existsByOrgIdAndAccountId(account.getOrgId(), account.getId().getValue())) {
@@ -122,12 +119,11 @@ public class AccountDomaineService {
             );
            takiboIdentityRepository.save(identity);
 
-            // ✅ CRITIQUE : Forcer le flush immédiat
+            //le flush immédiat
             takiboIdentityRepository.flush();
         }
     }
 
-    // ✅ NOUVELLE MÉTHODE - S'assurer que TakiboIdentity existe (pour comptes existants)
     private void ensureTakiboIdentityExists(Account account) {
         if (!takiboIdentityRepository.existsByOrgIdAndAccountId(account.getOrgId(), account.getId().getValue())) {
             provisionTakiboIdentity(account);

@@ -15,7 +15,6 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
 
 @Configuration
@@ -63,9 +62,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/roles/**").access(policyBasedAuthorizationManager)
                         .requestMatchers("/api/secrets/**").access(policyBasedAuthorizationManager)
                         .requestMatchers("/api/permissions/**").access(policyBasedAuthorizationManager)
-                        .requestMatchers(  "/api/v1/**").access(policyBasedAuthorizationManager)
-                        .requestMatchers("/debug/secure/**").access(policyBasedAuthorizationManager) // DEBUG A suprrimer
-
+                        .requestMatchers("/api/v1/**").access(policyBasedAuthorizationManager)
+                        .requestMatchers("/debug/secure/**").access(policyBasedAuthorizationManager)
 
                         .anyRequest().authenticated()
                 );

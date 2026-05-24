@@ -39,7 +39,6 @@ public class Account {
                 .build();
     }
 
-    // ✅ méthode fluide (immutabilité conservée)
     public Account withOrgId(UUID orgId) {
         return this.toBuilder().orgId(orgId).build();
     }

@@ -15,7 +15,6 @@ import java.util.UUID;
 @Mapper(componentModel = "spring", unmappedTargetPolicy = ReportingPolicy.ERROR)
 public interface UserJpaMapper {
 
-    // Domain -> Entity
     @Mapping(target = "id", source = "id", qualifiedByName = "userIdToUuid")
     @Mapping(target = "spaceId", source = "spaceId", qualifiedByName = "spaceIdToUuid")
     @Mapping(target = "orgId", ignore = true)
@@ -33,10 +32,9 @@ public interface UserJpaMapper {
     @Mapping(target = "updatedAt", ignore = true)
     @Mapping(target = "version", ignore = true)
     @Mapping(target = "identity", ignore = true)
-    @Mapping(target = "account", ignore = true)  // ✅ AJOUTÉ: Ignorer la relation account
+    @Mapping(target = "account", ignore = true)
     UserEntity toEntity(User user);
 
-    // Entity -> Domain
     @Mapping(target = "id", source = "id", qualifiedByName = "uuidToUserId")
     @Mapping(target = "spaceId", source = "spaceId", qualifiedByName = "uuidToSpaceId")
     @Mapping(target = "accountId", source = "accountId", qualifiedByName = "uuidToAccountId")
@@ -52,10 +50,9 @@ public interface UserJpaMapper {
     @Mapping(target = "createdAt", source = "createdAt")
     @Mapping(target = "updatedAt", source = "updatedAt")
     @Mapping(target = "version", source = "version")
-    @Mapping(source = "account", target = "account", ignore = true)  // ✅ AJOUTÉ: Ignorer account dans l'autre sens aussi
+    @Mapping(source = "account", target = "account", ignore = true)
     User toDomain(UserEntity entity);
 
-    // Helpers UserId
     @Named("userIdToUuid")
     default UUID userIdToUuid(UserId id) {
         return (id == null) ? null : id.getValue();
@@ -66,7 +63,6 @@ public interface UserJpaMapper {
         return (id == null) ? null : UserId.of(id);
     }
 
-    // Helpers SpaceId
     @Named("spaceIdToUuid")
     default UUID spaceIdToUuid(SpaceId id) {
         return (id == null) ? null : id.getValue();
@@ -77,7 +73,6 @@ public interface UserJpaMapper {
         return (id == null) ? null : SpaceId.of(id);
     }
 
-    // Helpers AccountId
     @Named("accountIdToUuid")
     default UUID accountIdToUuid(AccountId id) {
         return (id == null) ? null : id.getValue();

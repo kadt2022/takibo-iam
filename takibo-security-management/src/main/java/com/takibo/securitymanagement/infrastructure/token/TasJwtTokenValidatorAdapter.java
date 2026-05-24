@@ -47,18 +47,16 @@ public class TasJwtTokenValidatorAdapter implements TokenValidatorAdapter {
         String jti = jwt.getId();
         if (jti != null) claims.put("jti", jti);
 
-        // TAS claims: snake_case -> camelCase expected by TakiboSecurityContextFactory
         String orgId = jwt.getClaimAsString("org_id");
         if (orgId != null) claims.put("orgId", orgId);
 
         String spaceId = jwt.getClaimAsString("space_id");
         if (spaceId != null) claims.put("spaceId", spaceId);
 
-        // client_id: present in some SAS JWT profiles, useful for future adapters
         String clientId = jwt.getClaimAsString("client_id");
         if (clientId != null) claims.put("clientId", clientId);
 
-        // scope: normalize scope/scp regardless of String or List<String> representation
+        // scope may arrive as a String or as a List<String> depending on the SAS token profile
         String scope = normalizeScope(jwt.getClaims().get("scope"));
         if (scope == null) {
             scope = normalizeScope(jwt.getClaims().get("scp"));

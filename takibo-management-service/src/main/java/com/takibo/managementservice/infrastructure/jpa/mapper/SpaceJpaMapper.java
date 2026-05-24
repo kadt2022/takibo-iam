@@ -13,8 +13,6 @@ import java.util.UUID;
 @Mapper(componentModel = "spring", unmappedTargetPolicy = ReportingPolicy.ERROR)
 public interface SpaceJpaMapper {
 
-    // ===== Domain → Entity =====
-
     @Mapping(target = "id",              source = "id", qualifiedByName = "spaceIdToUuid")
     @Mapping(target = "orgId",           source = "orgId")
     @Mapping(target = "ownerAccountId",  source = "ownerAccountId")
@@ -24,15 +22,13 @@ public interface SpaceJpaMapper {
     @Mapping(target = "status",          source = "status")
     @Mapping(target = "statusReason",    source = "statusReason")
     @Mapping(target = "statusUpdatedAt", source = "statusUpdatedAt")
-    @Mapping(target = "createdAt",       ignore = true)  // @PrePersist
-    @Mapping(target = "updatedAt",       ignore = true)  // @PrePersist
+    @Mapping(target = "createdAt",       ignore = true)
+    @Mapping(target = "updatedAt",       ignore = true)
     @Mapping(target = "version",         ignore = true)
-    @Mapping(target = "organization",    ignore = true)  // ✅ Relation JPA optionnelle
-    @Mapping(target = "domains",         ignore = true)  // ✅ OneToMany - géré séparément
-    @Mapping(target = "oAuth2Clients",   ignore = true)  // ✅ OneToMany - géré séparément
+    @Mapping(target = "organization",    ignore = true)
+    @Mapping(target = "domains",         ignore = true)
+    @Mapping(target = "oAuth2Clients",   ignore = true)
     SpaceEntity toEntity(Space space);
-
-    // ===== Entity → Domain =====
 
     @Mapping(target = "id",              source = "id", qualifiedByName = "uuidToSpaceId")
     @Mapping(target = "orgId",           source = "orgId")
@@ -47,8 +43,6 @@ public interface SpaceJpaMapper {
     @Mapping(target = "updatedAt",       source = "updatedAt")
     @Mapping(target = "version",         source = "version")
     Space toDomain(SpaceEntity entity);
-
-    // ===== HELPERS =====
 
     @Named("spaceIdToUuid")
     default UUID spaceIdToUuid(SpaceId id) {

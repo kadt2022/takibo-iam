@@ -10,7 +10,7 @@ public interface TakiboIdentityRepository {
 
     TakiboIdentity save(TakiboIdentity identity);
 
-    void flush(); // ✅ AJOUTÉ
+    void flush();
 
     Optional<TakiboIdentity> findById(TakiboIdentityId id);
 

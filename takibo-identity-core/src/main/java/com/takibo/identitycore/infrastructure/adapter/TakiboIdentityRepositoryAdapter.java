@@ -27,7 +27,6 @@ public class TakiboIdentityRepositoryAdapter implements TakiboIdentityRepository
         TakiboIdentityEntity entity = mapper.toEntity(identity);
         jpaRepository.saveAndFlush(entity);
 
-        // ✅ Retourner l'objet domain original sans remapper
         return identity;
     }
 

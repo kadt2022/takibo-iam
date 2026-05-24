@@ -40,15 +40,12 @@ public class UserEntity {
     @Column(name = "org_id", nullable = false, updatable = false)
     private UUID orgId;
 
-    // PAS de FK JPA vers Space - juste l'UUID (géré par TMS)
     @Column(name = "space_id", nullable = false, updatable = false)
     private UUID spaceId;
 
-    // Phase A: accountId = identityId
     @Column(name = "account_id", nullable = false, updatable = false)
     private UUID accountId;
 
-    // FK vers takibo_identities(org_id, account_id) selon DDL
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumns({
             @JoinColumn(name = "org_id", referencedColumnName = "org_id", insertable = false, updatable = false),
@@ -56,8 +53,6 @@ public class UserEntity {
     })
     private TakiboIdentityEntity identity;
 
-    // ✅ CORRECTION: Ajout de la relation vers Account pour accéder à l'email
-    // Cette relation permet aux requêtes JPA d'utiliser "u.account.email"
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "account_id", referencedColumnName = "id", insertable = false, updatable = false)
     private AccountEntity account;
@@ -75,7 +70,6 @@ public class UserEntity {
     @Column(name = "status", nullable = false, length = 32)
     private UserStatus status;
 
-    // DDL CHECK: ('PLATFORM_ADMIN','SPACE_ADMIN','END_USER')
     @Enumerated(EnumType.STRING)
     @Column(name = "user_type", nullable = false, length = 32)
     private UserType type;
@@ -112,10 +106,8 @@ public class UserEntity {
         if (status == null) {
             status = UserStatus.ACTIVE;
         }
-        // type doit être fourni explicitement - pas de default
     }
 
-    // PK simple => equals/hashCode sur id ONLY
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;

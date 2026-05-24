@@ -25,14 +25,13 @@ public class UserRepositoryAdapter implements UserRepository {
 
     private final JpaUserRepository jpa;
     private final UserJpaMapper mapper;
-    private final EntityManager em;  // ✅ AJOUTÉ
+    private final EntityManager em;
 
     @Override
     @Transactional
     public User save(User user) {
         UserEntity entity = mapper.toEntity(user);
 
-        // ✅ CORRECTION: Récupérer orgId depuis Space
         UUID orgId = em.createQuery(
                         "SELECT s.orgId FROM SpaceEntity s WHERE s.id = :spaceId",
                         UUID.class

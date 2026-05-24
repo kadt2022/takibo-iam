@@ -43,8 +43,6 @@ public class AccountCredentialsRepositoryAdapter implements AccountCredentialsRe
         entity.setOrgId(orgId);
         entity.setAccountId(accountId);
 
-        // ✅ CORRECTION: Marquer explicitement comme nouvelle pour éviter StaleObjectStateException
-        // Puis utiliser persist() qui est approprié pour les nouvelles entités
         em.persist(entity);
         em.flush(); // Force la synchronisation avec la BD
 
