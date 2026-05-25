@@ -2,15 +2,11 @@ package com.takibo.identitycore.integration.space.port;
 
 import java.util.UUID;
 
-/**
- * Source autoritaire (BDD via TMS) :
- * Vérifie qu'un port appartient à l'org attendu.
- * Ne lit JAMAIS l'org depuis un jeton ou un header.
- */
 public interface SpaceOwnershipGuardCase {
 
     /**
-     * @throws org.springframework.security.access.AccessDeniedException si org mismatch
+     * @throws org.springframework.security.access.AccessDeniedException if spaceId does not belong to expectedOrgId
+     * @throws com.takibo.identitycore.domain.exception.SpaceNotFoundException if spaceId is unknown
      */
-    void assertSpaceBelongsToOrg(UUID spaceId);
+    void assertSpaceBelongsToOrg(UUID spaceId, UUID expectedOrgId);
 }

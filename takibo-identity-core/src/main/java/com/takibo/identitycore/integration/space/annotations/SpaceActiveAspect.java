@@ -31,8 +31,8 @@ public class SpaceActiveAspect {
     @Value("${takibo.policy.aop-require-active-enabled:true}")
     private boolean enabled;
 
-    @Before("@within(annotations.aspect.application.com.takibo.identitycore.RequireActiveSpace) || " +
-            "@annotation(annotations.aspect.application.com.takibo.identitycore.RequireActiveSpace)")
+    @Before("@within(com.takibo.identitycore.integration.space.annotations.RequireActiveSpace) || " +
+            "@annotation(com.takibo.identitycore.integration.space.annotations.RequireActiveSpace)")
     public void ensureActive(JoinPoint jp) {
         if (!enabled) return;
 
@@ -119,8 +119,23 @@ public class SpaceActiveAspect {
         for (Object arg : args) {
             UUID u = tryUuid(arg);
             if (u != null) return u;
+            UUID fromMethod = tryInvokeSpaceId(arg);
+            if (fromMethod != null) return fromMethod;
         }
         return null;
+    }
+
+    private UUID tryInvokeSpaceId(Object arg) {
+        if (arg == null) return null;
+        try {
+            java.lang.reflect.Method m = arg.getClass().getMethod("spaceId");
+            return tryUuid(m.invoke(arg));
+        } catch (NoSuchMethodException e) {
+            return null;
+        } catch (Exception e) {
+            log.debug("Failed to invoke spaceId() on {}: {}", arg.getClass().getSimpleName(), e.getMessage());
+            return null;
+        }
     }
 
     private UUID tryUuid(Object v) {

@@ -1,8 +1,10 @@
 package com.takibo.managementservice.integration;
 
+import com.takibo.identitycore.domain.exception.SpaceNotFoundException;
 import com.takibo.identitycore.integration.space.port.SpaceOwnershipGuardCase;
 import com.takibo.managementservice.infrastructure.jpa.repository.SpaceOwnershipRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -12,10 +14,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * Implémentation du Port TIS-CORE : vérifie en BDD que port ∈ org.
- * Avec cache mémoire TTL court pour limiter les hits DB (même approche que SpaceStatusCheckerCaseAdapter).
- */
+// TTL court (10 s) : compromis accepté pour limiter les hits DB tout en gardant une fenêtre de cohérence raisonnable.
 @Component
 @RequiredArgsConstructor
 public class SpaceOwnershipGuardCaseAdapter implements SpaceOwnershipGuardCase {
@@ -26,14 +25,20 @@ public class SpaceOwnershipGuardCaseAdapter implements SpaceOwnershipGuardCase {
     private final Duration ttl = Duration.ofSeconds(10);
 
     @Override
-    public void assertSpaceBelongsToOrg(UUID spaceId) {
-        UUID actualOrgId = resolveOrgId(spaceId)
-                .orElseThrow(() -> new RuntimeException("TMS-SPACE-NOT-FOUND: spaceId=" + spaceId));
+    public void assertSpaceBelongsToOrg(UUID spaceId, UUID expectedOrgId) {
+        if (spaceId == null) {
+            throw new IllegalArgumentException("spaceId must not be null");
+        }
+        if (expectedOrgId == null) {
+            throw new AccessDeniedException("ORG_CONTEXT_REQUIRED");
+        }
 
-//        if (!(actualOrgId)) {
-//            // 403 – mappé par Sentinel
-//            throw new AccessDeniedException("ORG_MISMATCH");
-//        }
+        UUID actualOrgId = resolveOrgId(spaceId)
+                .orElseThrow(() -> new SpaceNotFoundException(spaceId));
+
+        if (!expectedOrgId.equals(actualOrgId)) {
+            throw new AccessDeniedException("ORG_MISMATCH");
+        }
     }
 
     private Optional<UUID> resolveOrgId(UUID spaceId) {
