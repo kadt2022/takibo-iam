@@ -1,5 +1,7 @@
 package com.takibo.managementservice.integration;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import com.takibo.identitycore.domain.exception.SpaceNotFoundException;
 import com.takibo.identitycore.integration.space.port.SpaceOwnershipGuardCase;
 import com.takibo.managementservice.infrastructure.jpa.repository.SpaceOwnershipRepository;
@@ -7,22 +9,21 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Component;
 
-import java.time.Duration;
-import java.time.Instant;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
-// TTL court (10 s) : compromis accepté pour limiter les hits DB tout en gardant une fenêtre de cohérence raisonnable.
+// TTL court et taille bornée pour limiter les accès BDD sans conserver indéfiniment des entrées expirées.
 @Component
 @RequiredArgsConstructor
 public class SpaceOwnershipGuardCaseAdapter implements SpaceOwnershipGuardCase {
 
     private final SpaceOwnershipRepository repository;
 
-    private final Map<UUID, CacheEntry> cache = new ConcurrentHashMap<>();
-    private final Duration ttl = Duration.ofSeconds(10);
+    private final Cache<UUID, UUID> orgIdBySpaceId = Caffeine.newBuilder()
+            .expireAfterWrite(10, TimeUnit.SECONDS)
+            .maximumSize(10_000)
+            .build();
 
     @Override
     public void assertSpaceBelongsToOrg(UUID spaceId, UUID expectedOrgId) {
@@ -42,16 +43,13 @@ public class SpaceOwnershipGuardCaseAdapter implements SpaceOwnershipGuardCase {
     }
 
     private Optional<UUID> resolveOrgId(UUID spaceId) {
-        CacheEntry hit = cache.get(spaceId);
-        if (hit != null && !hit.isExpired(ttl)) {
-            return Optional.of(hit.value);
+        UUID cachedOrgId = orgIdBySpaceId.getIfPresent(spaceId);
+        if (cachedOrgId != null) {
+            return Optional.of(cachedOrgId);
         }
-        Optional<UUID> org = repository.findOrgIdBySpaceId(spaceId);
-        org.ifPresent(v -> cache.put(spaceId, new CacheEntry(v, Instant.now())));
-        return org;
-    }
 
-    private record CacheEntry(UUID value, Instant at) {
-        boolean isExpired(Duration ttl) { return Instant.now().isAfter(at.plus(ttl)); }
+        Optional<UUID> orgId = repository.findOrgIdBySpaceId(spaceId);
+        orgId.ifPresent(value -> orgIdBySpaceId.put(spaceId, value));
+        return orgId;
     }
 }
