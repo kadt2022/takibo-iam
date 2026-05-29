@@ -9,13 +9,16 @@ on:
 permissions:
   contents: read
 
+env:
+  TAKIBO_APP_PORT: 8081
+
 concurrency:
   group: takibo-ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build:
-    name: Build and Test
+    name: Takibo Build
     runs-on: ubuntu-latest
 
     steps:
@@ -54,7 +57,7 @@ jobs:
           if-no-files-found: warn
 
   bvt:
-    name: Build Verification Tests
+    name: Takibo Verification Tests
     needs: build
     runs-on: ubuntu-latest
 
@@ -99,6 +102,7 @@ jobs:
           SPRING_DATASOURCE_USERNAME: takibo
           SPRING_DATASOURCE_PASSWORD: takibo
           SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${{ secrets.CI_JWT_ISSUER_URI }}
+          SERVER_PORT: ${{ env.TAKIBO_APP_PORT }}
         run: |
           JAR_FILE="$(find build-artifacts -type f -path '*takibo-iam-boot*' \
             -name '*.jar' ! -name '*-plain.jar' | head -n 1)"
@@ -115,7 +119,7 @@ jobs:
       - name: Wait for application health
         run: |
           for i in {1..45}; do
-            if curl -fsS http://127.0.0.1:8080/actuator/health > /dev/null; then
+            if curl -fsS "http://127.0.0.1:${TAKIBO_APP_PORT}/actuator/health" > /dev/null; then
               echo "Takibo started"
               exit 0
             fi
@@ -132,7 +136,7 @@ jobs:
         run: |
           if [ -f postman/smoke.postman_collection.json ]; then
             newman run postman/smoke.postman_collection.json \
-              --env-var baseUrl=http://127.0.0.1:8080
+              --env-var baseUrl=http://127.0.0.1:${TAKIBO_APP_PORT}
           else
             echo "No Postman smoke collection found. Skipping BVT."
           fi
@@ -149,7 +153,7 @@ jobs:
           fi
 
   sonar:
-    name: Sonar Analysis
+    name: Takibo Sonar Analysis
     needs: bvt
     runs-on: ubuntu-latest
 
@@ -175,7 +179,31 @@ jobs:
       - name: Run Sonar analysis
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: ./gradlew sonar --no-daemon
+          SONAR_PROJECT_KEY: ${{ secrets.SONAR_PROJECT_KEY }}
+          SONAR_ORGANIZATION: ${{ vars.SONAR_ORGANIZATION }}
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+        run: |
+          set -euo pipefail
+
+          SONAR_HOST_URL="${SONAR_HOST_URL:-https://sonarcloud.io}"
+
+          if [ -z "${SONAR_TOKEN:-}" ] || [ -z "${SONAR_PROJECT_KEY:-}" ]; then
+            echo "Missing SONAR_TOKEN or SONAR_PROJECT_KEY"
+            exit 1
+          fi
+
+          args=(
+            sonar
+            --no-daemon
+            "-Dsonar.projectKey=${SONAR_PROJECT_KEY}"
+            "-Dsonar.host.url=${SONAR_HOST_URL}"
+          )
+
+          if [ -n "${SONAR_ORGANIZATION:-}" ]; then
+            args+=("-Dsonar.organization=${SONAR_ORGANIZATION}")
+          fi
+
+          ./gradlew "${args[@]}"
 
   quality-gate:
     name: Takibo Quality Gate
