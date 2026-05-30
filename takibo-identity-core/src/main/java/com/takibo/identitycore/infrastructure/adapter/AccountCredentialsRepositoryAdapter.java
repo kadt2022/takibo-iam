@@ -36,9 +36,6 @@ public class AccountCredentialsRepositoryAdapter implements AccountCredentialsRe
         entity.setOrgId(orgId);
         entity.setAccountId(accountId);
 
-        em.persist(entity);
-        em.flush();
-
-        return mapper.toDomain(entity);
+        return mapper.toDomain(jpa.saveAndFlush(entity));
     }
 }
