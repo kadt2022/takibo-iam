@@ -100,4 +100,34 @@ class BusinessRoleAssignmentServiceTest {
 
         verify(roleAssignmentRepository).saveAll(any());
     }
+
+    @Test
+    void assignBusinessRoles_emptyList_returnsWithoutQueryingRoles() {
+        service.assignBusinessRoles(ORG_ID, SPACE_ID, IDENTITY_ID, List.of());
+
+        verify(roleRepository, never()).findByOrgIdAndSpaceIdAndCodeIn(any(), any(), any());
+        verify(roleAssignmentRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void assignBusinessRoles_alreadyAssigned_isIdempotent() {
+        RoleEntity manager = RoleEntity.builder()
+                .id(ROLE_ID)
+                .orgId(ORG_ID)
+                .spaceId(SPACE_ID)
+                .code("MANAGER")
+                .name("Manager")
+                .build();
+
+        when(roleRepository.findByOrgIdAndSpaceIdAndCodeIn(ORG_ID, SPACE_ID, List.of("MANAGER")))
+                .thenReturn(List.of(manager));
+        when(roleAssignmentRepository.existsByOrgIdAndSpaceIdAndIdentityTypeAndIdentityIdAndRoleSourceAndBusinessRoleId(
+                ORG_ID, SPACE_ID, IdentityType.HUMAN.name(), IDENTITY_ID, RoleSource.BUSINESS, ROLE_ID))
+                .thenReturn(true);
+
+        service.assignBusinessRoles(ORG_ID, SPACE_ID, IDENTITY_ID, List.of("MANAGER"));
+
+        verify(roleAssignmentMapper, never()).toEntity(any());
+        verify(roleAssignmentRepository, never()).saveAll(any());
+    }
 }

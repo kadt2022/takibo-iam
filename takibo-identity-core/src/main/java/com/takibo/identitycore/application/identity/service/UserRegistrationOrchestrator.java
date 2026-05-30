@@ -20,7 +20,6 @@ public class UserRegistrationOrchestrator {
     private final UserDomainService userDomainService;
     private final AccountDomaineService accountDomaineService;
     private final BusinessRoleAssignmentService businessRoleAssignmentService;
-  //  private final RbacAssignmentService rbacAssignmentService;
     private final UserRepository userRepository;
 
     public UserRegistrationResult registerUser(CreateUserCommand command) {
@@ -48,8 +47,6 @@ public class UserRegistrationOrchestrator {
                 account.getId().getValue(),
                 command.businessRoleCodes()
         );
-      //  rbacAssignmentService.assignDefaultPermissions(spaceContext.spaceId(), saved.getId(), command);
-
         return new UserRegistrationResult(saved, account.getEmail());
     }
 }
