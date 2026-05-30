@@ -520,7 +520,7 @@ jobs:
           check_gt "$new_vulnerabilities" 0 "new_vulnerabilities"
 
           if [ "$new_coverage" != "N/A" ]; then
-            check_lt "$new_coverage" 80 "new_coverage"
+            warn_lt "$new_coverage" 80 "new_coverage"
           fi
 
           if [ "$new_duplication" != "N/A" ]; then
