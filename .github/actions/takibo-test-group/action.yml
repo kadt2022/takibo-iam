@@ -1,0 +1,37 @@
+name: 'Takibo Test Group'
+description: 'Set up Java, run Gradle test tasks and upload results for a test group.'
+
+inputs:
+  group:
+    description: 'Test group name — used as artifact suffix (e.g. core-identity)'
+    required: true
+  tasks:
+    description: 'Space-separated Gradle task paths to run (e.g. :module-a:test :module-b:test)'
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-java@v5
+      with:
+        distribution: temurin
+        java-version: '21'
+        cache: gradle
+
+    - name: Make Gradle wrapper executable
+      shell: bash
+      run: chmod +x ./gradlew
+
+    - name: Run ${{ inputs.group }} tests
+      shell: bash
+      run: ./gradlew ${{ inputs.tasks }} --no-daemon --build-cache
+
+    - name: Upload ${{ inputs.group }} test results
+      if: always()
+      uses: actions/upload-artifact@v6
+      with:
+        name: takibo-test-results-${{ inputs.group }}
+        path: |
+          **/build/test-results/**
+          **/build/reports/jacoco/**
+        if-no-files-found: warn
