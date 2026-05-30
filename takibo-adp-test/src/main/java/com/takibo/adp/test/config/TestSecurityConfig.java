@@ -14,6 +14,8 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.crypto.factory.PasswordEncoderFactories;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -22,6 +24,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
 
 import java.util.Set;
+import java.util.UUID;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -52,25 +55,35 @@ public class TestSecurityConfig {
 
     @Bean
     public UserDetailsService userDetailsService() {
+        PasswordEncoder passwordEncoder = PasswordEncoderFactories.createDelegatingPasswordEncoder();
+
         UserDetails user = User.builder()
                 .username("user")
-                .password("{noop}password")
+                .password(testPassword(passwordEncoder, "TAKIBO_ADP_TEST_USER_PASSWORD"))
                 .roles("USER")
                 .build();
 
         UserDetails admin = User.builder()
                 .username("admin")
-                .password("{noop}admin")
+                .password(testPassword(passwordEncoder, "TAKIBO_ADP_TEST_ADMIN_PASSWORD"))
                 .roles("USER", "ADMIN")
                 .build();
 
         UserDetails suspicious = User.builder()
                 .username("suspicious")
-                .password("{noop}suspicious")
+                .password(testPassword(passwordEncoder, "TAKIBO_ADP_TEST_SUSPICIOUS_PASSWORD"))
                 .roles("USER")
                 .build();
 
         return new InMemoryUserDetailsManager(user, admin, suspicious);
+    }
+
+    private String testPassword(PasswordEncoder passwordEncoder, String envName) {
+        String password = System.getenv(envName);
+        if (password == null || password.isBlank()) {
+            password = UUID.randomUUID().toString();
+        }
+        return passwordEncoder.encode(password);
     }
 
     @Bean
