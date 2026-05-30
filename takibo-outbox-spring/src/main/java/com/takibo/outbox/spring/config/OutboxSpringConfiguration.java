@@ -12,6 +12,7 @@ import com.takibo.outbox.spring.processor.OutboxProcessor;
 import com.takibo.outbox.spring.registry.OutboxHandlerRegistry;
 import com.takibo.outbox.spring.scheduling.OutboxScheduler;
 import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.health.contributor.HealthIndicator;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -75,6 +76,12 @@ public class OutboxSpringConfiguration {
 
 
     @Bean
+    @ConditionalOnProperty(
+            prefix = "takibo.outbox.processor",
+            name = "scheduling-enabled",
+            havingValue = "true",
+            matchIfMissing = true
+    )
     public OutboxScheduler outboxScheduler(OutboxProcessor processor) {
         return new OutboxScheduler(processor);
     }

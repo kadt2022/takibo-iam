@@ -10,6 +10,7 @@ build/
 out/
 **/out/
 postman/
+.gradle-user/
 
 # Keep Gradle wrapper ONLY at root
 **/gradle/wrapper/gradle-wrapper.jar

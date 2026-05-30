@@ -1,0 +1,598 @@
+name: Takibo CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  TAKIBO_APP_PORT: 8081
+
+concurrency:
+  group: takibo-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  preflight:
+    name: Takibo Preflight
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Verify Gradle wrapper
+        run: |
+          chmod +x ./gradlew
+          ./gradlew help --no-daemon
+
+  assemble:
+    name: Takibo Assemble
+    needs: preflight
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Assemble all modules
+        run: ./gradlew assemble --parallel --no-daemon --build-cache
+
+      - name: Upload JARs
+        uses: actions/upload-artifact@v6
+        with:
+          name: takibo-jars
+          path: |
+            **/build/libs/*.jar
+            !**/build/libs/*-plain.jar
+          if-no-files-found: warn
+
+      - name: Upload build outputs for Sonar
+        uses: actions/upload-artifact@v6
+        with:
+          name: takibo-build-outputs
+          path: |
+            **/build/classes/**
+            **/build/generated/**
+            **/build/resources/**
+          if-no-files-found: warn
+
+  test-groups:
+    name: Takibo Tests - ${{ matrix.group }}
+    needs: preflight
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: core-identity
+            tasks: ":takibo-identity-core:test :takibo-management-service:test"
+          - group: outbox
+            tasks: ":takibo-outbox-core:test :takibo-outbox-jpa:test :takibo-outbox-spring:test :takibo-outbox-spring-starter:test"
+          - group: security-context
+            tasks: ":takibo-security-context:test :takibo-security-context-spring:test :takibo-security-management:test"
+          - group: adp
+            tasks: ":takibo-adp-api:test :takibo-adp-core:test :takibo-adp-spring:test :takibo-adp-test:test"
+          - group: authorization-server
+            tasks: ":takibo-authorization-server:test"
+          - group: messaging-audit
+            tasks: ":takibo-messaging:test :takibo-audit:test"
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Run ${{ matrix.group }} tests
+        run: ./gradlew ${{ matrix.tasks }} --no-daemon --build-cache
+
+      - name: Upload ${{ matrix.group }} test results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: takibo-test-results-${{ matrix.group }}
+          path: |
+            **/build/test-results/**
+            **/build/reports/jacoco/**
+          if-no-files-found: warn
+
+  iam-boot-bvt:
+    name: Takibo IAM Boot BVT
+    needs:
+      - assemble
+      - test-groups
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: takibo_iam
+          POSTGRES_USER: takibo
+          POSTGRES_PASSWORD: takibo
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+
+      - name: Download JARs
+        uses: actions/download-artifact@v6
+        with:
+          name: takibo-jars
+          path: build-artifacts
+
+      - name: Start Takibo IAM Boot
+        env:
+          SPRING_PROFILES_ACTIVE: ci
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/takibo_iam
+          SPRING_DATASOURCE_USERNAME: takibo
+          SPRING_DATASOURCE_PASSWORD: takibo
+          SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${{ secrets.CI_JWT_ISSUER_URI }}
+          SERVER_PORT: ${{ env.TAKIBO_APP_PORT }}
+        run: |
+          JAR_FILE="$(find build-artifacts -type f -path '*takibo-iam-boot*' \
+            -name '*.jar' ! -name '*-plain.jar' | head -n 1)"
+
+          if [ -z "$JAR_FILE" ]; then
+            echo "No takibo-iam-boot jar found"
+            find build-artifacts -type f
+            exit 1
+          fi
+
+          java -jar "$JAR_FILE" > app.log 2>&1 &
+          echo $! > app.pid
+
+      - name: Wait for application health
+        run: |
+          for i in {1..45}; do
+            if curl -fsS "http://127.0.0.1:${TAKIBO_APP_PORT}/actuator/health" > /dev/null; then
+              echo "Takibo started"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Takibo did not start in time"
+          cat app.log
+          exit 1
+
+      - name: Install Newman
+        run: npm install -g newman@6.2.1 --ignore-scripts
+
+      - name: Run Postman smoke tests
+        run: |
+          if [ -f postman/smoke.postman_collection.json ]; then
+            newman run postman/smoke.postman_collection.json \
+              --env-var baseUrl=http://127.0.0.1:${TAKIBO_APP_PORT}
+          else
+            echo "No Postman smoke collection found. Skipping BVT."
+          fi
+
+      - name: Show application logs on failure
+        if: failure()
+        run: cat app.log
+
+      - name: Stop application
+        if: always()
+        run: |
+          if [ -f app.pid ]; then
+            kill "$(cat app.pid)" || true
+          fi
+
+  sonar:
+    name: Takibo Sonar Analysis
+    needs:
+      - test-groups
+      - iam-boot-bvt
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Download build outputs
+        uses: actions/download-artifact@v6
+        with:
+          name: takibo-build-outputs
+          path: .
+
+      - name: Download test artifacts
+        uses: actions/download-artifact@v6
+        with:
+          pattern: takibo-test-results-*
+          path: .
+          merge-multiple: true
+
+      - name: Run Sonar analysis
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_PROJECT_KEY: ${{ secrets.SONAR_PROJECT_KEY }}
+          SONAR_ORGANIZATION: ${{ secrets.SONAR_ORGANIZATION }}
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+        run: |
+          set -euo pipefail
+
+          SONAR_HOST_URL="${SONAR_HOST_URL:-https://sonarcloud.io}"
+
+          if [ -z "${SONAR_TOKEN:-}" ] || [ -z "${SONAR_PROJECT_KEY:-}" ]; then
+            echo "Missing SONAR_TOKEN or SONAR_PROJECT_KEY"
+            exit 1
+          fi
+
+          args=(
+            sonar
+            --no-daemon
+            "-Dsonar.projectKey=${SONAR_PROJECT_KEY}"
+            "-Dsonar.host.url=${SONAR_HOST_URL}"
+          )
+
+          if [ -n "${SONAR_ORGANIZATION:-}" ]; then
+            args+=("-Dsonar.organization=${SONAR_ORGANIZATION}")
+          fi
+
+          ./gradlew "${args[@]}"
+
+  quality-gate:
+    name: Takibo Quality Gate
+    needs: sonar
+    runs-on: ubuntu-latest
+    if: ${{ needs.sonar.result == 'success' }}
+    permissions: {}
+
+    steps:
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Verify Sonar Quality Gate
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_PROJECT_KEY: ${{ secrets.SONAR_PROJECT_KEY }}
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+        run: |
+          set -euo pipefail
+
+          SONAR_HOST_URL="${SONAR_HOST_URL:-https://sonarcloud.io}"
+
+          if [ -z "${SONAR_TOKEN:-}" ] || [ -z "${SONAR_PROJECT_KEY:-}" ]; then
+            echo "Missing SONAR_TOKEN or SONAR_PROJECT_KEY"
+            exit 1
+          fi
+
+          AUTH="$(printf "%s:" "$SONAR_TOKEN" | base64 | tr -d '\n')"
+
+          get_json() {
+            local url="$1"
+            curl -fsS -H "Authorization: Basic $AUTH" "$url"
+          }
+
+          get_metric() {
+            local json="$1" metric="$2" default="${3:-N/A}"
+            echo "$json" | jq -r --arg metric "$metric" --arg default "$default" '
+              (.component.measures[]? | select(.metric == $metric) | .value) // $default
+            ' | head -n 1
+          }
+
+          to_json_num() {
+            local val="$1"
+            [ "$val" = "N/A" ] && echo "null" || echo "$val"
+          }
+
+          rating_letter() {
+            case "$1" in
+              1|1.0) echo "A" ;;
+              2|2.0) echo "B" ;;
+              3|3.0) echo "C" ;;
+              4|4.0) echo "D" ;;
+              5|5.0) echo "E" ;;
+              *) echo "N/A" ;;
+            esac
+          }
+
+          rating_comment() {
+            case "$1" in
+              A) echo "Excellent: quality level is strong." ;;
+              B) echo "Acceptable: some improvements are recommended." ;;
+              C) echo "Insufficient: corrections are required." ;;
+              D) echo "Critical: quality is degraded." ;;
+              E) echo "Very critical: immediate action is required." ;;
+              *) echo "Not available." ;;
+            esac
+          }
+
+          project_status_json="$(get_json "$SONAR_HOST_URL/api/qualitygates/project_status?projectKey=$SONAR_PROJECT_KEY")"
+          quality_status="$(echo "$project_status_json" | jq -r '.projectStatus.status')"
+
+          metric_keys="new_bugs,new_vulnerabilities,new_security_hotspots_reviewed"
+          metric_keys="$metric_keys,security_hotspots_reviewed,new_coverage,new_duplicated_lines_density"
+          metric_keys="$metric_keys,duplicated_lines_density,coverage,code_smells"
+          metric_keys="$metric_keys,security_rating,reliability_rating,sqale_rating"
+          measures_json="$(get_json "$SONAR_HOST_URL/api/measures/component?component=$SONAR_PROJECT_KEY&metricKeys=$metric_keys")"
+
+          new_bugs="$(get_metric "$measures_json" "new_bugs" "0")"
+          new_vulnerabilities="$(get_metric "$measures_json" "new_vulnerabilities" "0")"
+          code_smells="$(get_metric "$measures_json" "code_smells" "0")"
+
+          new_coverage="$(get_metric "$measures_json" "new_coverage")"
+          new_duplication="$(get_metric "$measures_json" "new_duplicated_lines_density")"
+          new_hotspots_reviewed="$(get_metric "$measures_json" "new_security_hotspots_reviewed")"
+          hotspots_reviewed="$(get_metric "$measures_json" "security_hotspots_reviewed")"
+          coverage="$(get_metric "$measures_json" "coverage")"
+          duplication="$(get_metric "$measures_json" "duplicated_lines_density")"
+
+          security_rating="$(rating_letter "$(get_metric "$measures_json" "security_rating" "0")")"
+          reliability_rating="$(rating_letter "$(get_metric "$measures_json" "reliability_rating" "0")")"
+          maintainability_rating="$(rating_letter "$(get_metric "$measures_json" "sqale_rating" "0")")"
+          security_comment="$(rating_comment "$security_rating")"
+          reliability_comment="$(rating_comment "$reliability_rating")"
+          maintainability_comment="$(rating_comment "$maintainability_rating")"
+
+          fail=0
+          summary="PASS"
+          comments='[]'
+
+          add_comment() {
+            comments="$(echo "$comments" | jq --arg msg "$1" '. + [$msg]')"
+          }
+
+          check_gt() {
+            awk "BEGIN { exit !($1 > $2) }" && {
+              echo "BLOCK: $3 ($1 > $2)"
+              fail=1
+              summary="FAIL"
+              add_comment "$3 is too high"
+            } || true
+          }
+
+          check_lt() {
+            awk "BEGIN { exit !($1 < $2) }" && {
+              echo "BLOCK: $3 ($1 < $2)"
+              fail=1
+              summary="FAIL"
+              add_comment "$3 is too low"
+            } || true
+          }
+
+          warn_lt() {
+            awk "BEGIN { exit !($1 < $2) }" && {
+              echo "WARN: $3 ($1 < $2)"
+              [ "$summary" = "PASS" ] && summary="WARN"
+              add_comment "$3 is below the recommended threshold"
+            } || true
+          }
+
+          warn_gt() {
+            awk "BEGIN { exit !($1 > $2) }" && {
+              echo "WARN: $3 ($1 > $2)"
+              [ "$summary" = "PASS" ] && summary="WARN"
+              add_comment "$3 is above the recommended threshold"
+            } || true
+          }
+
+          if [ "$quality_status" != "OK" ]; then
+            fail=1
+            summary="FAIL"
+            add_comment "Sonar Quality Gate failed"
+          fi
+
+          check_gt "$new_bugs" 0 "new_bugs"
+          check_gt "$new_vulnerabilities" 0 "new_vulnerabilities"
+
+          if [ "$new_coverage" != "N/A" ]; then
+            check_lt "$new_coverage" 80 "new_coverage"
+          fi
+
+          if [ "$new_duplication" != "N/A" ]; then
+            check_gt "$new_duplication" 3 "new_duplicated_lines_density"
+          fi
+
+          if [ "$new_hotspots_reviewed" = "N/A" ]; then
+            :
+          elif [ "$new_hotspots_reviewed" != "100" ]; then
+            echo "BLOCK: new_security_hotspots_reviewed (${new_hotspots_reviewed}% != 100%)"
+            fail=1
+            summary="FAIL"
+            add_comment "All new security hotspots must be reviewed"
+          fi
+
+          if [ "$coverage" != "N/A" ]; then
+            warn_lt "$coverage" 60 "global coverage"
+          fi
+
+          warn_gt "$code_smells" 200 "global code smells"
+
+          jq -n \
+            --arg qualityGate "$quality_status" \
+            --arg summary "$summary" \
+            --arg securityRating "$security_rating" \
+            --arg securityComment "$security_comment" \
+            --arg reliabilityRating "$reliability_rating" \
+            --arg reliabilityComment "$reliability_comment" \
+            --arg maintainabilityRating "$maintainability_rating" \
+            --arg maintainabilityComment "$maintainability_comment" \
+            --argjson newBugs "$new_bugs" \
+            --argjson newVulnerabilities "$new_vulnerabilities" \
+            --argjson newCoveragePct "$(to_json_num "$new_coverage")" \
+            --argjson newDuplicationPct "$(to_json_num "$new_duplication")" \
+            --argjson newHotspotsReviewedPct "$(to_json_num "$new_hotspots_reviewed")" \
+            --argjson coveragePct "$(to_json_num "$coverage")" \
+            --argjson duplicationPct "$(to_json_num "$duplication")" \
+            --argjson hotspotsReviewedPct "$(to_json_num "$hotspots_reviewed")" \
+            --argjson codeSmells "$code_smells" \
+            --argjson comments "$comments" \
+            '{
+              qualityGate: $qualityGate,
+              summary: $summary,
+              ratings: {
+                security: { value: $securityRating, comment: $securityComment },
+                reliability: { value: $reliabilityRating, comment: $reliabilityComment },
+                maintainability: { value: $maintainabilityRating, comment: $maintainabilityComment }
+              },
+              newCode: {
+                bugs: $newBugs,
+                vulnerabilities: $newVulnerabilities,
+                coveragePct: $newCoveragePct,
+                duplicationPct: $newDuplicationPct,
+                hotspotsReviewedPct: $newHotspotsReviewedPct
+              },
+              global: {
+                coveragePct: $coveragePct,
+                duplicationPct: $duplicationPct,
+                hotspotsReviewedPct: $hotspotsReviewedPct,
+                codeSmells: $codeSmells
+              },
+              comments: $comments
+            }' > takibo-quality-gate-report.json
+
+          jq . takibo-quality-gate-report.json
+
+          {
+            echo "## Takibo Quality Gate"
+            echo ""
+            echo "- Sonar status: **$quality_status**"
+            echo "- Summary: **$summary**"
+            echo ""
+            echo "### Ratings"
+            echo "- Security: **$security_rating** - $security_comment"
+            echo "- Reliability: **$reliability_rating** - $reliability_comment"
+            echo "- Maintainability: **$maintainability_rating** - $maintainability_comment"
+            echo ""
+            echo "### New Code"
+            echo "- Bugs: $new_bugs"
+            echo "- Vulnerabilities: $new_vulnerabilities"
+            echo "- Coverage: ${new_coverage}%"
+            echo "- Duplication: ${new_duplication}%"
+            echo "- Hotspots reviewed: ${new_hotspots_reviewed}%"
+            echo ""
+            echo "### Global"
+            echo "- Coverage: ${coverage}%"
+            echo "- Duplication: ${duplication}%"
+            echo "- Hotspots reviewed: ${hotspots_reviewed}%"
+            echo "- Code smells: $code_smells"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$fail" -eq 1 ]; then
+            echo "Takibo Policy Gate: FAILED"
+            exit 1
+          fi
+
+          echo "Takibo Policy Gate: PASSED"
+
+      - name: Upload Takibo Quality Gate report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: takibo-quality-gate-report
+          path: takibo-quality-gate-report.json
+
+  status-check:
+    name: Takibo CI Status
+    needs:
+      - preflight
+      - assemble
+      - test-groups
+      - iam-boot-bvt
+      - sonar
+      - quality-gate
+    runs-on: ubuntu-latest
+    if: always()
+    permissions: {}
+
+    steps:
+      - name: Verify required jobs
+        run: |
+          set -euo pipefail
+
+          failed=0
+
+          check_result() {
+            local job="$1"
+            local result="$2"
+
+            case "$result" in
+              success)
+                echo "$job: $result"
+                ;;
+              failure|cancelled)
+                echo "$job: $result"
+                failed=1
+                ;;
+              skipped)
+                echo "$job: $result"
+                ;;
+              *)
+                echo "$job: unexpected result '$result'"
+                failed=1
+                ;;
+            esac
+          }
+
+          check_result preflight "${{ needs.preflight.result }}"
+          check_result assemble "${{ needs.assemble.result }}"
+          check_result test-groups "${{ needs.test-groups.result }}"
+          check_result iam-boot-bvt "${{ needs.iam-boot-bvt.result }}"
+          check_result sonar "${{ needs.sonar.result }}"
+          check_result quality-gate "${{ needs.quality-gate.result }}"
+
+          if [ "$failed" -eq 1 ]; then
+            echo "Takibo CI status: FAILED"
+            exit 1
+          fi
+
+          echo "Takibo CI status: PASSED"
