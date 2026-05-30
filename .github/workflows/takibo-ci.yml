@@ -117,7 +117,7 @@ jobs:
           SPRING_DATASOURCE_PASSWORD: takibo
           SPRING_PROFILES_ACTIVE: ci
         run: |
-          ./gradlew :takibo-iam-boot:test --tests "*Migration*" --no-daemon --build-cache
+          ./gradlew :takibo-iam-boot:test --tests "*Migration*" -Dtakibo.database-check=true --no-daemon --build-cache
 
   test-core-identity:
     name: Takibo Tests - core-identity
