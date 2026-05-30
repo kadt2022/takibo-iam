@@ -9,7 +9,6 @@ import com.takibo.identitycore.domain.vo.UserId;
 import com.takibo.identitycore.infrastructure.entity.UserEntity;
 import com.takibo.identitycore.infrastructure.jpa.mapper.UserJpaMapper;
 import com.takibo.identitycore.infrastructure.jpa.repository.JpaUserRepository;
-import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -25,22 +24,11 @@ public class UserRepositoryAdapter implements UserRepository {
 
     private final JpaUserRepository jpa;
     private final UserJpaMapper mapper;
-    private final EntityManager em;
 
     @Override
     @Transactional
     public User save(User user) {
         UserEntity entity = mapper.toEntity(user);
-
-        UUID orgId = em.createQuery(
-                        "SELECT s.orgId FROM SpaceEntity s WHERE s.id = :spaceId",
-                        UUID.class
-                )
-                .setParameter("spaceId", user.getSpaceId().value())
-                .getSingleResult();
-
-        entity.setOrgId(orgId);
-
         UserEntity saved = jpa.save(entity);
         return mapper.toDomain(saved);
     }

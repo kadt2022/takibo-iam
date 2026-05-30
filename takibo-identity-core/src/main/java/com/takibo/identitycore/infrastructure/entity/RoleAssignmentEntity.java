@@ -1,5 +1,6 @@
 package com.takibo.identitycore.infrastructure.entity;
 
+import com.takibo.identitycore.domain.rbac.model.RoleSource;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -46,8 +47,9 @@ public class RoleAssignmentEntity {
     private UUID businessRoleId;
 
     @Builder.Default
-    @Column(name = "assignment_source", nullable = false, length = 120)
-    private String assignmentSource = "SYSTEM";
+    @Enumerated(EnumType.STRING)
+    @Column(name = "role_source", nullable = false, length = 120)
+    private RoleSource roleSource = RoleSource.TECHNICAL;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)

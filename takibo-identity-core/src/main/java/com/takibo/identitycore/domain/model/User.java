@@ -89,11 +89,11 @@ import com.takibo.identitycore.domain.status.UserStatus;
 import com.takibo.identitycore.domain.vo.AccountId;
 import com.takibo.identitycore.domain.vo.SpaceId;
 import com.takibo.identitycore.domain.vo.UserId;
-import com.takibo.identitycore.infrastructure.entity.AccountEntity;
 import lombok.*;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 
 
 @Getter
@@ -103,6 +103,7 @@ public class User {
 
     @EqualsAndHashCode.Include
     private final UserId id;
+    private final UUID orgId;
     private final SpaceId spaceId;
     private final AccountId accountId;
     private String username;
@@ -126,6 +127,7 @@ public class User {
 
     @SuppressWarnings("java:S107")
     public static User createNative(UserId id,
+                                    UUID orgId,
                                     SpaceId spaceId,
                                     AccountId accountId,
                                     String username,
@@ -139,6 +141,7 @@ public class User {
                                     Instant updatedAt,
                                     Map<String, Object> metadata) {
         Objects.requireNonNull(id, "id");
+        Objects.requireNonNull(orgId, "orgId");
         Objects.requireNonNull(spaceId, "spaceId");
         Objects.requireNonNull(accountId, "accountId");
         Objects.requireNonNull(username, "username");
@@ -146,6 +149,7 @@ public class User {
         Objects.requireNonNull(updatedAt, "updatedAt");
         return User.builder()
                 .id(id)
+                .orgId(orgId)
                 .spaceId(spaceId)
                 .accountId(accountId)
                 .username(username)
@@ -164,16 +168,18 @@ public class User {
     }
 
     public static User createFederated(
-            SpaceId spaceId, AccountId accountId,
+            UUID orgId, SpaceId spaceId, AccountId accountId,
             String username, String firstName, String lastName,
             Map<String,Object> metadata
     ) {
         Instant now = Instant.now();
+        Objects.requireNonNull(orgId, "orgId");
         Objects.requireNonNull(spaceId, "spaceId");
         Objects.requireNonNull(accountId, "accountId");
         Objects.requireNonNull(username, "username");
         return User.builder()
                 .id(UserId.generate())
+                .orgId(orgId)
                 .spaceId(spaceId)
                 .accountId(accountId)
                 .type(UserType.FEDERATED)
@@ -189,14 +195,16 @@ public class User {
                 .build();
     }
     public static User createService(
-            SpaceId spaceId, AccountId accountId, String username, Map<String,Object> metadata
+            UUID orgId, SpaceId spaceId, AccountId accountId, String username, Map<String,Object> metadata
     ) {
         Instant now = Instant.now();
+        Objects.requireNonNull(orgId, "orgId");
         Objects.requireNonNull(spaceId, "spaceId");
         Objects.requireNonNull(accountId, "accountId");
         Objects.requireNonNull(username, "username");
         return User.builder()
                 .id(UserId.generate())
+                .orgId(orgId)
                 .spaceId(spaceId)
                 .accountId(accountId)
                 .type(UserType.MACHINE_ACCOUNT)
@@ -211,16 +219,18 @@ public class User {
     }
 
     public static User createGuest(
-            SpaceId spaceId, AccountId accountId,
+            UUID orgId, SpaceId spaceId, AccountId accountId,
             String username, String firstName, String lastName,
             Map<String,Object> metadata
     ) {
         Instant now = Instant.now();
+        Objects.requireNonNull(orgId, "orgId");
         Objects.requireNonNull(spaceId, "spaceId");
         Objects.requireNonNull(accountId, "accountId");
         Objects.requireNonNull(username, "username");
         return User.builder()
                 .id(UserId.generate())
+                .orgId(orgId)
                 .spaceId(spaceId)
                 .accountId(accountId)
                 .type(UserType.GUEST)
