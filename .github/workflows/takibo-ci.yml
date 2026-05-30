@@ -365,6 +365,7 @@ jobs:
             --no-daemon
             "-Dsonar.projectKey=${SONAR_PROJECT_KEY}"
             "-Dsonar.host.url=${SONAR_HOST_URL}"
+            "-Dsonar.coverage.jacoco.xmlReportPaths=**/build/reports/jacoco/test/jacocoTestReport.xml"
           )
 
           if [ -n "${SONAR_ORGANIZATION:-}" ]; then

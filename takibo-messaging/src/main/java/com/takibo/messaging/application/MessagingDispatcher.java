@@ -154,13 +154,13 @@ public class MessagingDispatcher {
     }
 
     private boolean isDedupConflict(DataIntegrityViolationException e) {
-        String message = e.getMostSpecificCause() != null ? e.getMostSpecificCause().getMessage() : e.getMessage();
+        String message = e.getMostSpecificCause().getMessage();
         if (message == null) {
             return false;
         }
-        return message.contains("uq_message_deliveries_dedup_key")
-                || (message.contains("message_deliveries") && message.contains("dedup_key"))
-                || message.contains("uq_message_deliveries_dedup_key".toUpperCase());
+        String normalized = message.toLowerCase();
+        return normalized.contains("uq_message_deliveries_dedup_key")
+                || (normalized.contains("message_deliveries") && normalized.contains("dedup_key"));
     }
 
     public record DispatchResult(int created, int skipped) { }
