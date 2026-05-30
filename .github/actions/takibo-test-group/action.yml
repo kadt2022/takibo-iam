@@ -24,7 +24,9 @@ runs:
 
     - name: Run ${{ inputs.group }} tests
       shell: bash
-      run: ./gradlew ${{ inputs.tasks }} --no-daemon --build-cache
+      env:
+        GRADLE_TASKS: ${{ inputs.tasks }}
+      run: ./gradlew $GRADLE_TASKS --no-daemon --build-cache
 
     - name: Upload ${{ inputs.group }} test results
       if: always()
