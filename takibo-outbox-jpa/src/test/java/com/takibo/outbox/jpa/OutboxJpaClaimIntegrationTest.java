@@ -62,7 +62,7 @@ class OutboxJpaClaimIntegrationTest {
         registry.add("spring.flyway.enabled", () -> "true");
     }
 
-    @SpringBootApplication
+    @SpringBootApplication(scanBasePackages = "com.takibo.outbox.jpa.repository")
     @EnableJpaRepositories(basePackages = "com.takibo.outbox.jpa.repository")
     @EntityScan(basePackages = "com.takibo.outbox.jpa.entity")
     @Import(com.takibo.outbox.jpa.repository.OutboxMessageClaimRepositoryImpl.class)
