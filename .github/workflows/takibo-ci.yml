@@ -77,8 +77,8 @@ jobs:
           if-no-files-found: warn
 
   database-check:
-    name: Takibo Database Check
-    needs: assemble
+    name: Database Check
+    needs: preflight
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -206,6 +206,7 @@ jobs:
   iam-boot-bvt:
     name: Takibo IAM Boot BVT
     needs:
+      - assemble
       - test-core-identity
       - test-outbox
       - test-security-context
