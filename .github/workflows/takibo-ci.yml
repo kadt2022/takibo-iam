@@ -156,6 +156,7 @@ jobs:
     name: Takibo Sonar Analysis
     needs: bvt
     runs-on: ubuntu-latest
+    if: ${{ vars.SONAR_ORGANIZATION != '' }}
 
     steps:
       - uses: actions/checkout@v6
@@ -209,6 +210,7 @@ jobs:
     name: Takibo Quality Gate
     needs: sonar
     runs-on: ubuntu-latest
+    if: ${{ needs.sonar.result == 'success' }}
 
     steps:
       - name: Install jq
