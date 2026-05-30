@@ -156,8 +156,6 @@ jobs:
     name: Takibo Sonar Analysis
     needs: bvt
     runs-on: ubuntu-latest
-    if: ${{ vars.SONAR_ORGANIZATION != '' }}
-
     steps:
       - uses: actions/checkout@v6
         with:
@@ -181,7 +179,7 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_PROJECT_KEY: ${{ secrets.SONAR_PROJECT_KEY }}
-          SONAR_ORGANIZATION: ${{ vars.SONAR_ORGANIZATION }}
+          SONAR_ORGANIZATION: ${{ secrets.SONAR_ORGANIZATION }}
           SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
         run: |
           set -euo pipefail
