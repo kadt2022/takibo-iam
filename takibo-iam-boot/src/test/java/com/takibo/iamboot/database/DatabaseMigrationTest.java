@@ -16,7 +16,8 @@ class DatabaseMigrationTest {
 
     @Test
     void flywayMigrationsApplyOnConfiguredDatabase() throws Exception {
-        assumeTrue(Boolean.getBoolean("takibo.database-check"), "Only runs in the database-check CI job");
+        assumeTrue("true".equalsIgnoreCase(System.getenv("TAKIBO_DATABASE_CHECK")),
+                "Only runs in the database-check CI job");
 
         String jdbcUrl = requiredEnv("SPRING_DATASOURCE_URL");
         String username = requiredEnv("SPRING_DATASOURCE_USERNAME");
