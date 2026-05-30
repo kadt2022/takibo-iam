@@ -401,6 +401,8 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_PROJECT_KEY: ${{ secrets.SONAR_PROJECT_KEY }}
           SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+          SONAR_PR_NUMBER: ${{ github.event.pull_request.number }}
+          SONAR_BRANCH: ${{ github.ref_name }}
         run: |
           set -euo pipefail
 
@@ -452,7 +454,12 @@ jobs:
             esac
           }
 
-          project_status_json="$(get_json "$SONAR_HOST_URL/api/qualitygates/project_status?projectKey=$SONAR_PROJECT_KEY")"
+          if [ -n "${SONAR_PR_NUMBER:-}" ]; then
+            STATUS_URL="$SONAR_HOST_URL/api/qualitygates/project_status?projectKey=$SONAR_PROJECT_KEY&pullRequest=$SONAR_PR_NUMBER"
+          else
+            STATUS_URL="$SONAR_HOST_URL/api/qualitygates/project_status?projectKey=$SONAR_PROJECT_KEY&branch=$SONAR_BRANCH"
+          fi
+          project_status_json="$(get_json "$STATUS_URL")"
           quality_status="$(echo "$project_status_json" | jq -r '.projectStatus.status')"
 
           metric_keys="new_bugs,new_vulnerabilities,new_security_hotspots_reviewed"
