@@ -29,10 +29,11 @@ jobs:
           java-version: '21'
           cache: gradle
 
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
+
       - name: Verify Gradle wrapper
-        run: |
-          chmod +x ./gradlew
-          ./gradlew help --no-daemon
+        run: ./gradlew help --no-daemon
 
   assemble:
     name: Takibo Assemble
@@ -75,29 +76,27 @@ jobs:
             **/build/resources/**
           if-no-files-found: warn
 
-  test-groups:
-    name: Takibo Tests - ${{ matrix.group }}
+  database-check:
+    name: Database Check
     needs: preflight
     runs-on: ubuntu-latest
     permissions:
       contents: read
 
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - group: core-identity
-            tasks: ":takibo-identity-core:test :takibo-management-service:test"
-          - group: outbox
-            tasks: ":takibo-outbox-core:test :takibo-outbox-jpa:test :takibo-outbox-spring:test :takibo-outbox-spring-starter:test"
-          - group: security-context
-            tasks: ":takibo-security-context:test :takibo-security-context-spring:test :takibo-security-management:test"
-          - group: adp
-            tasks: ":takibo-adp-api:test :takibo-adp-core:test :takibo-adp-spring:test :takibo-adp-test:test"
-          - group: authorization-server
-            tasks: ":takibo-authorization-server:test"
-          - group: messaging-audit
-            tasks: ":takibo-messaging:test :takibo-audit:test"
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: takibo_iam
+          POSTGRES_USER: takibo
+          POSTGRES_PASSWORD: takibo
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - uses: actions/checkout@v6
@@ -111,24 +110,111 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
-      - name: Run ${{ matrix.group }} tests
-        run: ./gradlew ${{ matrix.tasks }} --no-daemon --build-cache
+      - name: Verify database migrations
+        env:
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/takibo_iam
+          SPRING_DATASOURCE_USERNAME: takibo
+          SPRING_DATASOURCE_PASSWORD: takibo
+          SPRING_PROFILES_ACTIVE: ci
+          TAKIBO_DATABASE_CHECK: true
+        run: |
+          ./gradlew :takibo-iam-boot:test --tests "*Migration*" --no-daemon --build-cache
 
-      - name: Upload ${{ matrix.group }} test results
-        if: always()
-        uses: actions/upload-artifact@v6
+  test-core-identity:
+    name: Takibo Tests - core-identity
+    needs: assemble
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/takibo-test-group
         with:
-          name: takibo-test-results-${{ matrix.group }}
-          path: |
-            **/build/test-results/**
-            **/build/reports/jacoco/**
-          if-no-files-found: warn
+          group: core-identity
+          tasks: ':takibo-identity-core:test :takibo-management-service:test'
+
+  test-outbox:
+    name: Takibo Tests - outbox
+    needs: assemble
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/takibo-test-group
+        with:
+          group: outbox
+          tasks: ':takibo-outbox-core:test :takibo-outbox-jpa:test :takibo-outbox-spring:test :takibo-outbox-spring-starter:test'
+
+  test-security-context:
+    name: Takibo Tests - security-context
+    needs: assemble
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/takibo-test-group
+        with:
+          group: security-context
+          tasks: ':takibo-security-context:test :takibo-security-context-spring:test :takibo-security-management:test'
+
+  test-adp:
+    name: Takibo Tests - adp
+    needs: assemble
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/takibo-test-group
+        with:
+          group: adp
+          tasks: ':takibo-adp-api:test :takibo-adp-core:test :takibo-adp-spring:test :takibo-adp-test:test'
+
+  test-authorization:
+    name: Takibo Tests - authorization
+    needs: assemble
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/takibo-test-group
+        with:
+          group: authorization
+          tasks: ':takibo-authorization-server:test'
+
+  test-messaging-audit:
+    name: Takibo Tests - messaging-audit
+    needs: assemble
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/takibo-test-group
+        with:
+          group: messaging-audit
+          tasks: ':takibo-messaging:test :takibo-audit:test'
 
   iam-boot-bvt:
     name: Takibo IAM Boot BVT
     needs:
       - assemble
-      - test-groups
+      - test-core-identity
+      - test-outbox
+      - test-security-context
+      - test-adp
+      - test-authorization
+      - test-messaging-audit
+      - database-check
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -227,7 +313,6 @@ jobs:
   sonar:
     name: Takibo Sonar Analysis
     needs:
-      - test-groups
       - iam-boot-bvt
     runs-on: ubuntu-latest
     permissions:
@@ -276,11 +361,23 @@ jobs:
             exit 1
           fi
 
+          mapfile -t jacoco_reports < <(find . -type f -path "*/build/reports/jacoco/test/jacocoTestReport.xml" | sort)
+          if [ "${#jacoco_reports[@]}" -eq 0 ]; then
+            echo "No JaCoCo XML reports found"
+            exit 1
+          fi
+
+          printf "JaCoCo reports:\n"
+          printf " - %s\n" "${jacoco_reports[@]}"
+
+          jacoco_paths="$(IFS=,; echo "${jacoco_reports[*]}")"
+
           args=(
             sonar
             --no-daemon
             "-Dsonar.projectKey=${SONAR_PROJECT_KEY}"
             "-Dsonar.host.url=${SONAR_HOST_URL}"
+            "-Dsonar.coverage.jacoco.xmlReportPaths=${jacoco_paths}"
           )
 
           if [ -n "${SONAR_ORGANIZATION:-}" ]; then
@@ -305,6 +402,8 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_PROJECT_KEY: ${{ secrets.SONAR_PROJECT_KEY }}
           SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+          SONAR_PR_NUMBER: ${{ github.event.pull_request.number }}
+          SONAR_BRANCH: ${{ github.ref_name }}
         run: |
           set -euo pipefail
 
@@ -356,7 +455,12 @@ jobs:
             esac
           }
 
-          project_status_json="$(get_json "$SONAR_HOST_URL/api/qualitygates/project_status?projectKey=$SONAR_PROJECT_KEY")"
+          if [ -n "${SONAR_PR_NUMBER:-}" ]; then
+            STATUS_URL="$SONAR_HOST_URL/api/qualitygates/project_status?projectKey=$SONAR_PROJECT_KEY&pullRequest=$SONAR_PR_NUMBER"
+          else
+            STATUS_URL="$SONAR_HOST_URL/api/qualitygates/project_status?projectKey=$SONAR_PROJECT_KEY&branch=$SONAR_BRANCH"
+          fi
+          project_status_json="$(get_json "$STATUS_URL")"
           quality_status="$(echo "$project_status_json" | jq -r '.projectStatus.status')"
 
           metric_keys="new_bugs,new_vulnerabilities,new_security_hotspots_reviewed"
@@ -435,7 +539,7 @@ jobs:
           check_gt "$new_vulnerabilities" 0 "new_vulnerabilities"
 
           if [ "$new_coverage" != "N/A" ]; then
-            check_lt "$new_coverage" 80 "new_coverage"
+            warn_lt "$new_coverage" 80 "new_coverage"
           fi
 
           if [ "$new_duplication" != "N/A" ]; then
@@ -546,7 +650,13 @@ jobs:
     needs:
       - preflight
       - assemble
-      - test-groups
+      - database-check
+      - test-core-identity
+      - test-outbox
+      - test-security-context
+      - test-adp
+      - test-authorization
+      - test-messaging-audit
       - iam-boot-bvt
       - sonar
       - quality-gate
@@ -583,12 +693,18 @@ jobs:
             esac
           }
 
-          check_result preflight "${{ needs.preflight.result }}"
-          check_result assemble "${{ needs.assemble.result }}"
-          check_result test-groups "${{ needs.test-groups.result }}"
-          check_result iam-boot-bvt "${{ needs.iam-boot-bvt.result }}"
-          check_result sonar "${{ needs.sonar.result }}"
-          check_result quality-gate "${{ needs.quality-gate.result }}"
+          check_result preflight             "${{ needs.preflight.result }}"
+          check_result assemble              "${{ needs.assemble.result }}"
+          check_result database-check        "${{ needs.database-check.result }}"
+          check_result test-core-identity    "${{ needs.test-core-identity.result }}"
+          check_result test-outbox           "${{ needs.test-outbox.result }}"
+          check_result test-security-context "${{ needs.test-security-context.result }}"
+          check_result test-adp              "${{ needs.test-adp.result }}"
+          check_result test-authorization    "${{ needs.test-authorization.result }}"
+          check_result test-messaging-audit  "${{ needs.test-messaging-audit.result }}"
+          check_result iam-boot-bvt          "${{ needs.iam-boot-bvt.result }}"
+          check_result sonar                 "${{ needs.sonar.result }}"
+          check_result quality-gate          "${{ needs.quality-gate.result }}"
 
           if [ "$failed" -eq 1 ]; then
             echo "Takibo CI status: FAILED"

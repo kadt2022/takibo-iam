@@ -58,11 +58,12 @@ public class JpaOutboxPublisher implements OutboxPublisher {
     }
 
     private boolean isDedupConflict(DataIntegrityViolationException e) {
-        String message = e.getMostSpecificCause() != null ? e.getMostSpecificCause().getMessage() : e.getMessage();
+        String message = e.getMostSpecificCause().getMessage();
         if (message == null) {
             return false;
         }
-        return message.contains("uq_outbox_dedup_key")
-                || (message.contains("outbox_messages") && message.contains("dedup_key"));
+        String normalized = message.toLowerCase();
+        return normalized.contains("uq_outbox_dedup_key")
+                || (normalized.contains("outbox_messages") && normalized.contains("dedup_key"));
     }
 }

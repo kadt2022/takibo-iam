@@ -21,6 +21,8 @@ subprojects {
     }
 
     pluginManager.withPlugin('java') {
+        apply plugin: 'jacoco'
+
         java {
             toolchain { languageVersion = JavaLanguageVersion.of(21) }
         }
@@ -32,9 +34,19 @@ subprojects {
                 }
             }
         }
-    }
 
-    tasks.withType(Test).configureEach {
-        useJUnitPlatform()
+        tasks.withType(Test).configureEach {
+            useJUnitPlatform()
+            finalizedBy(tasks.named('jacocoTestReport'))
+        }
+
+        tasks.withType(JacocoReport).configureEach {
+            dependsOn(tasks.withType(Test))
+            reports {
+                xml.required = true
+                html.required = true
+                csv.required = false
+            }
+        }
     }
 }
