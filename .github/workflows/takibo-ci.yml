@@ -6,9 +6,6 @@ on:
   pull_request:
     branches: [main, develop]
 
-permissions:
-  contents: read
-
 env:
   TAKIBO_APP_PORT: 8081
 
@@ -20,6 +17,8 @@ jobs:
   preflight:
     name: Takibo Preflight
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
       - uses: actions/checkout@v6
@@ -39,6 +38,8 @@ jobs:
     name: Takibo Assemble
     needs: preflight
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
       - uses: actions/checkout@v6
@@ -78,6 +79,8 @@ jobs:
     name: Takibo Tests - ${{ matrix.group }}
     needs: preflight
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     strategy:
       fail-fast: false
@@ -127,6 +130,8 @@ jobs:
       - assemble
       - test-groups
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     services:
       postgres:
@@ -197,7 +202,7 @@ jobs:
           exit 1
 
       - name: Install Newman
-        run: npm install -g newman --ignore-scripts
+        run: npm install -g newman@6.2.1 --ignore-scripts
 
       - name: Run Postman smoke tests
         run: |
@@ -225,6 +230,8 @@ jobs:
       - test-groups
       - iam-boot-bvt
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
       - uses: actions/checkout@v6
@@ -287,6 +294,7 @@ jobs:
     needs: sonar
     runs-on: ubuntu-latest
     if: ${{ needs.sonar.result == 'success' }}
+    permissions: {}
 
     steps:
       - name: Install jq
@@ -544,6 +552,7 @@ jobs:
       - quality-gate
     runs-on: ubuntu-latest
     if: always()
+    permissions: {}
 
     steps:
       - name: Verify required jobs
