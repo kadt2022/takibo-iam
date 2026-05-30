@@ -31,29 +31,6 @@ public class AccountApplicationService implements AccountApplicationCase {
 
     @Override
     @Transactional
-    public AccountResponse createAccountNative(String emailStr, String rawPassword) {
-        if (!passwordPolicy.isValid(rawPassword)) {
-            throw new PasswordPolicyViolationException("Password does not meet policy");
-        }
-        EmailAddress email = new EmailAddress(emailStr);
-
-        Account account = accountRepository.findByEmail(email)
-                .orElseGet(() -> {
-                    Account newAccount = Account.create(email, null, null, Map.of());
-                    Account accountCreated = accountRepository.save(newAccount);
-                    PasswordHash pwd = PasswordHash.of(passwordHasherCase.hash(rawPassword), "bcrypt", 1);
-
-                    AccountCredentials accountCredentials = AccountCredentials.createNew(accountCreated.getId(), pwd);
-                    accountCredentialsRepository.save(accountCredentials, accountCreated.getOrgId());
-
-                    return accountCreated;
-                });
-
-        return new AccountResponse(account.getId().getValue(), account.getEmail().value());
-    }
-
-    @Override
-    @Transactional
     public AccountResponse createAccountInOrg(UUID orgId, String emailStr, String rawPassword) {
         if (!passwordPolicy.isValid(rawPassword)) {
             throw new PasswordPolicyViolationException("Password does not meet policy");

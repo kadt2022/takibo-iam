@@ -30,16 +30,9 @@ public class AccountCredentialsRepositoryAdapter implements AccountCredentialsRe
         AccountCredentialsEntity entity = mapper.toEntity(domain, orgId);
 
         UUID accountId = domain.getAccountId().getValue();
-        AccountEntity accountEntity = em.find(
-                AccountEntity.class,
-                accountId
-        );
+        AccountEntity accountRef = em.getReference(AccountEntity.class, accountId);
 
-        if (accountEntity == null) {
-            throw new IllegalStateException("Account not found: " + accountId);
-        }
-
-        entity.setAccount(accountEntity);
+        entity.setAccount(accountRef);
         entity.setOrgId(orgId);
         entity.setAccountId(accountId);
 

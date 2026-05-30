@@ -16,13 +16,13 @@ public record CreateUserCommand(
         String username,
         String firstName,
         String lastName,
-        List<String> roleCodes,
+        List<String> businessRoleCodes,
         List<String> groupCodes,
         Map<String, Object> metadata
 ) {
     public static CreateUserCommand from(UUID spaceId, CreateUserRequestV2 r) {
 
-        List<String> roleNames = r.initialAssignments() != null && r.initialAssignments().roleNames() != null
+        List<String> businessRoleCodes = r.initialAssignments() != null && r.initialAssignments().roleNames() != null
                 ? r.initialAssignments().roleNames()
                 : List.of();
 
@@ -38,9 +38,23 @@ public record CreateUserCommand(
                 r.username(),
                 r.firstName(),
                 r.lastName(),
-                roleNames,
+                businessRoleCodes,
                 groupCodes,
                 r.metadata()
         );
+    }
+
+    @Override
+    public String toString() {
+        return "CreateUserCommand[spaceId=" + spaceId +
+                ", accountId=" + accountId +
+                ", email=" + email +
+                ", rawPassword=[PROTECTED]" +
+                ", username=" + username +
+                ", firstName=" + firstName +
+                ", lastName=" + lastName +
+                ", businessRoleCodes=" + businessRoleCodes +
+                ", groupCodes=" + groupCodes +
+                ", metadata=" + metadata + "]";
     }
 }
