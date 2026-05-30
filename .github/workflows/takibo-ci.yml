@@ -360,12 +360,23 @@ jobs:
             exit 1
           fi
 
+          mapfile -t jacoco_reports < <(find . -type f -path "*/build/reports/jacoco/test/jacocoTestReport.xml" | sort)
+          if [ "${#jacoco_reports[@]}" -eq 0 ]; then
+            echo "No JaCoCo XML reports found"
+            exit 1
+          fi
+
+          printf "JaCoCo reports:\n"
+          printf " - %s\n" "${jacoco_reports[@]}"
+
+          jacoco_paths="$(IFS=,; echo "${jacoco_reports[*]}")"
+
           args=(
             sonar
             --no-daemon
             "-Dsonar.projectKey=${SONAR_PROJECT_KEY}"
             "-Dsonar.host.url=${SONAR_HOST_URL}"
-            "-Dsonar.coverage.jacoco.xmlReportPaths=**/build/reports/jacoco/test/jacocoTestReport.xml"
+            "-Dsonar.coverage.jacoco.xmlReportPaths=${jacoco_paths}"
           )
 
           if [ -n "${SONAR_ORGANIZATION:-}" ]; then
