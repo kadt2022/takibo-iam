@@ -29,29 +29,11 @@ jobs:
           java-version: '21'
           cache: gradle
 
-      - name: Verify Gradle wrapper
-        run: |
-          chmod +x ./gradlew
-          ./gradlew help --no-daemon
-
-  assemble:
-    name: Takibo Assemble
-    needs: preflight
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '21'
-          cache: gradle
-
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
+
+      - name: Verify Gradle wrapper
+        run: ./gradlew help --no-daemon
 
       - name: Assemble all modules
         run: ./gradlew assemble --parallel --no-daemon --build-cache
@@ -127,7 +109,7 @@ jobs:
   iam-boot-bvt:
     name: Takibo IAM Boot BVT
     needs:
-      - assemble
+      - preflight
       - test-groups
     runs-on: ubuntu-latest
     permissions:
@@ -545,7 +527,6 @@ jobs:
     name: Takibo CI Status
     needs:
       - preflight
-      - assemble
       - test-groups
       - iam-boot-bvt
       - sonar
@@ -584,7 +565,6 @@ jobs:
           }
 
           check_result preflight "${{ needs.preflight.result }}"
-          check_result assemble "${{ needs.assemble.result }}"
           check_result test-groups "${{ needs.test-groups.result }}"
           check_result iam-boot-bvt "${{ needs.iam-boot-bvt.result }}"
           check_result sonar "${{ needs.sonar.result }}"
