@@ -12,7 +12,6 @@ import com.takibo.identitycore.infrastructure.jpa.mapper.RoleJpaAssignmentMapper
 import com.takibo.identitycore.infrastructure.jpa.repository.JpaRoleAssignmentRepository;
 import com.takibo.identitycore.infrastructure.jpa.repository.JpaRoleRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -138,22 +137,15 @@ public class BusinessRoleAssignmentService {
     }
 
     private void saveAssignments(List<RoleAssignmentEntity> assignments) {
-        try {
-            roleAssignmentRepository.saveAllAndFlush(assignments);
-        } catch (DataIntegrityViolationException ex) {
-            boolean allNowExist = assignments.stream().allMatch(e ->
-                    roleAssignmentRepository.existsByOrgIdAndSpaceIdAndIdentityTypeAndIdentityIdAndRoleSourceAndBusinessRoleId(
-                            e.getOrgId(),
-                            e.getSpaceId(),
-                            e.getIdentityType(),
-                            e.getIdentityId(),
-                            e.getRoleSource(),
-                            e.getBusinessRoleId()
-                    ));
-
-            if (!allNowExist) {
-                throw ex;
-            }
-        }
+        assignments.forEach(assignment ->
+                roleAssignmentRepository.insertBusinessRoleAssignmentIfAbsent(
+                        UUID.randomUUID(),
+                        assignment.getOrgId(),
+                        assignment.getSpaceId(),
+                        assignment.getIdentityType(),
+                        assignment.getIdentityId(),
+                        assignment.getBusinessRoleId()
+                )
+        );
     }
 }
