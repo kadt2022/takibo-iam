@@ -7,8 +7,10 @@ import com.takibo.identitycore.domain.rbac.model.RoleSource;
 import com.takibo.identitycore.infrastructure.entity.RoleAssignmentEntity;
 import com.takibo.identitycore.infrastructure.entity.RoleEntity;
 import com.takibo.identitycore.infrastructure.jpa.mapper.RoleJpaAssignmentMapper;
+import com.takibo.identitycore.infrastructure.entity.TakiboIdentityEntity;
 import com.takibo.identitycore.infrastructure.jpa.repository.JpaRoleAssignmentRepository;
 import com.takibo.identitycore.infrastructure.jpa.repository.JpaRoleRepository;
+import com.takibo.identitycore.infrastructure.jpa.repository.JpaTakiboIdentityRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -17,6 +19,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -43,6 +46,9 @@ class BusinessRoleAssignmentServiceTest {
     @Mock
     private RoleJpaAssignmentMapper roleAssignmentMapper;
 
+    @Mock
+    private JpaTakiboIdentityRepository takiboIdentityRepository;
+
     @InjectMocks
     private BusinessRoleAssignmentService service;
 
@@ -68,6 +74,8 @@ class BusinessRoleAssignmentServiceTest {
                 .name("Manager")
                 .build();
 
+        when(takiboIdentityRepository.lockByOrgIdAndAccountId(ORG_ID, IDENTITY_ID))
+                .thenReturn(Optional.of(new TakiboIdentityEntity()));
         when(roleRepository.findByOrgIdAndSpaceIdAndCodeIn(ORG_ID, SPACE_ID, List.of("MANAGER")))
                 .thenReturn(List.of(manager));
         when(roleAssignmentRepository.existsByOrgIdAndSpaceIdAndIdentityTypeAndIdentityIdAndRoleSourceAndBusinessRoleId(
@@ -100,7 +108,7 @@ class BusinessRoleAssignmentServiceTest {
         assertThat(assignment.roleCode()).isNull();
         assertThat(assignment.businessRoleId()).isEqualTo(ROLE_ID);
 
-        verify(roleAssignmentRepository).saveAll(any());
+        verify(roleAssignmentRepository).saveAllAndFlush(any());
     }
 
     @Test
@@ -121,6 +129,8 @@ class BusinessRoleAssignmentServiceTest {
                 .name("Manager")
                 .build();
 
+        when(takiboIdentityRepository.lockByOrgIdAndAccountId(ORG_ID, IDENTITY_ID))
+                .thenReturn(Optional.of(new TakiboIdentityEntity()));
         when(roleRepository.findByOrgIdAndSpaceIdAndCodeIn(ORG_ID, SPACE_ID, List.of("MANAGER")))
                 .thenReturn(List.of(manager));
         when(roleAssignmentRepository.existsByOrgIdAndSpaceIdAndIdentityTypeAndIdentityIdAndRoleSourceAndBusinessRoleId(

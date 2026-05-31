@@ -11,6 +11,7 @@ import com.takibo.identitycore.infrastructure.entity.RoleEntity;
 import com.takibo.identitycore.infrastructure.jpa.mapper.RoleJpaAssignmentMapper;
 import com.takibo.identitycore.infrastructure.jpa.repository.JpaRoleAssignmentRepository;
 import com.takibo.identitycore.infrastructure.jpa.repository.JpaRoleRepository;
+import com.takibo.identitycore.infrastructure.jpa.repository.JpaTakiboIdentityRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,6 +31,7 @@ public class BusinessRoleAssignmentService {
     private final JpaRoleRepository roleRepository;
     private final JpaRoleAssignmentRepository roleAssignmentRepository;
     private final RoleJpaAssignmentMapper roleAssignmentMapper;
+    private final JpaTakiboIdentityRepository takiboIdentityRepository;
 
     @Transactional
     public void assignBusinessRoles(UUID orgId, UUID spaceId, UUID identityId, List<String> requestedRoleCodes) {
@@ -44,6 +46,8 @@ public class BusinessRoleAssignmentService {
 
         rejectTechnicalRoles(businessRoleCodes);
 
+        lockIdentityForAssignment(orgId, identityId);
+
         Map<String, UUID> roleIdByCode = loadBusinessRoleIds(orgId, spaceId, businessRoleCodes);
         assertAllRequestedRolesExist(spaceId, businessRoleCodes, roleIdByCode);
 
@@ -51,6 +55,13 @@ public class BusinessRoleAssignmentService {
         if (!assignments.isEmpty()) {
             saveAssignments(assignments);
         }
+    }
+
+    private void lockIdentityForAssignment(UUID orgId, UUID identityId) {
+        takiboIdentityRepository.lockByOrgIdAndAccountId(orgId, identityId)
+                .orElseThrow(() -> new UserCreationException(
+                        "Cannot assign business roles because identity does not exist in organization " + orgId
+                ));
     }
 
     private List<String> normalizeRoleCodes(List<String> codes) {
@@ -136,12 +147,12 @@ public class BusinessRoleAssignmentService {
         return assignments;
     }
 
-    // Portable idempotency strategy:
-    // buildMissingAssignments() filters duplicates via existsBy before this call,
-    // ensuring save() is only called for genuinely new assignments.
-    // REQUIRES_NEW is intentionally avoided: role_assignments FK references TakiboIdentity
-    // created in the outer transaction — a separate transaction would not see the uncommitted row.
+    // Concurrent safety: TakiboIdentity is locked with PESSIMISTIC_WRITE before this call.
+    // Two concurrent requests for the same identity cannot both reach this point simultaneously —
+    // one will block until the other commits. After the lock, existsBy in buildMissingAssignments
+    // is a reliable guard. saveAllAndFlush without a catch is intentional: if a unique violation
+    // still occurs here, it means another writer bypassed the canonical locked path and should fail.
     private void saveAssignments(List<RoleAssignmentEntity> assignments) {
-        roleAssignmentRepository.saveAll(assignments);
+        roleAssignmentRepository.saveAllAndFlush(assignments);
     }
 }
