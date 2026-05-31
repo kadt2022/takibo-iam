@@ -1,6 +1,7 @@
 package com.takibo.authorizationserver.infrastructure.springauthserver.client;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -13,6 +14,7 @@ import org.springframework.security.oauth2.server.authorization.client.Registere
 import java.util.UUID;
 
 @Configuration
+@ConditionalOnProperty(prefix = "takibo.dev.postman-client", name = "enabled", havingValue = "true")
 public class InMemoryDevRegisteredClientConfiguration {
 
     // Temporary dev client - will be replaced by the Takibo/TMS registered client adapter

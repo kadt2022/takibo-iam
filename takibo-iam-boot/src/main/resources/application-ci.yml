@@ -1,0 +1,5 @@
+takibo:
+  dev:
+    postman-client:
+      enabled: true
+      secret: ${TAKIBO_DEV_POSTMAN_SECRET}
