@@ -1,5 +1,6 @@
 package com.takibo.identitycore.application.identity.command;
 
+import com.takibo.audit.annotations.Sensitive;
 import com.takibo.identitycore.interfaces.rest.request.CreateUserRequestV2;
 import lombok.Builder;
 
@@ -12,6 +13,7 @@ public record CreateUserCommand(
         UUID spaceId,
         UUID accountId,
         String email,
+        @Sensitive
         String rawPassword,
         String username,
         String firstName,
@@ -49,12 +51,26 @@ public record CreateUserCommand(
         return "CreateUserCommand[spaceId=" + spaceId +
                 ", accountId=" + accountId +
                 ", email=" + email +
-                ", rawPassword=[PROTECTED]" +
                 ", username=" + username +
                 ", firstName=" + firstName +
                 ", lastName=" + lastName +
                 ", businessRoleCodes=" + businessRoleCodes +
                 ", groupCodes=" + groupCodes +
                 ", metadata=" + metadata + "]";
+    }
+
+    public static class CreateUserCommandBuilder {
+        @Override
+        public String toString() {
+            return "CreateUserCommand.CreateUserCommandBuilder(spaceId=" + spaceId +
+                    ", accountId=" + accountId +
+                    ", email=" + email +
+                    ", username=" + username +
+                    ", firstName=" + firstName +
+                    ", lastName=" + lastName +
+                    ", businessRoleCodes=" + businessRoleCodes +
+                    ", groupCodes=" + groupCodes +
+                    ", metadata=" + metadata + ")";
+        }
     }
 }

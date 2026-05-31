@@ -25,7 +25,21 @@ class CreateUserCommandTest {
         String result = command.toString();
 
         assertThat(result).doesNotContain("s3cr3tP@ss!");
-        assertThat(result).contains("[PROTECTED]");
+        assertThat(result).doesNotContain("rawPassword");
+    }
+
+    @Test
+    void builderToString_doesNotExposeRawPassword() {
+        CreateUserCommand.CreateUserCommandBuilder builder = CreateUserCommand.builder()
+                .spaceId(SPACE_ID)
+                .email("user@example.com")
+                .rawPassword("s3cr3tP@ss!")
+                .username("jdoe");
+
+        String result = builder.toString();
+
+        assertThat(result).doesNotContain("s3cr3tP@ss!");
+        assertThat(result).doesNotContain("rawPassword");
     }
 
     @Test
