@@ -48,7 +48,7 @@ class UserRoleAssignmentServiceTest {
         service.assignRolesToUser(ORG_ID, SPACE_ID, USER_ID, null);
 
         verify(roleRepository, never()).findByOrgIdAndSpaceIdAndCodeIn(any(), any(), any());
-        verify(userRoleRepository, never()).saveAll(any());
+        verify(userRoleRepository, never()).saveAllAndFlush(any());
     }
 
     @Test
@@ -56,7 +56,7 @@ class UserRoleAssignmentServiceTest {
         service.assignRolesToUser(ORG_ID, SPACE_ID, USER_ID, List.of());
 
         verify(roleRepository, never()).findByOrgIdAndSpaceIdAndCodeIn(any(), any(), any());
-        verify(userRoleRepository, never()).saveAll(any());
+        verify(userRoleRepository, never()).saveAllAndFlush(any());
     }
 
     @Test
@@ -68,7 +68,7 @@ class UserRoleAssignmentServiceTest {
                 .isInstanceOf(UserCreationException.class)
                 .hasMessageContaining("UNKNOWN_ROLE");
 
-        verify(userRoleRepository, never()).saveAll(any());
+        verify(userRoleRepository, never()).saveAllAndFlush(any());
     }
 
     @Test
@@ -83,7 +83,7 @@ class UserRoleAssignmentServiceTest {
 
         service.assignRolesToUser(ORG_ID, SPACE_ID, USER_ID, List.of("VIEWER"));
 
-        verify(userRoleRepository, never()).saveAll(any());
+        verify(userRoleRepository, never()).saveAllAndFlush(any());
     }
 
     @Test
@@ -103,7 +103,7 @@ class UserRoleAssignmentServiceTest {
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<com.takibo.identitycore.infrastructure.entity.UserRoleEntity>> captor =
                 ArgumentCaptor.forClass(List.class);
-        verify(userRoleRepository).saveAll(captor.capture());
+        verify(userRoleRepository).saveAllAndFlush(captor.capture());
 
         List<com.takibo.identitycore.infrastructure.entity.UserRoleEntity> saved = captor.getValue();
         assertThat(saved).hasSize(1);

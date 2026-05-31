@@ -55,7 +55,7 @@ class BusinessRoleAssignmentServiceTest {
                 .hasMessageContaining("Technical role codes cannot be assigned");
 
         verify(roleRepository, never()).findByOrgIdAndSpaceIdAndCodeIn(any(), any(), any());
-        verify(roleAssignmentRepository, never()).saveAll(any());
+        verify(roleAssignmentRepository, never()).saveAllAndFlush(any());
     }
 
     @Test
@@ -100,7 +100,7 @@ class BusinessRoleAssignmentServiceTest {
         assertThat(assignment.roleCode()).isNull();
         assertThat(assignment.businessRoleId()).isEqualTo(ROLE_ID);
 
-        verify(roleAssignmentRepository).saveAll(any());
+        verify(roleAssignmentRepository).saveAllAndFlush(any());
     }
 
     @Test
@@ -108,7 +108,7 @@ class BusinessRoleAssignmentServiceTest {
         service.assignBusinessRoles(ORG_ID, SPACE_ID, IDENTITY_ID, List.of());
 
         verify(roleRepository, never()).findByOrgIdAndSpaceIdAndCodeIn(any(), any(), any());
-        verify(roleAssignmentRepository, never()).saveAll(any());
+        verify(roleAssignmentRepository, never()).saveAllAndFlush(any());
     }
 
     @Test
@@ -130,6 +130,6 @@ class BusinessRoleAssignmentServiceTest {
         service.assignBusinessRoles(ORG_ID, SPACE_ID, IDENTITY_ID, List.of("MANAGER"));
 
         verify(roleAssignmentMapper, never()).toEntity(any());
-        verify(roleAssignmentRepository, never()).saveAll(any());
+        verify(roleAssignmentRepository, never()).saveAllAndFlush(any());
     }
 }
