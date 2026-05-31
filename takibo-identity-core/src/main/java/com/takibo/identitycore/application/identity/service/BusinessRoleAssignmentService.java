@@ -139,7 +139,7 @@ public class BusinessRoleAssignmentService {
 
     private void saveAssignments(List<RoleAssignmentEntity> assignments) {
         try {
-            roleAssignmentRepository.saveAll(assignments);
+            roleAssignmentRepository.saveAllAndFlush(assignments);
         } catch (DataIntegrityViolationException ex) {
             boolean allNowExist = assignments.stream().allMatch(e ->
                     roleAssignmentRepository.existsByOrgIdAndSpaceIdAndIdentityTypeAndIdentityIdAndRoleSourceAndBusinessRoleId(

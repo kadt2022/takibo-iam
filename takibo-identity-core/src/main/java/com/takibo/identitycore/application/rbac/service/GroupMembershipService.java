@@ -99,7 +99,7 @@ public class GroupMembershipService {
                                              List<String> normalizedGroupCodes,
                                              List<GroupMemberEntity> membershipsToInsert) {
         try {
-            groupMemberRepository.saveAll(membershipsToInsert);
+            groupMemberRepository.saveAllAndFlush(membershipsToInsert);
         } catch (DataIntegrityViolationException ex) {
             boolean allNowExist = membershipsToInsert.stream().allMatch(e ->
                     groupMemberRepository.existsBySpaceIdAndUserIdAndGroupId(

@@ -115,7 +115,7 @@ public class UserRoleAssignmentService {
                                              List<String> normalizedRoleCodes,
                                              List<UserRoleEntity> assignmentsToInsert) {
         try {
-            userRoleRepository.saveAll(assignmentsToInsert);
+            userRoleRepository.saveAllAndFlush(assignmentsToInsert);
         } catch (DataIntegrityViolationException ex) {
             boolean allNowExist = assignmentsToInsert.stream().allMatch(e ->
                     userRoleRepository.existsByOrgIdAndSpaceIdAndUserIdAndRoleId(
