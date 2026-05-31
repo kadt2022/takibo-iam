@@ -16,8 +16,8 @@ import java.util.UUID;
 public interface UserJpaMapper {
 
     @Mapping(target = "id", source = "id", qualifiedByName = "userIdToUuid")
+    @Mapping(target = "orgId", source = "orgId")
     @Mapping(target = "spaceId", source = "spaceId", qualifiedByName = "spaceIdToUuid")
-    @Mapping(target = "orgId", ignore = true)
     @Mapping(target = "accountId", source = "accountId", qualifiedByName = "accountIdToUuid")
     @Mapping(target = "username", source = "username")
     @Mapping(target = "firstName", source = "firstName")
@@ -36,6 +36,7 @@ public interface UserJpaMapper {
     UserEntity toEntity(User user);
 
     @Mapping(target = "id", source = "id", qualifiedByName = "uuidToUserId")
+    @Mapping(target = "orgId", source = "orgId")
     @Mapping(target = "spaceId", source = "spaceId", qualifiedByName = "uuidToSpaceId")
     @Mapping(target = "accountId", source = "accountId", qualifiedByName = "uuidToAccountId")
     @Mapping(target = "username", source = "username")

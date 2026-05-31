@@ -30,22 +30,27 @@ public class UserRoleAssignmentService {
     private final SpaceStatusCheckerCase spaceStatusCheckerCase;
 
     @Transactional
-    public void assignRolesToUser(SpaceId spaceId, UserId userId, List<String> requestedRoleCodes) {
+    public void assignRolesToUser(UUID orgId, SpaceId spaceId, UserId userId, List<String> requestedRoleCodes) {
         //spaceStatusCheckerCase.assertActive(spaceId); // si ton port accepte SpaceId
+
+        Objects.requireNonNull(orgId, "orgId");
+        Objects.requireNonNull(spaceId, "spaceId");
+        Objects.requireNonNull(userId, "userId");
 
         List<String> normalizedRoleCodes = normalizeRoleCodes(requestedRoleCodes);
         if (normalizedRoleCodes.isEmpty()) {
             return;
         }
 
+        UUID orgUuid = orgId;
         UUID spaceUuid = spaceId.value();   // UUID direct
         UUID userUuid  = userId.value();    // UUID direct
 
-        Map<String, UUID> roleIdByCode = loadRoleIdsByCode(spaceUuid, normalizedRoleCodes);
+        Map<String, UUID> roleIdByCode = loadRoleIdsByCode(orgUuid, spaceUuid, normalizedRoleCodes);
         assertAllRequestedRolesExist(spaceUuid, normalizedRoleCodes, roleIdByCode);
 
         List<UserRoleEntity> assignmentsToInsert =
-                computeMissingAssignments(spaceUuid, userUuid, roleIdByCode);
+                computeMissingAssignments(orgUuid, spaceUuid, userUuid, roleIdByCode);
 
         if (!assignmentsToInsert.isEmpty()) {
             saveAssignmentsIdempotently(spaceId, userId, normalizedRoleCodes, assignmentsToInsert);
@@ -62,8 +67,8 @@ public class UserRoleAssignmentService {
                 .toList();
     }
 
-    private Map<String, UUID> loadRoleIdsByCode(UUID spaceUuid, List<String> codes) {
-        List<RoleEntity> roleEntities = roleRepository.findBySpaceIdAndCodeIn(spaceUuid, codes);
+    private Map<String, UUID> loadRoleIdsByCode(UUID orgUuid, UUID spaceUuid, List<String> codes) {
+        List<RoleEntity> roleEntities = roleRepository.findByOrgIdAndSpaceIdAndCodeIn(orgUuid, spaceUuid, codes);
         return roleEntities.stream()
                 .collect(Collectors.toMap(RoleEntity::getCode, RoleEntity::getId));
     }
@@ -81,7 +86,8 @@ public class UserRoleAssignmentService {
         }
     }
 
-    private List<UserRoleEntity> computeMissingAssignments(UUID spaceUuid,
+    private List<UserRoleEntity> computeMissingAssignments(UUID orgUuid,
+                                                           UUID spaceUuid,
                                                            UUID userUuid,
                                                            Map<String, UUID> roleIdByCode) {
         Instant assignedAt = clock.instant();
@@ -89,9 +95,10 @@ public class UserRoleAssignmentService {
 
         for (UUID roleId : roleIdByCode.values()) {
             boolean alreadyAssigned = userRoleRepository
-                    .existsBySpaceIdAndUserIdAndRoleId(spaceUuid, userUuid, roleId);
+                    .existsByOrgIdAndSpaceIdAndUserIdAndRoleId(orgUuid, spaceUuid, userUuid, roleId);
             if (!alreadyAssigned) {
                 assignments.add(UserRoleEntity.builder()
+                        .orgId(orgUuid)
                         .spaceId(spaceUuid)
                         .userId(userUuid)
                         .roleId(roleId)
@@ -108,11 +115,11 @@ public class UserRoleAssignmentService {
                                              List<String> normalizedRoleCodes,
                                              List<UserRoleEntity> assignmentsToInsert) {
         try {
-            userRoleRepository.saveAll(assignmentsToInsert);
+            userRoleRepository.saveAllAndFlush(assignmentsToInsert);
         } catch (DataIntegrityViolationException ex) {
             boolean allNowExist = assignmentsToInsert.stream().allMatch(e ->
-                    userRoleRepository.existsBySpaceIdAndUserIdAndRoleId(
-                            e.getSpaceId(), e.getUserId(), e.getRoleId()));
+                    userRoleRepository.existsByOrgIdAndSpaceIdAndUserIdAndRoleId(
+                            e.getOrgId(), e.getSpaceId(), e.getUserId(), e.getRoleId()));
 
             if (allNowExist) {
                 if (log.isDebugEnabled()) {

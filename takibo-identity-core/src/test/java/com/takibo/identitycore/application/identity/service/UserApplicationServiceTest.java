@@ -14,8 +14,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
 
-import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -27,7 +25,6 @@ import static org.mockito.Mockito.*;
 class UserApplicationServiceTest {
 
     private static final UUID ORG_A = UUID.fromString("aaaaaaaa-0000-0000-0000-000000000001");
-    private static final UUID ORG_B = UUID.fromString("bbbbbbbb-0000-0000-0000-000000000002");
     private static final UUID SPACE_A = UUID.fromString("cccccccc-0000-0000-0000-000000000003");
     private static final UUID SPACE_B = UUID.fromString("dddddddd-0000-0000-0000-000000000004");
 
@@ -68,7 +65,9 @@ class UserApplicationServiceTest {
         doThrow(new AccessDeniedException("ORG_MISMATCH"))
                 .when(spaceOwnershipGuard).assertSpaceBelongsToOrg(SPACE_B, ORG_A);
 
-        assertThatThrownBy(() -> service.createUser(command(SPACE_B)))
+        CreateUserCommand command = command(SPACE_B);
+
+        assertThatThrownBy(() -> service.createUser(command))
                 .isInstanceOf(AccessDeniedException.class)
                 .hasMessage("ORG_MISMATCH");
 
@@ -81,7 +80,9 @@ class UserApplicationServiceTest {
         doThrow(new SpaceNotFoundException(SPACE_A))
                 .when(spaceOwnershipGuard).assertSpaceBelongsToOrg(SPACE_A, ORG_A);
 
-        assertThatThrownBy(() -> service.createUser(command(SPACE_A)))
+        CreateUserCommand command = command(SPACE_A);
+
+        assertThatThrownBy(() -> service.createUser(command))
                 .isInstanceOf(SpaceNotFoundException.class);
 
         verify(orchestrator, never()).registerUser(any());
@@ -92,7 +93,9 @@ class UserApplicationServiceTest {
         when(currentOrganizationContext.requireCurrentOrganizationId())
                 .thenThrow(new AccessDeniedException("ORG_CONTEXT_REQUIRED"));
 
-        assertThatThrownBy(() -> service.createUser(command(SPACE_A)))
+        CreateUserCommand command = command(SPACE_A);
+
+        assertThatThrownBy(() -> service.createUser(command))
                 .isInstanceOf(AccessDeniedException.class)
                 .hasMessage("ORG_CONTEXT_REQUIRED");
 

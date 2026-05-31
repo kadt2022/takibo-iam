@@ -19,7 +19,7 @@ public class UserRegistrationOrchestrator {
     private final SpaceContextVerifier spaceContextVerifier;
     private final UserDomainService userDomainService;
     private final AccountDomaineService accountDomaineService;
-  //  private final RbacAssignmentService rbacAssignmentService;
+    private final BusinessRoleAssignmentService businessRoleAssignmentService;
     private final UserRepository userRepository;
 
     public UserRegistrationResult registerUser(CreateUserCommand command) {
@@ -30,14 +30,23 @@ public class UserRegistrationOrchestrator {
         Account account = accountDomaineService.resolveAccountForRegistration(command, spaceContext.organizationId());
 
         // 3) User (construction + règles)
-        User user = userDomainService.createNativeUser(command, spaceContext.spaceId(), account.getId());
+        User user = userDomainService.createNativeUser(
+                command,
+                spaceContext.organizationId(),
+                spaceContext.spaceId(),
+                account.getId()
+        );
 
         // 4) Persistance
         User saved = userRepository.save(user);
 
         // 5) RBAC
-      //  rbacAssignmentService.assignDefaultPermissions(spaceContext.spaceId(), saved.getId(), command);
-
+        businessRoleAssignmentService.assignBusinessRoles(
+                spaceContext.organizationId(),
+                spaceContext.spaceId().value(),
+                account.getId().getValue(),
+                command.businessRoleCodes()
+        );
         return new UserRegistrationResult(saved, account.getEmail());
     }
 }

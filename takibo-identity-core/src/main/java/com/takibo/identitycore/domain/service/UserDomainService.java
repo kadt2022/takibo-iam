@@ -12,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -20,13 +21,14 @@ public class UserDomainService {
     private final UserRepository userRepository;
     private final Clock clock;
 
-    public User createNativeUser(CreateUserCommand command, SpaceId spaceId, AccountId accountId) {
+    public User createNativeUser(CreateUserCommand command, UUID orgId, SpaceId spaceId, AccountId accountId) {
         // Règles métier d’unicité
         validateUserUniqueness(spaceId, command.username(), accountId);
 
         // Construction de l’agrégat
         return User.createNative(
                 UserId.generate(),
+                orgId,
                 spaceId,
                 accountId,
                 command.username(),

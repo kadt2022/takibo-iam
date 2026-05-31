@@ -1,5 +1,6 @@
 package com.takibo.identitycore.application.identity.command;
 
+import com.takibo.audit.annotations.Sensitive;
 import com.takibo.identitycore.interfaces.rest.request.CreateUserRequestV2;
 import lombok.Builder;
 
@@ -12,17 +13,18 @@ public record CreateUserCommand(
         UUID spaceId,
         UUID accountId,
         String email,
+        @Sensitive
         String rawPassword,
         String username,
         String firstName,
         String lastName,
-        List<String> roleCodes,
+        List<String> businessRoleCodes,
         List<String> groupCodes,
         Map<String, Object> metadata
 ) {
     public static CreateUserCommand from(UUID spaceId, CreateUserRequestV2 r) {
 
-        List<String> roleNames = r.initialAssignments() != null && r.initialAssignments().roleNames() != null
+        List<String> businessRoleCodes = r.initialAssignments() != null && r.initialAssignments().roleNames() != null
                 ? r.initialAssignments().roleNames()
                 : List.of();
 
@@ -38,9 +40,37 @@ public record CreateUserCommand(
                 r.username(),
                 r.firstName(),
                 r.lastName(),
-                roleNames,
+                businessRoleCodes,
                 groupCodes,
                 r.metadata()
         );
+    }
+
+    @Override
+    public String toString() {
+        return "CreateUserCommand[spaceId=" + spaceId +
+                ", accountId=" + accountId +
+                ", email=" + email +
+                ", username=" + username +
+                ", firstName=" + firstName +
+                ", lastName=" + lastName +
+                ", businessRoleCodes=" + businessRoleCodes +
+                ", groupCodes=" + groupCodes +
+                ", metadata=" + metadata + "]";
+    }
+
+    public static class CreateUserCommandBuilder {
+        @Override
+        public String toString() {
+            return "CreateUserCommand.CreateUserCommandBuilder(spaceId=" + spaceId +
+                    ", accountId=" + accountId +
+                    ", email=" + email +
+                    ", username=" + username +
+                    ", firstName=" + firstName +
+                    ", lastName=" + lastName +
+                    ", businessRoleCodes=" + businessRoleCodes +
+                    ", groupCodes=" + groupCodes +
+                    ", metadata=" + metadata + ")";
+        }
     }
 }

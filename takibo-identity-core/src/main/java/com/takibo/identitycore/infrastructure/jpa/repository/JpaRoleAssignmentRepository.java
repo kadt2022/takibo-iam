@@ -1,6 +1,7 @@
 package com.takibo.identitycore.infrastructure.jpa.repository;
 
 import com.takibo.identitycore.domain.model.IdentityType;
+import com.takibo.identitycore.domain.rbac.model.RoleSource;
 import com.takibo.identitycore.infrastructure.entity.RoleAssignmentEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -16,4 +17,13 @@ public interface JpaRoleAssignmentRepository extends JpaRepository<RoleAssignmen
             UUID orgId, UUID spaceId, IdentityType identityType, UUID identityId);
 
     List<RoleAssignmentEntity> findByOrgIdAndRoleCode(UUID orgId, String roleCode);
+
+    boolean existsByOrgIdAndSpaceIdAndIdentityTypeAndIdentityIdAndRoleSourceAndBusinessRoleId(
+            UUID orgId,
+            UUID spaceId,
+            String identityType,
+            UUID identityId,
+            RoleSource roleSource,
+            UUID businessRoleId
+    );
 }
