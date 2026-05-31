@@ -151,3 +151,7 @@ takibo:
             User: ${userId}
             IP: ${clientIp}
             TraceID: ${traceId}
+
+  dev:
+    postman-client:
+      secret: ${TAKIBO_DEV_POSTMAN_SECRET}

@@ -219,6 +219,9 @@ jobs:
     permissions:
       contents: read
 
+    env:
+      TAKIBO_DEV_POSTMAN_SECRET: ${{ secrets.TAKIBO_DEV_POSTMAN_SECRET }}
+
     services:
       postgres:
         image: postgres:16
@@ -294,7 +297,8 @@ jobs:
         run: |
           if [ -f postman/smoke.postman_collection.json ]; then
             newman run postman/smoke.postman_collection.json \
-              --env-var baseUrl=http://127.0.0.1:${TAKIBO_APP_PORT}
+              --env-var baseUrl=http://127.0.0.1:${TAKIBO_APP_PORT} \
+              --env-var postmanClientSecret="${TAKIBO_DEV_POSTMAN_SECRET}"
           else
             echo "No Postman smoke collection found. Skipping BVT."
           fi
