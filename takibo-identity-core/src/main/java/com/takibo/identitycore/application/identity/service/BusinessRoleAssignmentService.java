@@ -136,16 +136,12 @@ public class BusinessRoleAssignmentService {
         return assignments;
     }
 
+    // Portable idempotency strategy:
+    // buildMissingAssignments() filters duplicates via existsBy before this call,
+    // ensuring save() is only called for genuinely new assignments.
+    // REQUIRES_NEW is intentionally avoided: role_assignments FK references TakiboIdentity
+    // created in the outer transaction — a separate transaction would not see the uncommitted row.
     private void saveAssignments(List<RoleAssignmentEntity> assignments) {
-        assignments.forEach(assignment ->
-                roleAssignmentRepository.insertBusinessRoleAssignmentIfAbsent(
-                        UUID.randomUUID(),
-                        assignment.getOrgId(),
-                        assignment.getSpaceId(),
-                        assignment.getIdentityType(),
-                        assignment.getIdentityId(),
-                        assignment.getBusinessRoleId()
-                )
-        );
+        roleAssignmentRepository.saveAll(assignments);
     }
 }
