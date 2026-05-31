@@ -34,7 +34,8 @@ class BusinessRoleAssignmentServiceTest {
 
     private static final UUID ORG_ID = UUID.fromString("aaaaaaaa-0000-0000-0000-000000000001");
     private static final UUID SPACE_ID = UUID.fromString("bbbbbbbb-0000-0000-0000-000000000002");
-    private static final UUID IDENTITY_ID = UUID.fromString("cccccccc-0000-0000-0000-000000000003");
+    private static final UUID ACCOUNT_ID = UUID.fromString("cccccccc-0000-0000-0000-000000000003");
+    private static final UUID IDENTITY_ID = UUID.fromString("eeeeeeee-0000-0000-0000-000000000005");
     private static final UUID ROLE_ID = UUID.fromString("dddddddd-0000-0000-0000-000000000004");
 
     @Mock
@@ -56,7 +57,7 @@ class BusinessRoleAssignmentServiceTest {
     void assignBusinessRoles_rejectsTechnicalRoleCodes() {
         List<String> roleCodes = List.of("R_SPACE_ADMIN");
 
-        assertThatThrownBy(() -> service.assignBusinessRoles(ORG_ID, SPACE_ID, IDENTITY_ID, roleCodes))
+        assertThatThrownBy(() -> service.assignBusinessRoles(ORG_ID, SPACE_ID, ACCOUNT_ID, roleCodes))
                 .isInstanceOf(UserCreationException.class)
                 .hasMessageContaining("Technical role codes cannot be assigned");
 
@@ -74,8 +75,13 @@ class BusinessRoleAssignmentServiceTest {
                 .name("Manager")
                 .build();
 
-        when(takiboIdentityRepository.lockByOrgIdAndAccountId(ORG_ID, IDENTITY_ID))
-                .thenReturn(Optional.of(new TakiboIdentityEntity()));
+        TakiboIdentityEntity identityEntity = TakiboIdentityEntity.builder()
+                .identityId(IDENTITY_ID)
+                .orgId(ORG_ID)
+                .accountId(ACCOUNT_ID)
+                .build();
+        when(takiboIdentityRepository.lockByOrgIdAndAccountId(ORG_ID, ACCOUNT_ID))
+                .thenReturn(Optional.of(identityEntity));
         when(roleRepository.findByOrgIdAndSpaceIdAndCodeIn(ORG_ID, SPACE_ID, List.of("MANAGER")))
                 .thenReturn(List.of(manager));
         when(roleAssignmentRepository.existsByOrgIdAndSpaceIdAndIdentityTypeAndIdentityIdAndRoleSourceAndBusinessRoleId(
@@ -94,7 +100,7 @@ class BusinessRoleAssignmentServiceTest {
                     .build();
         });
 
-        service.assignBusinessRoles(ORG_ID, SPACE_ID, IDENTITY_ID, List.of("MANAGER"));
+        service.assignBusinessRoles(ORG_ID, SPACE_ID, ACCOUNT_ID, List.of("MANAGER"));
 
         ArgumentCaptor<RoleAssignment> assignmentCaptor = ArgumentCaptor.forClass(RoleAssignment.class);
         verify(roleAssignmentMapper).toEntity(assignmentCaptor.capture());
@@ -129,15 +135,20 @@ class BusinessRoleAssignmentServiceTest {
                 .name("Manager")
                 .build();
 
-        when(takiboIdentityRepository.lockByOrgIdAndAccountId(ORG_ID, IDENTITY_ID))
-                .thenReturn(Optional.of(new TakiboIdentityEntity()));
+        TakiboIdentityEntity identityEntityForIdempotent = TakiboIdentityEntity.builder()
+                .identityId(IDENTITY_ID)
+                .orgId(ORG_ID)
+                .accountId(ACCOUNT_ID)
+                .build();
+        when(takiboIdentityRepository.lockByOrgIdAndAccountId(ORG_ID, ACCOUNT_ID))
+                .thenReturn(Optional.of(identityEntityForIdempotent));
         when(roleRepository.findByOrgIdAndSpaceIdAndCodeIn(ORG_ID, SPACE_ID, List.of("MANAGER")))
                 .thenReturn(List.of(manager));
         when(roleAssignmentRepository.existsByOrgIdAndSpaceIdAndIdentityTypeAndIdentityIdAndRoleSourceAndBusinessRoleId(
                 ORG_ID, SPACE_ID, IdentityType.HUMAN.name(), IDENTITY_ID, RoleSource.BUSINESS, ROLE_ID))
                 .thenReturn(true);
 
-        service.assignBusinessRoles(ORG_ID, SPACE_ID, IDENTITY_ID, List.of("MANAGER"));
+        service.assignBusinessRoles(ORG_ID, SPACE_ID, ACCOUNT_ID, List.of("MANAGER"));
 
         verify(roleAssignmentMapper, never()).toEntity(any());
         verify(roleAssignmentRepository, never()).saveAll(any());

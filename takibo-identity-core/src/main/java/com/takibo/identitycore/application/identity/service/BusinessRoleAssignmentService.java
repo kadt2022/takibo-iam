@@ -8,6 +8,7 @@ import com.takibo.identitycore.domain.rbac.model.RoleAssignment;
 import com.takibo.identitycore.domain.rbac.model.RoleSource;
 import com.takibo.identitycore.infrastructure.entity.RoleAssignmentEntity;
 import com.takibo.identitycore.infrastructure.entity.RoleEntity;
+import com.takibo.identitycore.infrastructure.entity.TakiboIdentityEntity;
 import com.takibo.identitycore.infrastructure.jpa.mapper.RoleJpaAssignmentMapper;
 import com.takibo.identitycore.infrastructure.jpa.repository.JpaRoleAssignmentRepository;
 import com.takibo.identitycore.infrastructure.jpa.repository.JpaRoleRepository;
@@ -34,10 +35,10 @@ public class BusinessRoleAssignmentService {
     private final JpaTakiboIdentityRepository takiboIdentityRepository;
 
     @Transactional
-    public void assignBusinessRoles(UUID orgId, UUID spaceId, UUID identityId, List<String> requestedRoleCodes) {
+    public void assignBusinessRoles(UUID orgId, UUID spaceId, UUID accountId, List<String> requestedRoleCodes) {
         Objects.requireNonNull(orgId, "orgId");
         Objects.requireNonNull(spaceId, "spaceId");
-        Objects.requireNonNull(identityId, "identityId");
+        Objects.requireNonNull(accountId, "accountId");
 
         List<String> businessRoleCodes = normalizeRoleCodes(requestedRoleCodes);
         if (businessRoleCodes.isEmpty()) {
@@ -46,7 +47,7 @@ public class BusinessRoleAssignmentService {
 
         rejectTechnicalRoles(businessRoleCodes);
 
-        lockIdentityForAssignment(orgId, identityId);
+        UUID identityId = lockIdentityAndResolveIdentityId(orgId, accountId);
 
         Map<String, UUID> roleIdByCode = loadBusinessRoleIds(orgId, spaceId, businessRoleCodes);
         assertAllRequestedRolesExist(spaceId, businessRoleCodes, roleIdByCode);
@@ -57,8 +58,9 @@ public class BusinessRoleAssignmentService {
         }
     }
 
-    private void lockIdentityForAssignment(UUID orgId, UUID identityId) {
-        takiboIdentityRepository.lockByOrgIdAndAccountId(orgId, identityId)
+    private UUID lockIdentityAndResolveIdentityId(UUID orgId, UUID accountId) {
+        return takiboIdentityRepository.lockByOrgIdAndAccountId(orgId, accountId)
+                .map(TakiboIdentityEntity::getIdentityId)
                 .orElseThrow(() -> new UserCreationException(
                         "Cannot assign business roles because identity does not exist in organization " + orgId
                 ));
