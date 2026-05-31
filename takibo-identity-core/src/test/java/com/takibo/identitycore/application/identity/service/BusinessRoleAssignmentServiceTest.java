@@ -48,7 +48,9 @@ class BusinessRoleAssignmentServiceTest {
 
     @Test
     void assignBusinessRoles_rejectsTechnicalRoleCodes() {
-        assertThatThrownBy(() -> service.assignBusinessRoles(ORG_ID, SPACE_ID, IDENTITY_ID, List.of("R_SPACE_ADMIN")))
+        List<String> roleCodes = List.of("R_SPACE_ADMIN");
+
+        assertThatThrownBy(() -> service.assignBusinessRoles(ORG_ID, SPACE_ID, IDENTITY_ID, roleCodes))
                 .isInstanceOf(UserCreationException.class)
                 .hasMessageContaining("Technical role codes cannot be assigned");
 
