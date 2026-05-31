@@ -22,6 +22,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -55,7 +56,7 @@ class BusinessRoleAssignmentServiceTest {
                 .hasMessageContaining("Technical role codes cannot be assigned");
 
         verify(roleRepository, never()).findByOrgIdAndSpaceIdAndCodeIn(any(), any(), any());
-        verify(roleAssignmentRepository, never()).saveAllAndFlush(any());
+        verify(roleAssignmentRepository, never()).insertBusinessRoleAssignmentIfAbsent(any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -100,7 +101,14 @@ class BusinessRoleAssignmentServiceTest {
         assertThat(assignment.roleCode()).isNull();
         assertThat(assignment.businessRoleId()).isEqualTo(ROLE_ID);
 
-        verify(roleAssignmentRepository).saveAllAndFlush(any());
+        verify(roleAssignmentRepository).insertBusinessRoleAssignmentIfAbsent(
+                any(UUID.class),
+                eq(ORG_ID),
+                eq(SPACE_ID),
+                eq(IdentityType.HUMAN.name()),
+                eq(IDENTITY_ID),
+                eq(ROLE_ID)
+        );
     }
 
     @Test
@@ -108,7 +116,7 @@ class BusinessRoleAssignmentServiceTest {
         service.assignBusinessRoles(ORG_ID, SPACE_ID, IDENTITY_ID, List.of());
 
         verify(roleRepository, never()).findByOrgIdAndSpaceIdAndCodeIn(any(), any(), any());
-        verify(roleAssignmentRepository, never()).saveAllAndFlush(any());
+        verify(roleAssignmentRepository, never()).insertBusinessRoleAssignmentIfAbsent(any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -130,6 +138,6 @@ class BusinessRoleAssignmentServiceTest {
         service.assignBusinessRoles(ORG_ID, SPACE_ID, IDENTITY_ID, List.of("MANAGER"));
 
         verify(roleAssignmentMapper, never()).toEntity(any());
-        verify(roleAssignmentRepository, never()).saveAllAndFlush(any());
+        verify(roleAssignmentRepository, never()).insertBusinessRoleAssignmentIfAbsent(any(), any(), any(), any(), any(), any());
     }
 }
