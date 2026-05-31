@@ -1,5 +1,6 @@
 package com.takibo.authorizationserver.infrastructure.springauthserver.client;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -16,10 +17,13 @@ public class InMemoryDevRegisteredClientConfiguration {
 
     // Temporary dev client - will be replaced by the Takibo/TMS registered client adapter
     @Bean
-    public RegisteredClientRepository registeredClientRepository(PasswordEncoder passwordEncoder) {
+    public RegisteredClientRepository registeredClientRepository(
+            PasswordEncoder passwordEncoder,
+            @Value("${takibo.dev.postman-client.secret}") String postmanClientSecret
+    ) {
         RegisteredClient postmanClient = RegisteredClient.withId(UUID.randomUUID().toString())
                 .clientId("postman-client")
-                .clientSecret(passwordEncoder.encode("postman-secret"))
+                .clientSecret(passwordEncoder.encode(postmanClientSecret))
                 .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
                 .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
                 .scope("api.read")
