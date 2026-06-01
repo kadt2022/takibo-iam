@@ -8,11 +8,12 @@ import com.takibo.identitycore.domain.rbac.model.RoleAssignment;
 import com.takibo.identitycore.domain.rbac.model.RoleSource;
 import com.takibo.identitycore.infrastructure.entity.RoleAssignmentEntity;
 import com.takibo.identitycore.infrastructure.entity.RoleEntity;
+import com.takibo.identitycore.infrastructure.entity.TakiboIdentityEntity;
 import com.takibo.identitycore.infrastructure.jpa.mapper.RoleJpaAssignmentMapper;
 import com.takibo.identitycore.infrastructure.jpa.repository.JpaRoleAssignmentRepository;
 import com.takibo.identitycore.infrastructure.jpa.repository.JpaRoleRepository;
+import com.takibo.identitycore.infrastructure.jpa.repository.JpaTakiboIdentityRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,12 +32,13 @@ public class BusinessRoleAssignmentService {
     private final JpaRoleRepository roleRepository;
     private final JpaRoleAssignmentRepository roleAssignmentRepository;
     private final RoleJpaAssignmentMapper roleAssignmentMapper;
+    private final JpaTakiboIdentityRepository takiboIdentityRepository;
 
     @Transactional
-    public void assignBusinessRoles(UUID orgId, UUID spaceId, UUID identityId, List<String> requestedRoleCodes) {
+    public void assignBusinessRoles(UUID orgId, UUID spaceId, UUID accountId, List<String> requestedRoleCodes) {
         Objects.requireNonNull(orgId, "orgId");
         Objects.requireNonNull(spaceId, "spaceId");
-        Objects.requireNonNull(identityId, "identityId");
+        Objects.requireNonNull(accountId, "accountId");
 
         List<String> businessRoleCodes = normalizeRoleCodes(requestedRoleCodes);
         if (businessRoleCodes.isEmpty()) {
@@ -45,6 +47,8 @@ public class BusinessRoleAssignmentService {
 
         rejectTechnicalRoles(businessRoleCodes);
 
+        UUID identityId = lockIdentityAndResolveIdentityId(orgId, accountId);
+
         Map<String, UUID> roleIdByCode = loadBusinessRoleIds(orgId, spaceId, businessRoleCodes);
         assertAllRequestedRolesExist(spaceId, businessRoleCodes, roleIdByCode);
 
@@ -52,6 +56,14 @@ public class BusinessRoleAssignmentService {
         if (!assignments.isEmpty()) {
             saveAssignments(assignments);
         }
+    }
+
+    private UUID lockIdentityAndResolveIdentityId(UUID orgId, UUID accountId) {
+        return takiboIdentityRepository.lockByOrgIdAndAccountId(orgId, accountId)
+                .map(TakiboIdentityEntity::getIdentityId)
+                .orElseThrow(() -> new UserCreationException(
+                        "Cannot assign business roles because identity does not exist in organization " + orgId
+                ));
     }
 
     private List<String> normalizeRoleCodes(List<String> codes) {
@@ -137,23 +149,12 @@ public class BusinessRoleAssignmentService {
         return assignments;
     }
 
+    // Concurrent safety: TakiboIdentity is locked with PESSIMISTIC_WRITE before this call.
+    // Two concurrent requests for the same identity cannot both reach this point simultaneously —
+    // one will block until the other commits. After the lock, existsBy in buildMissingAssignments
+    // is a reliable guard. saveAllAndFlush without a catch is intentional: if a unique violation
+    // still occurs here, it means another writer bypassed the canonical locked path and should fail.
     private void saveAssignments(List<RoleAssignmentEntity> assignments) {
-        try {
-            roleAssignmentRepository.saveAllAndFlush(assignments);
-        } catch (DataIntegrityViolationException ex) {
-            boolean allNowExist = assignments.stream().allMatch(e ->
-                    roleAssignmentRepository.existsByOrgIdAndSpaceIdAndIdentityTypeAndIdentityIdAndRoleSourceAndBusinessRoleId(
-                            e.getOrgId(),
-                            e.getSpaceId(),
-                            e.getIdentityType(),
-                            e.getIdentityId(),
-                            e.getRoleSource(),
-                            e.getBusinessRoleId()
-                    ));
-
-            if (!allNowExist) {
-                throw ex;
-            }
-        }
+        roleAssignmentRepository.saveAllAndFlush(assignments);
     }
 }
