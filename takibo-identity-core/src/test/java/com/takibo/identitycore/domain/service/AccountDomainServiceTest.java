@@ -223,7 +223,7 @@ class AccountDomainServiceTest {
 
     private Account mockAccount(UUID accountId, UUID orgId) {
         Account account = mock(Account.class);
-        when(account.getId()).thenReturn(AccountId.of(accountId));
+        lenient().when(account.getId()).thenReturn(AccountId.of(accountId));
         when(account.getOrgId()).thenReturn(orgId);
         return account;
     }
