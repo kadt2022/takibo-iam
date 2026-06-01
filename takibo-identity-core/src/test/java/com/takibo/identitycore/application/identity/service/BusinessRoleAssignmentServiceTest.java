@@ -153,4 +153,19 @@ class BusinessRoleAssignmentServiceTest {
         verify(roleAssignmentMapper, never()).toEntity(any());
         verify(roleAssignmentRepository, never()).saveAllAndFlush(any());
     }
+
+    @Test
+    void assignBusinessRoles_identityNotFound_throws() {
+        when(takiboIdentityRepository.lockByOrgIdAndAccountId(ORG_ID, ACCOUNT_ID))
+                .thenReturn(Optional.empty());
+
+        List<String> businessRoleCodes = List.of("MANAGER");
+
+        assertThatThrownBy(() -> service.assignBusinessRoles(ORG_ID, SPACE_ID, ACCOUNT_ID, businessRoleCodes))
+                .isInstanceOf(UserCreationException.class)
+                .hasMessageContaining("identity does not exist");
+
+        verify(roleRepository, never()).findByOrgIdAndSpaceIdAndCodeIn(any(), any(), any());
+        verify(roleAssignmentRepository, never()).saveAllAndFlush(any());
+    }
 }
