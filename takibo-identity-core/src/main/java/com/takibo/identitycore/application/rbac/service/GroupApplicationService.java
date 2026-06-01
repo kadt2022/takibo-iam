@@ -20,7 +20,7 @@ public class GroupApplicationService {
 
     @Transactional
     public void ensure(SpaceId spaceId, String code, String name, String description) {
-     //   spaceStatusPort.assertActive(spaceId.getValue());
+        spaceStatusCheckerCase.assertSpacetExistsAndActive(spaceId.getValue());
         if (groupRepository.findBySpaceIdAndCode(spaceId, code).isPresent()) {
             return;
         }
