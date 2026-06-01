@@ -1,5 +1,9 @@
 # Takibo IAM
 
+> **Disclaimer:** Takibo is an advanced, research-oriented IAM engineering project under active development. It is not yet a certified, externally audited, or production-ready IAM distribution. Any production deployment requires an independent security review, proper configuration, secret management, and compliance validation. Do not use default, sample, or development configurations in production environments. See [DISCLAIMER.md](./DISCLAIMER.md) for full details.
+
+---
+
 **Takibo (TAKIBO)** stands for **Trust, Access Key, Identity, Boundary, Organization**.
 
 Takibo IAM is a modular Identity and Access Management platform designed around OAuth2, OpenID Connect, adaptive authorization, multi-tenant governance, auditability, and event-driven security workflows.

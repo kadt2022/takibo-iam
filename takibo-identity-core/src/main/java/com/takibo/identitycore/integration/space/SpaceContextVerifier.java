@@ -20,7 +20,7 @@ public class SpaceContextVerifier {
     public SpaceContext validateSpaceContext(UUID spaceId) {
         SpaceId space = new SpaceId(spaceId);
 
-        spaceStatusCheckerCase.assertSpacetExistsAndActive(space.getValue());
+        spaceStatusCheckerCase.assertSpaceExistsAndActive(space.getValue());
 
         UUID organizationId = spaceManagementCase.findOrgIdBySpaceId(space)
                 .orElseThrow(() -> new UserCreationException("Organization not found for port " + space.value()));
