@@ -27,7 +27,7 @@ import java.util.UUID;
 @Service
 @Transactional
 @RequiredArgsConstructor
-public class AccountDomaineService {
+public class AccountDomainService {
 
     private final AccountRepository accountRepository;
     private final AccountCredentialsRepository credentialsRepository;

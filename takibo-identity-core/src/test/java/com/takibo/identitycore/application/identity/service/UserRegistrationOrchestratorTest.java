@@ -8,7 +8,7 @@ import com.takibo.identitycore.domain.model.SpaceContext;
 import com.takibo.identitycore.domain.model.User;
 import com.takibo.identitycore.domain.model.UserRegistrationResult;
 import com.takibo.identitycore.domain.repository.UserRepository;
-import com.takibo.identitycore.domain.service.AccountDomaineService;
+import com.takibo.identitycore.domain.service.AccountDomainService;
 import com.takibo.identitycore.domain.service.UserDomainService;
 import com.takibo.identitycore.domain.vo.AccountId;
 import com.takibo.identitycore.domain.vo.SpaceId;
@@ -37,7 +37,7 @@ class UserRegistrationOrchestratorTest {
 
     @Mock private SpaceContextVerifier spaceContextVerifier;
     @Mock private UserDomainService userDomainService;
-    @Mock private AccountDomaineService accountDomaineService;
+    @Mock private AccountDomainService accountDomaineService;
     @Mock private BusinessRoleAssignmentService businessRoleAssignmentService;
     @Mock private UserRepository userRepository;
 
