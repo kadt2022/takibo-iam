@@ -159,8 +159,7 @@ class BusinessRoleAssignmentServiceTest {
         when(takiboIdentityRepository.lockByOrgIdAndAccountId(ORG_ID, ACCOUNT_ID))
                 .thenReturn(Optional.empty());
 
-        assertThatThrownBy(() ->
-                service.assignBusinessRoles(ORG_ID, SPACE_ID, ACCOUNT_ID, List.of("MANAGER")))
+        assertThatThrownBy(() -> service.assignBusinessRoles(ORG_ID, SPACE_ID, ACCOUNT_ID, List.of("MANAGER")))
                 .isInstanceOf(UserCreationException.class)
                 .hasMessageContaining("identity does not exist");
 
