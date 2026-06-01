@@ -31,11 +31,11 @@ public class UserRoleAssignmentService {
 
     @Transactional
     public void assignRolesToUser(UUID orgId, SpaceId spaceId, UserId userId, List<String> requestedRoleCodes) {
-        //spaceStatusCheckerCase.assertActive(spaceId); // si ton port accepte SpaceId
-
         Objects.requireNonNull(orgId, "orgId");
         Objects.requireNonNull(spaceId, "spaceId");
         Objects.requireNonNull(userId, "userId");
+
+        spaceStatusCheckerCase.assertSpacetExistsAndActive(spaceId.value());
 
         List<String> normalizedRoleCodes = normalizeRoleCodes(requestedRoleCodes);
         if (normalizedRoleCodes.isEmpty()) {

@@ -22,7 +22,7 @@ public class RoleApplicationService {
 
     @Transactional
     public void ensure(SpaceId spaceId, String code, String name, String description) {
-       // spaceStatusPort.assertActive(spaceId.getValue());
+        spaceStatusCheckerCase.assertSpacetExistsAndActive(spaceId.getValue());
         if (roleRepository.findBySpaceIdAndCode(spaceId, code).isPresent()) {
             return;
         }
