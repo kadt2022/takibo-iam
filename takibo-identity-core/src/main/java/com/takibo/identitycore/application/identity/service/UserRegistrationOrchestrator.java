@@ -6,7 +6,7 @@ import com.takibo.identitycore.domain.model.SpaceContext;
 import com.takibo.identitycore.domain.model.User;
 import com.takibo.identitycore.domain.model.UserRegistrationResult;
 import com.takibo.identitycore.domain.repository.UserRepository;
-import com.takibo.identitycore.domain.service.AccountDomaineService;
+import com.takibo.identitycore.domain.service.AccountDomainService;
 import com.takibo.identitycore.integration.space.SpaceContextVerifier;
 import com.takibo.identitycore.domain.service.UserDomainService;
 import lombok.RequiredArgsConstructor;
@@ -18,7 +18,7 @@ public class UserRegistrationOrchestrator {
 
     private final SpaceContextVerifier spaceContextVerifier;
     private final UserDomainService userDomainService;
-    private final AccountDomaineService accountDomaineService;
+    private final AccountDomainService accountDomaineService;
     private final BusinessRoleAssignmentService businessRoleAssignmentService;
     private final UserRepository userRepository;
 

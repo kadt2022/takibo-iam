@@ -35,7 +35,7 @@ public class UserRoleAssignmentService {
         Objects.requireNonNull(spaceId, "spaceId");
         Objects.requireNonNull(userId, "userId");
 
-        spaceStatusCheckerCase.assertSpacetExistsAndActive(spaceId.value());
+        spaceStatusCheckerCase.assertSpaceExistsAndActive(spaceId.value());
 
         List<String> normalizedRoleCodes = normalizeRoleCodes(requestedRoleCodes);
         if (normalizedRoleCodes.isEmpty()) {

@@ -21,8 +21,8 @@ public interface SpaceStatusCheckerCase {
                 .orElse(false);
     }
 
-    /** NEW: Lève 404 si inexistant, 403 si non ACTIVE. */
-    default void assertSpacetExistsAndActive(UUID spaceId) {
+    /** Lève 404 si inexistant, 403 si non ACTIVE. */
+    default void assertSpaceExistsAndActive(UUID spaceId) {
         SpaceOperationalStatus status = findStatus(spaceId)
                 .orElseThrow(() -> new SpaceNotFoundException(spaceId));
         if (!SpaceOperationalStatus.ACTIVE.equals(status)) {

@@ -30,7 +30,7 @@ public class GroupMembershipService {
 
     @Transactional /* qualifier: "iamTxManager" si multi-DS */
     public void addToGroups(SpaceId spaceId, UserId userId, List<String> groupCodes) {
-        spaceStatusCheckerCase.assertSpacetExistsAndActive(spaceId.value());
+        spaceStatusCheckerCase.assertSpaceExistsAndActive(spaceId.value());
         List<String> normalizedGroupCodes = normalizeGroupCodes(groupCodes);
         if (normalizedGroupCodes.isEmpty()) return;
 

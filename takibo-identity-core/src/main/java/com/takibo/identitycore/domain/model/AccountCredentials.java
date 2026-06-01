@@ -2,7 +2,6 @@ package com.takibo.identitycore.domain.model;
 
 import com.takibo.identitycore.domain.vo.AccountId;
 import com.takibo.identitycore.domain.vo.PasswordHash;
-import com.takibo.identitycore.infrastructure.entity.AccountEntity;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
