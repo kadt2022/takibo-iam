@@ -1,4 +1,4 @@
-package com.takibo.identitycore.application.rbac.assignement;
+package com.takibo.identitycore.application.rbac.governance.service;
 
 import com.takibo.identitycore.domain.exception.DuplicateAssignmentException;
 import com.takibo.identitycore.domain.exception.InvalidRoleScopeException;
@@ -6,7 +6,7 @@ import com.takibo.identitycore.domain.model.Identity;
 import com.takibo.identitycore.domain.model.IdentityType;
 import com.takibo.identitycore.domain.rbac.model.RoleAssignment;
 import com.takibo.identitycore.domain.rbac.model.RoleSource;
-import com.takibo.identitycore.domain.repository.GovernanceRoleAssignmentRepository;
+import com.takibo.identitycore.domain.rbac.repository.GovernanceRoleAssignmentRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -24,8 +24,8 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class RoleAssignmentCaseImplTest {
 
-    private static final UUID ORG_ID    = UUID.fromString("aaaaaaaa-0000-0000-0000-000000000001");
-    private static final UUID SPACE_ID  = UUID.fromString("bbbbbbbb-0000-0000-0000-000000000002");
+    private static final UUID ORG_ID     = UUID.fromString("aaaaaaaa-0000-0000-0000-000000000001");
+    private static final UUID SPACE_ID   = UUID.fromString("bbbbbbbb-0000-0000-0000-000000000002");
     private static final UUID ACCOUNT_ID = UUID.fromString("cccccccc-0000-0000-0000-000000000003");
 
     private static final Identity FOUNDER = new Identity(IdentityType.ACCOUNT, ACCOUNT_ID);
@@ -40,8 +40,7 @@ class RoleAssignmentCaseImplTest {
         RoleAssignment saved = mock(RoleAssignment.class);
         when(governanceRoleAssignmentRepository.saveGovernanceAssignment(any())).thenReturn(saved);
 
-        RoleAssignment result = service.assignTechnicalRole(
-                ORG_ID, SPACE_ID, FOUNDER, "R_SPACE_ADMIN", "system");
+        RoleAssignment result = service.assignTechnicalRole(ORG_ID, SPACE_ID, FOUNDER, "R_SPACE_ADMIN", "system");
 
         assertThat(result).isSameAs(saved);
 
@@ -100,9 +99,9 @@ class RoleAssignmentCaseImplTest {
 
     @Test
     void assignTechnicalRole_userRole_happyPath() {
-        when(governanceRoleAssignmentRepository.saveGovernanceAssignment(any())).thenReturn(mock(RoleAssignment.class));
+        when(governanceRoleAssignmentRepository.saveGovernanceAssignment(any()))
+                .thenReturn(mock(RoleAssignment.class));
 
-        // R_SELF has USER scope — requires orgId, spaceId optional
         service.assignTechnicalRole(ORG_ID, null, FOUNDER, "R_SELF", "system");
 
         verify(governanceRoleAssignmentRepository).saveGovernanceAssignment(any());

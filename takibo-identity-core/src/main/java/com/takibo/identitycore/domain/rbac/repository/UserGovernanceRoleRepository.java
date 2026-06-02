@@ -1,4 +1,4 @@
-package com.takibo.identitycore.domain.repository;
+package com.takibo.identitycore.domain.rbac.repository;
 
 import com.takibo.identitycore.domain.rbac.model.UserGovernanceRoleAssignment;
 

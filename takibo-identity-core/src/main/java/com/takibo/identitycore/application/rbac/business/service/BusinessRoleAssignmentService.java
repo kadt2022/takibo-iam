@@ -1,9 +1,9 @@
-package com.takibo.identitycore.application.identity.service;
+package com.takibo.identitycore.application.rbac.business.service;
 
 import com.takibo.identitycore.domain.exception.UserCreationException;
 import com.takibo.identitycore.domain.model.Role;
 import com.takibo.identitycore.domain.rbac.model.BusinessRoleAssignment;
-import com.takibo.identitycore.domain.repository.BusinessRoleAssignmentRepository;
+import com.takibo.identitycore.domain.rbac.repository.BusinessRoleAssignmentRepository;
 import com.takibo.identitycore.domain.repository.RoleRepository;
 import com.takibo.identitycore.domain.repository.TakiboIdentityRepository;
 import lombok.RequiredArgsConstructor;
@@ -56,9 +56,7 @@ public class BusinessRoleAssignmentService {
     }
 
     private List<String> normalizeRoleCodes(List<String> codes) {
-        if (codes == null) {
-            return List.of();
-        }
+        if (codes == null) return List.of();
         return codes.stream()
                 .filter(Objects::nonNull)
                 .map(String::trim)

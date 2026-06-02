@@ -1,13 +1,13 @@
-package com.takibo.identitycore.application.rbac.assignement;
+package com.takibo.identitycore.application.rbac.governance.service;
 
-import com.takibo.identitycore.application.rbac.assignement.port.RoleAssignmentCase;
+import com.takibo.identitycore.application.rbac.governance.port.RoleAssignmentCase;
 import com.takibo.identitycore.domain.catalogrbac.TechnicalRole;
 import com.takibo.identitycore.domain.catalogrbac.TechnicalScope;
 import com.takibo.identitycore.domain.exception.InvalidRoleScopeException;
 import com.takibo.identitycore.domain.model.Identity;
 import com.takibo.identitycore.domain.rbac.model.RoleAssignment;
 import com.takibo.identitycore.domain.rbac.model.RoleSource;
-import com.takibo.identitycore.domain.repository.GovernanceRoleAssignmentRepository;
+import com.takibo.identitycore.domain.rbac.repository.GovernanceRoleAssignmentRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,17 +42,9 @@ public class RoleAssignmentCaseImpl implements RoleAssignmentCase {
         validateTechnicalRoleScope(role, orgId, spaceId);
 
         RoleAssignment assignment = new RoleAssignment(
-                null,
-                orgId,
-                spaceId,
-                identity,
-                role.code(),
-                RoleSource.TECHNICAL,
-                null,
-                Instant.now(),
-                createdBy,
-                null,
-                null
+                null, orgId, spaceId, identity,
+                role.code(), RoleSource.TECHNICAL, null,
+                Instant.now(), createdBy, null, null
         );
 
         return governanceRoleAssignmentRepository.saveGovernanceAssignment(assignment);

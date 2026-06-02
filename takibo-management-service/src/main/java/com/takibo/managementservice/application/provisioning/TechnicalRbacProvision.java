@@ -1,7 +1,7 @@
 package com.takibo.managementservice.application.provisioning;
 
-import com.takibo.identitycore.application.rbac.assignement.port.GroupAssignmentCase;
-import com.takibo.identitycore.application.rbac.assignement.port.RoleAssignmentCase;
+import com.takibo.identitycore.application.rbac.governance.port.GroupAssignmentCase;
+import com.takibo.identitycore.application.rbac.governance.port.RoleAssignmentCase;
 import com.takibo.identitycore.domain.model.Identity;
 import com.takibo.identitycore.domain.model.IdentityType;
 import org.springframework.stereotype.Component;

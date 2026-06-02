@@ -1,4 +1,4 @@
-package com.takibo.identitycore.application.rbac.assignement.port;
+package com.takibo.identitycore.application.rbac.governance.port;
 
 import com.takibo.identitycore.domain.model.Identity;
 import com.takibo.identitycore.domain.rbac.model.RoleAssignment;
@@ -13,4 +13,3 @@ public interface RoleAssignmentCase {
                                        String technicalRoleCode,
                                        String createdBy);
 }
-
