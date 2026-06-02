@@ -38,7 +38,7 @@ class RoleAssignmentCaseImplTest {
     @Test
     void assignTechnicalRole_happyPath_buildsCorrectAssignmentAndDelegates() {
         RoleAssignment saved = mock(RoleAssignment.class);
-        when(governanceRoleAssignmentRepository.save(any())).thenReturn(saved);
+        when(governanceRoleAssignmentRepository.saveGovernanceAssignment(any())).thenReturn(saved);
 
         RoleAssignment result = service.assignTechnicalRole(
                 ORG_ID, SPACE_ID, FOUNDER, "R_SPACE_ADMIN", "system");
@@ -46,7 +46,7 @@ class RoleAssignmentCaseImplTest {
         assertThat(result).isSameAs(saved);
 
         ArgumentCaptor<RoleAssignment> captor = ArgumentCaptor.forClass(RoleAssignment.class);
-        verify(governanceRoleAssignmentRepository).save(captor.capture());
+        verify(governanceRoleAssignmentRepository).saveGovernanceAssignment(captor.capture());
 
         RoleAssignment built = captor.getValue();
         assertThat(built.orgId()).isEqualTo(ORG_ID);
@@ -65,7 +65,7 @@ class RoleAssignmentCaseImplTest {
                 .isInstanceOf(InvalidRoleScopeException.class)
                 .hasMessageContaining("Unknown technical role");
 
-        verify(governanceRoleAssignmentRepository, never()).save(any());
+        verify(governanceRoleAssignmentRepository, never()).saveGovernanceAssignment(any());
     }
 
     @Test
@@ -75,7 +75,7 @@ class RoleAssignmentCaseImplTest {
                 .isInstanceOf(InvalidRoleScopeException.class)
                 .hasMessageContaining("must not be scoped");
 
-        verify(governanceRoleAssignmentRepository, never()).save(any());
+        verify(governanceRoleAssignmentRepository, never()).saveGovernanceAssignment(any());
     }
 
     @Test
@@ -85,7 +85,7 @@ class RoleAssignmentCaseImplTest {
                 .isInstanceOf(InvalidRoleScopeException.class)
                 .hasMessageContaining("requires orgId");
 
-        verify(governanceRoleAssignmentRepository, never()).save(any());
+        verify(governanceRoleAssignmentRepository, never()).saveGovernanceAssignment(any());
     }
 
     @Test
@@ -95,17 +95,17 @@ class RoleAssignmentCaseImplTest {
                 .isInstanceOf(InvalidRoleScopeException.class)
                 .hasMessageContaining("requires orgId and spaceId");
 
-        verify(governanceRoleAssignmentRepository, never()).save(any());
+        verify(governanceRoleAssignmentRepository, never()).saveGovernanceAssignment(any());
     }
 
     @Test
     void assignTechnicalRole_userRole_happyPath() {
-        when(governanceRoleAssignmentRepository.save(any())).thenReturn(mock(RoleAssignment.class));
+        when(governanceRoleAssignmentRepository.saveGovernanceAssignment(any())).thenReturn(mock(RoleAssignment.class));
 
         // R_SELF has USER scope — requires orgId, spaceId optional
         service.assignTechnicalRole(ORG_ID, null, FOUNDER, "R_SELF", "system");
 
-        verify(governanceRoleAssignmentRepository).save(any());
+        verify(governanceRoleAssignmentRepository).saveGovernanceAssignment(any());
     }
 
     @Test
@@ -115,12 +115,12 @@ class RoleAssignmentCaseImplTest {
                 .isInstanceOf(InvalidRoleScopeException.class)
                 .hasMessageContaining("requires orgId");
 
-        verify(governanceRoleAssignmentRepository, never()).save(any());
+        verify(governanceRoleAssignmentRepository, never()).saveGovernanceAssignment(any());
     }
 
     @Test
     void assignTechnicalRole_duplicate_propagatesDuplicateAssignmentException() {
-        when(governanceRoleAssignmentRepository.save(any()))
+        when(governanceRoleAssignmentRepository.saveGovernanceAssignment(any()))
                 .thenThrow(new DuplicateAssignmentException("already assigned"));
 
         assertThatThrownBy(() ->

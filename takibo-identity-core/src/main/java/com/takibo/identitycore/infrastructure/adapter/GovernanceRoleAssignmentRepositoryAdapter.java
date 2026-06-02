@@ -2,6 +2,7 @@ package com.takibo.identitycore.infrastructure.adapter;
 
 import com.takibo.identitycore.domain.exception.DuplicateAssignmentException;
 import com.takibo.identitycore.domain.rbac.model.RoleAssignment;
+import com.takibo.identitycore.domain.rbac.model.RoleSource;
 import com.takibo.identitycore.domain.repository.GovernanceRoleAssignmentRepository;
 import com.takibo.identitycore.infrastructure.entity.RoleAssignmentEntity;
 import com.takibo.identitycore.infrastructure.jpa.mapper.RoleJpaAssignmentMapper;
@@ -22,13 +23,15 @@ public class GovernanceRoleAssignmentRepositoryAdapter implements GovernanceRole
 
     @Override
     @Transactional
-    public RoleAssignment save(RoleAssignment assignment) {
+    public RoleAssignment saveGovernanceAssignment(RoleAssignment assignment) {
+        assertGovernanceShape(assignment);
+
         RoleAssignmentEntity entity = mapper.toEntity(assignment);
         if (entity.getId() == null) {
             entity.setId(UUID.randomUUID());
         }
         try {
-            RoleAssignmentEntity saved = jpa.save(entity);
+            RoleAssignmentEntity saved = jpa.saveAndFlush(entity);
             return mapper.toDomain(saved);
         } catch (DataIntegrityViolationException ex) {
             throw new DuplicateAssignmentException(
@@ -38,6 +41,15 @@ public class GovernanceRoleAssignmentRepositoryAdapter implements GovernanceRole
                             + (assignment.spaceId() != null ? " and space " + assignment.spaceId() : ""),
                     ex
             );
+        }
+    }
+
+    private void assertGovernanceShape(RoleAssignment assignment) {
+        if (assignment.roleSource() != RoleSource.TECHNICAL
+                || assignment.roleCode() == null
+                || assignment.businessRoleId() != null) {
+            throw new IllegalArgumentException(
+                    "Governance role assignment must use a roleCode with TECHNICAL source and no businessRoleId");
         }
     }
 }

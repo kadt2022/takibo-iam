@@ -26,8 +26,8 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class GovernanceRoleAssignmentRepositoryAdapterTest {
 
-    private static final UUID ORG_ID    = UUID.fromString("aaaaaaaa-0000-0000-0000-000000000001");
-    private static final UUID SPACE_ID  = UUID.fromString("bbbbbbbb-0000-0000-0000-000000000002");
+    private static final UUID ORG_ID     = UUID.fromString("aaaaaaaa-0000-0000-0000-000000000001");
+    private static final UUID SPACE_ID   = UUID.fromString("bbbbbbbb-0000-0000-0000-000000000002");
     private static final UUID ACCOUNT_ID = UUID.fromString("cccccccc-0000-0000-0000-000000000003");
 
     @Mock private JpaRoleAssignmentRepository jpa;
@@ -37,78 +37,93 @@ class GovernanceRoleAssignmentRepositoryAdapterTest {
     private GovernanceRoleAssignmentRepositoryAdapter adapter;
 
     @Test
-    void save_mapsToEntitySavesAndReturnsDomain() {
-        RoleAssignment domain = assignment(null);
+    void saveGovernanceAssignment_mapsToEntityFlushesAndReturnsDomain() {
+        RoleAssignment domain = technicalAssignment(null);
         RoleAssignmentEntity entity = entityWithoutId();
         RoleAssignmentEntity saved = entityWithId();
         RoleAssignment result = mock(RoleAssignment.class);
 
         when(mapper.toEntity(domain)).thenReturn(entity);
-        when(jpa.save(entity)).thenReturn(saved);
+        when(jpa.saveAndFlush(entity)).thenReturn(saved);
         when(mapper.toDomain(saved)).thenReturn(result);
 
-        assertThat(adapter.save(domain)).isSameAs(result);
-        verify(jpa).save(entity);
+        assertThat(adapter.saveGovernanceAssignment(domain)).isSameAs(result);
+        verify(jpa).saveAndFlush(entity);
     }
 
     @Test
-    void save_entityWithoutId_generatesIdBeforePersisting() {
-        RoleAssignment domain = assignment(null);
+    void saveGovernanceAssignment_entityWithoutId_generatesIdBeforePersisting() {
+        RoleAssignment domain = technicalAssignment(null);
         RoleAssignmentEntity entity = entityWithoutId();
-        RoleAssignmentEntity saved = entityWithId();
 
         when(mapper.toEntity(domain)).thenReturn(entity);
-        when(jpa.save(entity)).thenReturn(saved);
-        when(mapper.toDomain(saved)).thenReturn(mock(RoleAssignment.class));
+        when(jpa.saveAndFlush(entity)).thenReturn(entityWithId());
+        when(mapper.toDomain(any())).thenReturn(mock(RoleAssignment.class));
 
-        adapter.save(domain);
+        adapter.saveGovernanceAssignment(domain);
 
         assertThat(entity.getId()).isNotNull();
     }
 
     @Test
-    void save_entityWithExistingId_doesNotOverwriteId() {
+    void saveGovernanceAssignment_entityWithExistingId_doesNotOverwriteId() {
         UUID existingId = UUID.fromString("eeeeeeee-0000-0000-0000-000000000005");
-        RoleAssignment domain = assignment(null);
+        RoleAssignment domain = technicalAssignment(null);
         RoleAssignmentEntity entity = entityWithId(existingId);
-        RoleAssignmentEntity saved = entityWithId(existingId);
 
         when(mapper.toEntity(domain)).thenReturn(entity);
-        when(jpa.save(entity)).thenReturn(saved);
-        when(mapper.toDomain(saved)).thenReturn(mock(RoleAssignment.class));
+        when(jpa.saveAndFlush(entity)).thenReturn(entity);
+        when(mapper.toDomain(any())).thenReturn(mock(RoleAssignment.class));
 
-        adapter.save(domain);
+        adapter.saveGovernanceAssignment(domain);
 
         assertThat(entity.getId()).isEqualTo(existingId);
     }
 
     @Test
-    void save_dataIntegrityViolation_withoutSpaceId_messageOmitsSpaceInfo() {
-        RoleAssignment domain = assignmentWithoutSpace();
+    void saveGovernanceAssignment_businessSourceRejected() {
+        RoleAssignment business = new RoleAssignment(
+                null, ORG_ID, SPACE_ID,
+                new Identity(IdentityType.ACCOUNT, ACCOUNT_ID),
+                null, RoleSource.BUSINESS, UUID.randomUUID(),
+                Instant.now(), "system", null, null
+        );
+
+        assertThatThrownBy(() -> adapter.saveGovernanceAssignment(business))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("TECHNICAL source");
+
+        verify(jpa, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void saveGovernanceAssignment_dataIntegrityViolation_withSpaceId_throwsDuplicateException() {
+        RoleAssignment domain = technicalAssignment(null);
         RoleAssignmentEntity entity = entityWithoutId();
 
         when(mapper.toEntity(domain)).thenReturn(entity);
-        when(jpa.save(any())).thenThrow(new DataIntegrityViolationException("duplicate"));
+        when(jpa.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException("duplicate"));
 
-        assertThatThrownBy(() -> adapter.save(domain))
+        assertThatThrownBy(() -> adapter.saveGovernanceAssignment(domain))
+                .isInstanceOf(DuplicateAssignmentException.class)
+                .hasMessageContaining("R_SPACE_ADMIN")
+                .hasMessageContaining("and space");
+    }
+
+    @Test
+    void saveGovernanceAssignment_dataIntegrityViolation_withoutSpaceId_messageOmitsSpace() {
+        RoleAssignment domain = technicalAssignmentWithoutSpace();
+        RoleAssignmentEntity entity = entityWithoutId();
+
+        when(mapper.toEntity(domain)).thenReturn(entity);
+        when(jpa.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException("duplicate"));
+
+        assertThatThrownBy(() -> adapter.saveGovernanceAssignment(domain))
                 .isInstanceOf(DuplicateAssignmentException.class)
                 .hasMessageNotContaining("and space");
     }
 
-    @Test
-    void save_dataIntegrityViolation_throwsDuplicateAssignmentException() {
-        RoleAssignment domain = assignment(null);
-        RoleAssignmentEntity entity = entityWithoutId();
-
-        when(mapper.toEntity(domain)).thenReturn(entity);
-        when(jpa.save(any())).thenThrow(new DataIntegrityViolationException("duplicate"));
-
-        assertThatThrownBy(() -> adapter.save(domain))
-                .isInstanceOf(DuplicateAssignmentException.class)
-                .hasMessageContaining("R_SPACE_ADMIN");
-    }
-
-    private RoleAssignment assignment(UUID id) {
+    private RoleAssignment technicalAssignment(UUID id) {
         return new RoleAssignment(
                 id, ORG_ID, SPACE_ID,
                 new Identity(IdentityType.ACCOUNT, ACCOUNT_ID),
@@ -117,7 +132,7 @@ class GovernanceRoleAssignmentRepositoryAdapterTest {
         );
     }
 
-    private RoleAssignment assignmentWithoutSpace() {
+    private RoleAssignment technicalAssignmentWithoutSpace() {
         return new RoleAssignment(
                 null, ORG_ID, null,
                 new Identity(IdentityType.ACCOUNT, ACCOUNT_ID),

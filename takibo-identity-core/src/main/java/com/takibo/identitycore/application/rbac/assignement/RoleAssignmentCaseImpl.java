@@ -55,7 +55,7 @@ public class RoleAssignmentCaseImpl implements RoleAssignmentCase {
                 null
         );
 
-        return governanceRoleAssignmentRepository.save(assignment);
+        return governanceRoleAssignmentRepository.saveGovernanceAssignment(assignment);
     }
 
     private void validateTechnicalRoleScope(TechnicalRole role, UUID orgId, UUID spaceId) {

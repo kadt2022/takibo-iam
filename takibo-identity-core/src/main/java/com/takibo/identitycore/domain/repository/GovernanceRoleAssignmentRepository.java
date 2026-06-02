@@ -6,5 +6,5 @@ import com.takibo.identitycore.domain.rbac.model.RoleAssignment;
 public interface GovernanceRoleAssignmentRepository {
 
     /** @throws DuplicateAssignmentException if the assignment already exists */
-    RoleAssignment save(RoleAssignment assignment);
+    RoleAssignment saveGovernanceAssignment(RoleAssignment assignment);
 }
