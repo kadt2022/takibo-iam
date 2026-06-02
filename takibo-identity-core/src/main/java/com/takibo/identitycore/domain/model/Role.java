@@ -30,6 +30,8 @@ public class Role {
     private String name;
     private String description;
 
+    private final RoleNature nature;
+
     private final Instant createdAt;
     private Instant updatedAt;
 
@@ -48,6 +50,7 @@ public class Role {
                 .code(code)
                 .name(name)
                 .description(description)
+                .nature(RoleNature.BUSINESS)
                 .createdAt(now)
                 .updatedAt(now)
                 .version(0L)
