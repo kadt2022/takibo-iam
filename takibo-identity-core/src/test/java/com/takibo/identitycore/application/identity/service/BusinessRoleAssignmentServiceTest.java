@@ -1,16 +1,14 @@
 package com.takibo.identitycore.application.identity.service;
 
 import com.takibo.identitycore.domain.exception.UserCreationException;
-import com.takibo.identitycore.domain.model.IdentityType;
-import com.takibo.identitycore.domain.rbac.model.RoleAssignment;
-import com.takibo.identitycore.domain.rbac.model.RoleSource;
-import com.takibo.identitycore.infrastructure.entity.RoleAssignmentEntity;
-import com.takibo.identitycore.infrastructure.entity.RoleEntity;
-import com.takibo.identitycore.infrastructure.jpa.mapper.RoleJpaAssignmentMapper;
-import com.takibo.identitycore.infrastructure.entity.TakiboIdentityEntity;
-import com.takibo.identitycore.infrastructure.jpa.repository.JpaRoleAssignmentRepository;
-import com.takibo.identitycore.infrastructure.jpa.repository.JpaRoleRepository;
-import com.takibo.identitycore.infrastructure.jpa.repository.JpaTakiboIdentityRepository;
+import com.takibo.identitycore.domain.model.Role;
+import com.takibo.identitycore.domain.model.RoleNature;
+import com.takibo.identitycore.domain.rbac.model.BusinessRoleAssignment;
+import com.takibo.identitycore.domain.repository.BusinessRoleAssignmentRepository;
+import com.takibo.identitycore.domain.repository.RoleRepository;
+import com.takibo.identitycore.domain.repository.TakiboIdentityRepository;
+import com.takibo.identitycore.domain.vo.RoleId;
+import com.takibo.identitycore.domain.vo.SpaceId;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -18,6 +16,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -25,147 +24,111 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class BusinessRoleAssignmentServiceTest {
 
-    private static final UUID ORG_ID = UUID.fromString("aaaaaaaa-0000-0000-0000-000000000001");
-    private static final UUID SPACE_ID = UUID.fromString("bbbbbbbb-0000-0000-0000-000000000002");
-    private static final UUID ACCOUNT_ID = UUID.fromString("cccccccc-0000-0000-0000-000000000003");
+    private static final UUID ORG_ID      = UUID.fromString("aaaaaaaa-0000-0000-0000-000000000001");
+    private static final UUID SPACE_ID    = UUID.fromString("bbbbbbbb-0000-0000-0000-000000000002");
+    private static final UUID ACCOUNT_ID  = UUID.fromString("cccccccc-0000-0000-0000-000000000003");
     private static final UUID IDENTITY_ID = UUID.fromString("eeeeeeee-0000-0000-0000-000000000005");
-    private static final UUID ROLE_ID = UUID.fromString("dddddddd-0000-0000-0000-000000000004");
+    private static final UUID ROLE_ID     = UUID.fromString("dddddddd-0000-0000-0000-000000000004");
 
-    @Mock
-    private JpaRoleRepository roleRepository;
-
-    @Mock
-    private JpaRoleAssignmentRepository roleAssignmentRepository;
-
-    @Mock
-    private RoleJpaAssignmentMapper roleAssignmentMapper;
-
-    @Mock
-    private JpaTakiboIdentityRepository takiboIdentityRepository;
+    @Mock private TakiboIdentityRepository takiboIdentityRepository;
+    @Mock private RoleRepository roleRepository;
+    @Mock private BusinessRoleAssignmentRepository businessRoleAssignmentRepository;
 
     @InjectMocks
     private BusinessRoleAssignmentService service;
 
     @Test
-    void assignBusinessRoles_rejectsTechnicalRoleCodes() {
+    void assignBusinessRoles_governanceCodeNotFoundInBusinessPort_throws() {
         List<String> roleCodes = List.of("R_SPACE_ADMIN");
+        when(takiboIdentityRepository.lockAndFindIdentityIdByOrgIdAndAccountId(ORG_ID, ACCOUNT_ID))
+                .thenReturn(Optional.of(IDENTITY_ID));
+        when(roleRepository.findBusinessRolesByOrgAndSpaceAndCodes(ORG_ID, SPACE_ID, roleCodes))
+                .thenReturn(List.of());
 
         assertThatThrownBy(() -> service.assignBusinessRoles(ORG_ID, SPACE_ID, ACCOUNT_ID, roleCodes))
                 .isInstanceOf(UserCreationException.class)
-                .hasMessageContaining("Technical role codes cannot be assigned");
+                .hasMessageContaining("Unknown business role codes");
 
-        verify(roleRepository, never()).findByOrgIdAndSpaceIdAndCodeIn(any(), any(), any());
-        verify(roleAssignmentRepository, never()).saveAllAndFlush(any());
+        verify(businessRoleAssignmentRepository, never()).saveAll(any());
     }
 
     @Test
-    void assignBusinessRoles_createsBusinessRoleAssignment() {
-        RoleEntity manager = RoleEntity.builder()
-                .id(ROLE_ID)
-                .orgId(ORG_ID)
-                .spaceId(SPACE_ID)
-                .code("MANAGER")
-                .name("Manager")
-                .build();
-
-        TakiboIdentityEntity identityEntity = TakiboIdentityEntity.builder()
-                .identityId(IDENTITY_ID)
-                .orgId(ORG_ID)
-                .accountId(ACCOUNT_ID)
-                .build();
-        when(takiboIdentityRepository.lockByOrgIdAndAccountId(ORG_ID, ACCOUNT_ID))
-                .thenReturn(Optional.of(identityEntity));
-        when(roleRepository.findByOrgIdAndSpaceIdAndCodeIn(ORG_ID, SPACE_ID, List.of("MANAGER")))
-                .thenReturn(List.of(manager));
-        when(roleAssignmentRepository.existsByOrgIdAndSpaceIdAndIdentityTypeAndIdentityIdAndRoleSourceAndBusinessRoleId(
-                ORG_ID, SPACE_ID, IdentityType.HUMAN.name(), IDENTITY_ID, RoleSource.BUSINESS, ROLE_ID))
+    void assignBusinessRoles_happyPath_savesBusinessRoleAssignment() {
+        List<String> roleCodes = List.of("MANAGER");
+        when(takiboIdentityRepository.lockAndFindIdentityIdByOrgIdAndAccountId(ORG_ID, ACCOUNT_ID))
+                .thenReturn(Optional.of(IDENTITY_ID));
+        when(roleRepository.findBusinessRolesByOrgAndSpaceAndCodes(ORG_ID, SPACE_ID, roleCodes))
+                .thenReturn(List.of(managerRole()));
+        when(businessRoleAssignmentRepository.existsByOrgIdAndSpaceIdAndIdentityIdAndBusinessRoleId(
+                ORG_ID, SPACE_ID, IDENTITY_ID, ROLE_ID))
                 .thenReturn(false);
-        when(roleAssignmentMapper.toEntity(any())).thenAnswer(invocation -> {
-            RoleAssignment assignment = invocation.getArgument(0);
-            return RoleAssignmentEntity.builder()
-                    .orgId(assignment.orgId())
-                    .spaceId(assignment.spaceId())
-                    .identityType(assignment.identity().type().name())
-                    .identityId(assignment.identity().id())
-                    .roleCode(assignment.roleCode())
-                    .roleSource(assignment.roleSource())
-                    .businessRoleId(assignment.businessRoleId())
-                    .build();
-        });
 
-        service.assignBusinessRoles(ORG_ID, SPACE_ID, ACCOUNT_ID, List.of("MANAGER"));
+        service.assignBusinessRoles(ORG_ID, SPACE_ID, ACCOUNT_ID, roleCodes);
 
-        ArgumentCaptor<RoleAssignment> assignmentCaptor = ArgumentCaptor.forClass(RoleAssignment.class);
-        verify(roleAssignmentMapper).toEntity(assignmentCaptor.capture());
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<BusinessRoleAssignment>> captor = ArgumentCaptor.forClass(List.class);
+        verify(businessRoleAssignmentRepository).saveAll(captor.capture());
 
-        RoleAssignment assignment = assignmentCaptor.getValue();
+        BusinessRoleAssignment assignment = captor.getValue().get(0);
         assertThat(assignment.orgId()).isEqualTo(ORG_ID);
         assertThat(assignment.spaceId()).isEqualTo(SPACE_ID);
-        assertThat(assignment.identity().type()).isEqualTo(IdentityType.HUMAN);
-        assertThat(assignment.identity().id()).isEqualTo(IDENTITY_ID);
-        assertThat(assignment.roleSource()).isEqualTo(RoleSource.BUSINESS);
-        assertThat(assignment.roleCode()).isNull();
+        assertThat(assignment.identityId()).isEqualTo(IDENTITY_ID);
         assertThat(assignment.businessRoleId()).isEqualTo(ROLE_ID);
-
-        verify(roleAssignmentRepository).saveAllAndFlush(any());
-    }
-
-    @Test
-    void assignBusinessRoles_emptyList_returnsWithoutQueryingRoles() {
-        service.assignBusinessRoles(ORG_ID, SPACE_ID, ACCOUNT_ID, List.of());
-
-        verify(roleRepository, never()).findByOrgIdAndSpaceIdAndCodeIn(any(), any(), any());
-        verify(roleAssignmentRepository, never()).saveAllAndFlush(any());
     }
 
     @Test
     void assignBusinessRoles_alreadyAssigned_isIdempotent() {
-        RoleEntity manager = RoleEntity.builder()
-                .id(ROLE_ID)
-                .orgId(ORG_ID)
-                .spaceId(SPACE_ID)
-                .code("MANAGER")
-                .name("Manager")
-                .build();
-
-        TakiboIdentityEntity identityEntityForIdempotent = TakiboIdentityEntity.builder()
-                .identityId(IDENTITY_ID)
-                .orgId(ORG_ID)
-                .accountId(ACCOUNT_ID)
-                .build();
-        when(takiboIdentityRepository.lockByOrgIdAndAccountId(ORG_ID, ACCOUNT_ID))
-                .thenReturn(Optional.of(identityEntityForIdempotent));
-        when(roleRepository.findByOrgIdAndSpaceIdAndCodeIn(ORG_ID, SPACE_ID, List.of("MANAGER")))
-                .thenReturn(List.of(manager));
-        when(roleAssignmentRepository.existsByOrgIdAndSpaceIdAndIdentityTypeAndIdentityIdAndRoleSourceAndBusinessRoleId(
-                ORG_ID, SPACE_ID, IdentityType.HUMAN.name(), IDENTITY_ID, RoleSource.BUSINESS, ROLE_ID))
+        List<String> roleCodes = List.of("MANAGER");
+        when(takiboIdentityRepository.lockAndFindIdentityIdByOrgIdAndAccountId(ORG_ID, ACCOUNT_ID))
+                .thenReturn(Optional.of(IDENTITY_ID));
+        when(roleRepository.findBusinessRolesByOrgAndSpaceAndCodes(ORG_ID, SPACE_ID, roleCodes))
+                .thenReturn(List.of(managerRole()));
+        when(businessRoleAssignmentRepository.existsByOrgIdAndSpaceIdAndIdentityIdAndBusinessRoleId(
+                ORG_ID, SPACE_ID, IDENTITY_ID, ROLE_ID))
                 .thenReturn(true);
 
-        service.assignBusinessRoles(ORG_ID, SPACE_ID, ACCOUNT_ID, List.of("MANAGER"));
+        service.assignBusinessRoles(ORG_ID, SPACE_ID, ACCOUNT_ID, roleCodes);
 
-        verify(roleAssignmentMapper, never()).toEntity(any());
-        verify(roleAssignmentRepository, never()).saveAllAndFlush(any());
+        verify(businessRoleAssignmentRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void assignBusinessRoles_emptyList_returnsEarlyWithoutAnyQuery() {
+        service.assignBusinessRoles(ORG_ID, SPACE_ID, ACCOUNT_ID, List.of());
+
+        verify(takiboIdentityRepository, never()).lockAndFindIdentityIdByOrgIdAndAccountId(any(), any());
+        verify(roleRepository, never()).findBusinessRolesByOrgAndSpaceAndCodes(any(), any(), any());
+        verify(businessRoleAssignmentRepository, never()).saveAll(any());
     }
 
     @Test
     void assignBusinessRoles_identityNotFound_throws() {
-        when(takiboIdentityRepository.lockByOrgIdAndAccountId(ORG_ID, ACCOUNT_ID))
+        List<String> roleCodes = List.of("MANAGER");
+        when(takiboIdentityRepository.lockAndFindIdentityIdByOrgIdAndAccountId(ORG_ID, ACCOUNT_ID))
                 .thenReturn(Optional.empty());
 
-        List<String> businessRoleCodes = List.of("MANAGER");
-
-        assertThatThrownBy(() -> service.assignBusinessRoles(ORG_ID, SPACE_ID, ACCOUNT_ID, businessRoleCodes))
+        assertThatThrownBy(() -> service.assignBusinessRoles(ORG_ID, SPACE_ID, ACCOUNT_ID, roleCodes))
                 .isInstanceOf(UserCreationException.class)
-                .hasMessageContaining("identity does not exist");
+                .hasMessageContaining("no TakiboIdentity found");
 
-        verify(roleRepository, never()).findByOrgIdAndSpaceIdAndCodeIn(any(), any(), any());
-        verify(roleAssignmentRepository, never()).saveAllAndFlush(any());
+        verify(roleRepository, never()).findBusinessRolesByOrgAndSpaceAndCodes(any(), any(), any());
+    }
+
+    private Role managerRole() {
+        return Role.builder()
+                .id(RoleId.of(ROLE_ID))
+                .spaceId(SpaceId.of(SPACE_ID))
+                .code("MANAGER")
+                .name("Manager")
+                .nature(RoleNature.BUSINESS)
+                .createdAt(Instant.now())
+                .updatedAt(Instant.now())
+                .version(0L)
+                .build();
     }
 }

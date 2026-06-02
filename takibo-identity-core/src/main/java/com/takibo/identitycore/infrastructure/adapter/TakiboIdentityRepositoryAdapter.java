@@ -8,6 +8,8 @@ import com.takibo.identitycore.infrastructure.jpa.mapper.TakiboIdentityJpaMapper
 import com.takibo.identitycore.infrastructure.jpa.repository.JpaTakiboIdentityRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
+
+import java.util.Optional;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
@@ -51,5 +53,11 @@ public class TakiboIdentityRepositoryAdapter implements TakiboIdentityRepository
     @Override
     public boolean existsByOrgIdAndAccountId(UUID orgId, UUID accountId) {
         return jpaRepository.existsByOrgIdAndAccountId(orgId, accountId);
+    }
+
+    @Override
+    public Optional<UUID> lockAndFindIdentityIdByOrgIdAndAccountId(UUID orgId, UUID accountId) {
+        return jpaRepository.lockByOrgIdAndAccountId(orgId, accountId)
+                .map(TakiboIdentityEntity::getIdentityId);
     }
 }
