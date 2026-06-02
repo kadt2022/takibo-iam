@@ -27,7 +27,7 @@ public class RoleApplicationService {
             return;
         }
 
-        Role role = Role.createNew(spaceId, code, name, description);
+        Role role = Role.createBusinessRole(spaceId, code, name, description);
 
         try {
             roleRepository.save(role);
@@ -40,7 +40,7 @@ public class RoleApplicationService {
         Optional<UUID> existingId = roleRepository.findIdBySpaceIdAndCode(SpaceId.of(spaceId), code);
         if (existingId.isPresent()) return existingId.get();
 
-        Role role = Role.createNew(
+        Role role = Role.createBusinessRole(
                 SpaceId.of(spaceId),
                 code,
                 (name != null ? name : code),

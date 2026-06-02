@@ -42,39 +42,33 @@ class BusinessRoleAssignmentServiceTest {
     @InjectMocks
     private BusinessRoleAssignmentService service;
 
-    // -----------------------------------------------------------------------
-    // Circuit protection : le port business ne retourne que des rôles BUSINESS
-    // -----------------------------------------------------------------------
-
     @Test
     void assignBusinessRoles_governanceCodeNotFoundInBusinessPort_throws() {
+        List<String> roleCodes = List.of("R_SPACE_ADMIN");
         when(takiboIdentityRepository.lockAndFindIdentityIdByOrgIdAndAccountId(ORG_ID, ACCOUNT_ID))
                 .thenReturn(Optional.of(IDENTITY_ID));
-        when(roleRepository.findBusinessRolesByOrgAndSpaceAndCodes(ORG_ID, SPACE_ID, List.of("R_SPACE_ADMIN")))
+        when(roleRepository.findBusinessRolesByOrgAndSpaceAndCodes(ORG_ID, SPACE_ID, roleCodes))
                 .thenReturn(List.of());
 
-        assertThatThrownBy(() -> service.assignBusinessRoles(ORG_ID, SPACE_ID, ACCOUNT_ID, List.of("R_SPACE_ADMIN")))
+        assertThatThrownBy(() -> service.assignBusinessRoles(ORG_ID, SPACE_ID, ACCOUNT_ID, roleCodes))
                 .isInstanceOf(UserCreationException.class)
                 .hasMessageContaining("Unknown business role codes");
 
         verify(businessRoleAssignmentRepository, never()).saveAll(any());
     }
 
-    // -----------------------------------------------------------------------
-    // Happy path
-    // -----------------------------------------------------------------------
-
     @Test
     void assignBusinessRoles_happyPath_savesBusinessRoleAssignment() {
+        List<String> roleCodes = List.of("MANAGER");
         when(takiboIdentityRepository.lockAndFindIdentityIdByOrgIdAndAccountId(ORG_ID, ACCOUNT_ID))
                 .thenReturn(Optional.of(IDENTITY_ID));
-        when(roleRepository.findBusinessRolesByOrgAndSpaceAndCodes(ORG_ID, SPACE_ID, List.of("MANAGER")))
+        when(roleRepository.findBusinessRolesByOrgAndSpaceAndCodes(ORG_ID, SPACE_ID, roleCodes))
                 .thenReturn(List.of(managerRole()));
         when(businessRoleAssignmentRepository.existsByOrgIdAndSpaceIdAndIdentityIdAndBusinessRoleId(
                 ORG_ID, SPACE_ID, IDENTITY_ID, ROLE_ID))
                 .thenReturn(false);
 
-        service.assignBusinessRoles(ORG_ID, SPACE_ID, ACCOUNT_ID, List.of("MANAGER"));
+        service.assignBusinessRoles(ORG_ID, SPACE_ID, ACCOUNT_ID, roleCodes);
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<BusinessRoleAssignment>> captor = ArgumentCaptor.forClass(List.class);
@@ -87,28 +81,21 @@ class BusinessRoleAssignmentServiceTest {
         assertThat(assignment.businessRoleId()).isEqualTo(ROLE_ID);
     }
 
-    // -----------------------------------------------------------------------
-    // Idempotence
-    // -----------------------------------------------------------------------
-
     @Test
     void assignBusinessRoles_alreadyAssigned_isIdempotent() {
+        List<String> roleCodes = List.of("MANAGER");
         when(takiboIdentityRepository.lockAndFindIdentityIdByOrgIdAndAccountId(ORG_ID, ACCOUNT_ID))
                 .thenReturn(Optional.of(IDENTITY_ID));
-        when(roleRepository.findBusinessRolesByOrgAndSpaceAndCodes(ORG_ID, SPACE_ID, List.of("MANAGER")))
+        when(roleRepository.findBusinessRolesByOrgAndSpaceAndCodes(ORG_ID, SPACE_ID, roleCodes))
                 .thenReturn(List.of(managerRole()));
         when(businessRoleAssignmentRepository.existsByOrgIdAndSpaceIdAndIdentityIdAndBusinessRoleId(
                 ORG_ID, SPACE_ID, IDENTITY_ID, ROLE_ID))
                 .thenReturn(true);
 
-        service.assignBusinessRoles(ORG_ID, SPACE_ID, ACCOUNT_ID, List.of("MANAGER"));
+        service.assignBusinessRoles(ORG_ID, SPACE_ID, ACCOUNT_ID, roleCodes);
 
         verify(businessRoleAssignmentRepository, never()).saveAll(any());
     }
-
-    // -----------------------------------------------------------------------
-    // Cas limites
-    // -----------------------------------------------------------------------
 
     @Test
     void assignBusinessRoles_emptyList_returnsEarlyWithoutAnyQuery() {
@@ -121,19 +108,16 @@ class BusinessRoleAssignmentServiceTest {
 
     @Test
     void assignBusinessRoles_identityNotFound_throws() {
+        List<String> roleCodes = List.of("MANAGER");
         when(takiboIdentityRepository.lockAndFindIdentityIdByOrgIdAndAccountId(ORG_ID, ACCOUNT_ID))
                 .thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.assignBusinessRoles(ORG_ID, SPACE_ID, ACCOUNT_ID, List.of("MANAGER")))
+        assertThatThrownBy(() -> service.assignBusinessRoles(ORG_ID, SPACE_ID, ACCOUNT_ID, roleCodes))
                 .isInstanceOf(UserCreationException.class)
                 .hasMessageContaining("no TakiboIdentity found");
 
         verify(roleRepository, never()).findBusinessRolesByOrgAndSpaceAndCodes(any(), any(), any());
     }
-
-    // -----------------------------------------------------------------------
-    // Helper
-    // -----------------------------------------------------------------------
 
     private Role managerRole() {
         return Role.builder()

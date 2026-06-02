@@ -46,37 +46,43 @@ class UserRoleAssignmentServiceTest {
     @InjectMocks
     private UserRoleAssignmentService service;
 
-    // -----------------------------------------------------------------------
-    // Circuit protection : le port governance ne retourne que des rôles GOVERNANCE
-    // -----------------------------------------------------------------------
-
     @Test
     void assignRolesToUser_businessCodeNotFoundInGovernancePort_throws() {
-        when(roleRepository.findGovernanceRolesByOrgAndSpaceAndCodes(ORG_ID, SPACE_UUID, List.of("MANAGER")))
+        List<String> roleCodes = List.of("MANAGER");
+        when(roleRepository.findGovernanceRolesByOrgAndSpaceAndCodes(ORG_ID, SPACE_UUID, roleCodes))
                 .thenReturn(List.of());
 
-        assertThatThrownBy(() -> service.assignRolesToUser(ORG_ID, SPACE_ID, USER_ID, List.of("MANAGER")))
+        assertThatThrownBy(() -> service.assignRolesToUser(ORG_ID, SPACE_ID, USER_ID, roleCodes))
                 .isInstanceOf(UserCreationException.class)
                 .hasMessageContaining("Unknown governance role codes");
 
         verify(userGovernanceRoleRepository, never()).saveAll(any());
     }
 
-    // -----------------------------------------------------------------------
-    // Happy path
-    // -----------------------------------------------------------------------
+    @Test
+    void assignRolesToUser_inactiveSpace_throwsBeforeLoadingRoles() {
+        List<String> roleCodes = List.of("R_SPACE_ADMIN");
+        doThrow(new com.takibo.identitycore.domain.exception.SpaceNotActiveException(SPACE_UUID))
+                .when(spaceStatusCheckerCase).assertSpaceExistsAndActive(SPACE_UUID);
+
+        assertThatThrownBy(() -> service.assignRolesToUser(ORG_ID, SPACE_ID, USER_ID, roleCodes))
+                .isInstanceOf(com.takibo.identitycore.domain.exception.SpaceNotActiveException.class);
+
+        verify(roleRepository, never()).findGovernanceRolesByOrgAndSpaceAndCodes(any(), any(), any());
+    }
 
     @Test
     void assignRolesToUser_happyPath_savesGovernanceRoleAssignment() {
+        List<String> roleCodes = List.of("R_SPACE_ADMIN");
         Instant fixedNow = Instant.parse("2026-01-01T00:00:00Z");
         when(clock.instant()).thenReturn(fixedNow);
-        when(roleRepository.findGovernanceRolesByOrgAndSpaceAndCodes(ORG_ID, SPACE_UUID, List.of("R_SPACE_ADMIN")))
+        when(roleRepository.findGovernanceRolesByOrgAndSpaceAndCodes(ORG_ID, SPACE_UUID, roleCodes))
                 .thenReturn(List.of(spaceAdminRole()));
         when(userGovernanceRoleRepository.existsByOrgIdAndSpaceIdAndUserIdAndGovernanceRoleId(
                 ORG_ID, SPACE_UUID, USER_UUID, ROLE_ID))
                 .thenReturn(false);
 
-        service.assignRolesToUser(ORG_ID, SPACE_ID, USER_ID, List.of("R_SPACE_ADMIN"));
+        service.assignRolesToUser(ORG_ID, SPACE_ID, USER_ID, roleCodes);
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<UserGovernanceRoleAssignment>> captor = ArgumentCaptor.forClass(List.class);
@@ -90,26 +96,19 @@ class UserRoleAssignmentServiceTest {
         assertThat(assignment.assignedAt()).isEqualTo(fixedNow);
     }
 
-    // -----------------------------------------------------------------------
-    // Idempotence
-    // -----------------------------------------------------------------------
-
     @Test
     void assignRolesToUser_alreadyAssigned_isIdempotent() {
-        when(roleRepository.findGovernanceRolesByOrgAndSpaceAndCodes(ORG_ID, SPACE_UUID, List.of("R_SPACE_ADMIN")))
+        List<String> roleCodes = List.of("R_SPACE_ADMIN");
+        when(roleRepository.findGovernanceRolesByOrgAndSpaceAndCodes(ORG_ID, SPACE_UUID, roleCodes))
                 .thenReturn(List.of(spaceAdminRole()));
         when(userGovernanceRoleRepository.existsByOrgIdAndSpaceIdAndUserIdAndGovernanceRoleId(
                 ORG_ID, SPACE_UUID, USER_UUID, ROLE_ID))
                 .thenReturn(true);
 
-        service.assignRolesToUser(ORG_ID, SPACE_ID, USER_ID, List.of("R_SPACE_ADMIN"));
+        service.assignRolesToUser(ORG_ID, SPACE_ID, USER_ID, roleCodes);
 
         verify(userGovernanceRoleRepository, never()).saveAll(any());
     }
-
-    // -----------------------------------------------------------------------
-    // Cas limites
-    // -----------------------------------------------------------------------
 
     @Test
     void assignRolesToUser_nullList_returnsEarlyWithoutQuery() {
@@ -129,9 +128,10 @@ class UserRoleAssignmentServiceTest {
 
     @Test
     void assignRolesToUser_duplicateCodesInRequest_deduplicatesBeforeQuerying() {
+        List<String> deduplicated = List.of("R_SPACE_ADMIN");
         Instant fixedNow = Instant.parse("2026-01-01T00:00:00Z");
         when(clock.instant()).thenReturn(fixedNow);
-        when(roleRepository.findGovernanceRolesByOrgAndSpaceAndCodes(ORG_ID, SPACE_UUID, List.of("R_SPACE_ADMIN")))
+        when(roleRepository.findGovernanceRolesByOrgAndSpaceAndCodes(ORG_ID, SPACE_UUID, deduplicated))
                 .thenReturn(List.of(spaceAdminRole()));
         when(userGovernanceRoleRepository.existsByOrgIdAndSpaceIdAndUserIdAndGovernanceRoleId(
                 ORG_ID, SPACE_UUID, USER_UUID, ROLE_ID))
@@ -140,12 +140,8 @@ class UserRoleAssignmentServiceTest {
         service.assignRolesToUser(ORG_ID, SPACE_ID, USER_ID,
                 List.of("R_SPACE_ADMIN", "R_SPACE_ADMIN", "R_SPACE_ADMIN"));
 
-        verify(roleRepository).findGovernanceRolesByOrgAndSpaceAndCodes(ORG_ID, SPACE_UUID, List.of("R_SPACE_ADMIN"));
+        verify(roleRepository).findGovernanceRolesByOrgAndSpaceAndCodes(ORG_ID, SPACE_UUID, deduplicated);
     }
-
-    // -----------------------------------------------------------------------
-    // Helper
-    // -----------------------------------------------------------------------
 
     private Role spaceAdminRole() {
         return Role.builder()
