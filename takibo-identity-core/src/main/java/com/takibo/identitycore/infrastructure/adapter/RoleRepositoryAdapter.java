@@ -1,14 +1,16 @@
 package com.takibo.identitycore.infrastructure.adapter;
 
 import com.takibo.identitycore.domain.model.Role;
-import com.takibo.identitycore.domain.vo.SpaceId;
+import com.takibo.identitycore.domain.model.RoleNature;
 import com.takibo.identitycore.domain.repository.RoleRepository;
+import com.takibo.identitycore.domain.vo.SpaceId;
 import com.takibo.identitycore.infrastructure.entity.RoleEntity;
 import com.takibo.identitycore.infrastructure.jpa.mapper.RoleJpaMapper;
 import com.takibo.identitycore.infrastructure.jpa.repository.JpaRoleRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -33,6 +35,18 @@ public class RoleRepositoryAdapter implements RoleRepository {
     public Optional<Role> findBySpaceIdAndCode(SpaceId spaceId, String code) {
         return jpa.findBySpaceIdAndCode(spaceId.value(), code)
                 .map(roleJpaMapper::toDomain);
+    }
+
+    @Override
+    public List<Role> findBusinessRolesByOrgAndSpaceAndCodes(UUID orgId, UUID spaceId, List<String> codes) {
+        return jpa.findByOrgIdAndSpaceIdAndCodeInAndRoleNature(orgId, spaceId, codes, RoleNature.BUSINESS)
+                .stream().map(roleJpaMapper::toDomain).toList();
+    }
+
+    @Override
+    public List<Role> findGovernanceRolesByOrgAndSpaceAndCodes(UUID orgId, UUID spaceId, List<String> codes) {
+        return jpa.findByOrgIdAndSpaceIdAndCodeInAndRoleNature(orgId, spaceId, codes, RoleNature.GOVERNANCE)
+                .stream().map(roleJpaMapper::toDomain).toList();
     }
 
     @Override

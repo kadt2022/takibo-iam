@@ -3,6 +3,7 @@ package com.takibo.identitycore.domain.repository;
 import com.takibo.identitycore.domain.model.Role;
 import com.takibo.identitycore.domain.vo.SpaceId;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -14,6 +15,9 @@ public interface RoleRepository {
 
     Optional<Role> findBySpaceIdAndCode(SpaceId spaceId, String code);
 
-    /** Persiste et retourne l’agrégat sauvegardé */
+    List<Role> findBusinessRolesByOrgAndSpaceAndCodes(UUID orgId, UUID spaceId, List<String> codes);
+
+    List<Role> findGovernanceRolesByOrgAndSpaceAndCodes(UUID orgId, UUID spaceId, List<String> codes);
+
     Role save(Role role);
 }

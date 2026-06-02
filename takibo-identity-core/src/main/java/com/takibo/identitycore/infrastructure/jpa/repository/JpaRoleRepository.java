@@ -1,5 +1,6 @@
 package com.takibo.identitycore.infrastructure.jpa.repository;
 
+import com.takibo.identitycore.domain.model.RoleNature;
 import com.takibo.identitycore.infrastructure.entity.RoleEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -33,6 +34,14 @@ public interface JpaRoleRepository extends JpaRepository<RoleEntity, UUID> {
     List<RoleEntity> findBySpaceIdAndCodeIn(UUID spaceId, Collection<String> codes);
 
     List<RoleEntity> findByOrgIdAndSpaceIdAndCodeIn(UUID orgId, UUID spaceId, Collection<String> codes);
+
+    @Query("select r from RoleEntity r where r.orgId = :orgId and r.spaceId = :spaceId and r.code in :codes and r.roleNature = :nature")
+    List<RoleEntity> findByOrgIdAndSpaceIdAndCodeInAndRoleNature(
+            @Param("orgId") UUID orgId,
+            @Param("spaceId") UUID spaceId,
+            @Param("codes") Collection<String> codes,
+            @Param("nature") RoleNature nature
+    );
 
     Optional<RoleEntity> findBySpaceIdAndCode(UUID spaceId, String code);
 }

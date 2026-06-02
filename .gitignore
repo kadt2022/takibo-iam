@@ -5,6 +5,8 @@
 ### Gradle ###
 .gradle/
 **/.gradle/
+.g/
+.g2/
 build/
 **/build/
 out/

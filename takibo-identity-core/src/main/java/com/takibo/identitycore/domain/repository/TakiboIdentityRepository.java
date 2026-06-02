@@ -17,4 +17,6 @@ public interface TakiboIdentityRepository {
     Optional<TakiboIdentity> findByOrgIdAndAccountId(UUID orgId, UUID accountId);
 
     boolean existsByOrgIdAndAccountId(UUID orgId, UUID accountId);
+
+    Optional<UUID> lockAndFindIdentityIdByOrgIdAndAccountId(UUID orgId, UUID accountId);
 }

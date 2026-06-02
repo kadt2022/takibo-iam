@@ -1,33 +1,33 @@
 package com.takibo.identitycore.application.identity.service;
 
-import com.takibo.identitycore.integration.space.port.SpaceStatusCheckerCase;
 import com.takibo.identitycore.domain.exception.UserCreationException;
+import com.takibo.identitycore.domain.model.Role;
+import com.takibo.identitycore.domain.rbac.model.UserGovernanceRoleAssignment;
+import com.takibo.identitycore.domain.repository.RoleRepository;
+import com.takibo.identitycore.domain.repository.UserGovernanceRoleRepository;
 import com.takibo.identitycore.domain.vo.SpaceId;
 import com.takibo.identitycore.domain.vo.UserId;
-import com.takibo.identitycore.infrastructure.entity.RoleEntity;
-import com.takibo.identitycore.infrastructure.entity.UserRoleEntity;
-import com.takibo.identitycore.infrastructure.jpa.repository.JpaRoleRepository;
-import com.takibo.identitycore.infrastructure.jpa.repository.JpaUserRoleRepository;
+import com.takibo.identitycore.integration.space.port.SpaceStatusCheckerCase;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.util.*;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
-@Slf4j
 public class UserRoleAssignmentService {
 
-    private final JpaRoleRepository roleRepository;
-    private final JpaUserRoleRepository userRoleRepository;
-    private final Clock clock;
+    private final RoleRepository roleRepository;
+    private final UserGovernanceRoleRepository userGovernanceRoleRepository;
     private final SpaceStatusCheckerCase spaceStatusCheckerCase;
+    private final Clock clock;
 
     @Transactional
     public void assignRolesToUser(UUID orgId, SpaceId spaceId, UserId userId, List<String> requestedRoleCodes) {
@@ -37,23 +37,19 @@ public class UserRoleAssignmentService {
 
         spaceStatusCheckerCase.assertSpaceExistsAndActive(spaceId.value());
 
-        List<String> normalizedRoleCodes = normalizeRoleCodes(requestedRoleCodes);
-        if (normalizedRoleCodes.isEmpty()) {
+        List<String> roleCodes = normalizeRoleCodes(requestedRoleCodes);
+        if (roleCodes.isEmpty()) {
             return;
         }
 
-        UUID orgUuid = orgId;
-        UUID spaceUuid = spaceId.value();   // UUID direct
-        UUID userUuid  = userId.value();    // UUID direct
+        List<Role> roles = roleRepository.findGovernanceRolesByOrgAndSpaceAndCodes(
+                orgId, spaceId.value(), roleCodes);
+        assertAllRequestedRolesExist(spaceId.value(), roleCodes, roles);
 
-        Map<String, UUID> roleIdByCode = loadRoleIdsByCode(orgUuid, spaceUuid, normalizedRoleCodes);
-        assertAllRequestedRolesExist(spaceUuid, normalizedRoleCodes, roleIdByCode);
-
-        List<UserRoleEntity> assignmentsToInsert =
-                computeMissingAssignments(orgUuid, spaceUuid, userUuid, roleIdByCode);
-
-        if (!assignmentsToInsert.isEmpty()) {
-            saveAssignmentsIdempotently(spaceId, userId, normalizedRoleCodes, assignmentsToInsert);
+        List<UserGovernanceRoleAssignment> assignments =
+                buildMissingAssignments(orgId, spaceId.value(), userId.value(), roles);
+        if (!assignments.isEmpty()) {
+            userGovernanceRoleRepository.saveAll(assignments);
         }
     }
 
@@ -67,71 +63,29 @@ public class UserRoleAssignmentService {
                 .toList();
     }
 
-    private Map<String, UUID> loadRoleIdsByCode(UUID orgUuid, UUID spaceUuid, List<String> codes) {
-        List<RoleEntity> roleEntities = roleRepository.findByOrgIdAndSpaceIdAndCodeIn(orgUuid, spaceUuid, codes);
-        return roleEntities.stream()
-                .collect(Collectors.toMap(RoleEntity::getCode, RoleEntity::getId));
-    }
+    private void assertAllRequestedRolesExist(UUID spaceId, List<String> requestedCodes, List<Role> foundRoles) {
+        Map<String, Role> byCode = foundRoles.stream()
+                .collect(Collectors.toMap(Role::getCode, r -> r));
 
-    private void assertAllRequestedRolesExist(UUID spaceUuid,
-                                              List<String> requestedCodes,
-                                              Map<String, UUID> roleIdByCode) {
-        List<String> missingRoleCodes = requestedCodes.stream()
-                .filter(code -> !roleIdByCode.containsKey(code))
+        List<String> missing = requestedCodes.stream()
+                .filter(code -> !byCode.containsKey(code))
                 .toList();
 
-        if (!missingRoleCodes.isEmpty()) {
+        if (!missing.isEmpty()) {
             throw new UserCreationException(
-                    "Unknown role codes in port " + spaceUuid + ": " + missingRoleCodes);
+                    "Unknown governance role codes in space " + spaceId + ": " + missing);
         }
     }
 
-    private List<UserRoleEntity> computeMissingAssignments(UUID orgUuid,
-                                                           UUID spaceUuid,
-                                                           UUID userUuid,
-                                                           Map<String, UUID> roleIdByCode) {
-        Instant assignedAt = clock.instant();
-        List<UserRoleEntity> assignments = new ArrayList<>(roleIdByCode.size());
-
-        for (UUID roleId : roleIdByCode.values()) {
-            boolean alreadyAssigned = userRoleRepository
-                    .existsByOrgIdAndSpaceIdAndUserIdAndRoleId(orgUuid, spaceUuid, userUuid, roleId);
-            if (!alreadyAssigned) {
-                assignments.add(UserRoleEntity.builder()
-                        .orgId(orgUuid)
-                        .spaceId(spaceUuid)
-                        .userId(userUuid)
-                        .roleId(roleId)
-                        .assignedAt(assignedAt)
-                        .assignedBy(null)
-                        .build());
-            }
-        }
-        return assignments;
-    }
-
-    private void saveAssignmentsIdempotently(SpaceId spaceId,
-                                             UserId userId,
-                                             List<String> normalizedRoleCodes,
-                                             List<UserRoleEntity> assignmentsToInsert) {
-        try {
-            userRoleRepository.saveAllAndFlush(assignmentsToInsert);
-        } catch (DataIntegrityViolationException ex) {
-            boolean allNowExist = assignmentsToInsert.stream().allMatch(e ->
-                    userRoleRepository.existsByOrgIdAndSpaceIdAndUserIdAndRoleId(
-                            e.getOrgId(), e.getSpaceId(), e.getUserId(), e.getRoleId()));
-
-            if (allNowExist) {
-                if (log.isDebugEnabled()) {
-                    log.debug("Idempotent user_roles ignored (port={}, user={}, roles={})",
-                            spaceId.value(), userId.value(), normalizedRoleCodes);
-                    log.trace("Duplicate key detail", ex);
-                }
-            } else {
-                log.warn("Failed to persist user_roles (port={}, user={}, roles={})",
-                        spaceId.value(), userId.value(), normalizedRoleCodes, ex);
-                throw ex;
-            }
-        }
+    private List<UserGovernanceRoleAssignment> buildMissingAssignments(
+            UUID orgId, UUID spaceId, UUID userId, List<Role> roles) {
+        Instant now = clock.instant();
+        return roles.stream()
+                .filter(role -> !userGovernanceRoleRepository
+                        .existsByOrgIdAndSpaceIdAndUserIdAndGovernanceRoleId(
+                                orgId, spaceId, userId, role.getId().getValue()))
+                .map(role -> new UserGovernanceRoleAssignment(
+                        orgId, spaceId, userId, role.getId().getValue(), now))
+                .toList();
     }
 }

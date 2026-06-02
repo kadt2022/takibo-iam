@@ -1,5 +1,6 @@
 package com.takibo.identitycore.infrastructure.entity;
 
+import com.takibo.identitycore.domain.model.RoleNature;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -46,6 +47,10 @@ public class RoleEntity {
 
     @Column(name = "description", length = 255)
     private String description;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "role_nature", nullable = false, length = 20)
+    private RoleNature roleNature;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)

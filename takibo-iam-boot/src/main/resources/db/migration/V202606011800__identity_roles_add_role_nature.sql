@@ -1,0 +1,23 @@
+ALTER TABLE roles
+    ADD COLUMN role_nature VARCHAR(20) NOT NULL DEFAULT 'BUSINESS';
+
+UPDATE roles
+SET role_nature = 'GOVERNANCE'
+WHERE code IN (
+    'R_SYSTEM_ADMIN',
+    'R_SYSTEM_AUDITOR',
+    'R_ORG_OWNER',
+    'R_ORG_ADMIN',
+    'R_ORG_USER_ADMIN',
+    'R_ORG_CLIENT_ADMIN',
+    'R_ORG_AUDITOR',
+    'R_ORG_VIEWER',
+    'R_SPACE_ADMIN',
+    'R_SPACE_USER_ADMIN',
+    'R_SPACE_CLIENT_ADMIN',
+    'R_SPACE_VIEWER',
+    'R_SELF'
+);
+
+ALTER TABLE roles
+    ADD CONSTRAINT ck_roles_nature CHECK (role_nature IN ('GOVERNANCE', 'BUSINESS'));
