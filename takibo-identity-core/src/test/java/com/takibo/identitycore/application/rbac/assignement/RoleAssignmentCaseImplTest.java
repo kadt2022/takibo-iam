@@ -99,6 +99,26 @@ class RoleAssignmentCaseImplTest {
     }
 
     @Test
+    void assignTechnicalRole_userRole_happyPath() {
+        when(governanceRoleAssignmentRepository.save(any())).thenReturn(mock(RoleAssignment.class));
+
+        // R_SELF has USER scope — requires orgId, spaceId optional
+        service.assignTechnicalRole(ORG_ID, null, FOUNDER, "R_SELF", "system");
+
+        verify(governanceRoleAssignmentRepository).save(any());
+    }
+
+    @Test
+    void assignTechnicalRole_userRoleWithoutOrgId_throwsScopeViolation() {
+        assertThatThrownBy(() ->
+                service.assignTechnicalRole(null, null, FOUNDER, "R_SELF", "system"))
+                .isInstanceOf(InvalidRoleScopeException.class)
+                .hasMessageContaining("requires orgId");
+
+        verify(governanceRoleAssignmentRepository, never()).save(any());
+    }
+
+    @Test
     void assignTechnicalRole_duplicate_propagatesDuplicateAssignmentException() {
         when(governanceRoleAssignmentRepository.save(any()))
                 .thenThrow(new DuplicateAssignmentException("already assigned"));

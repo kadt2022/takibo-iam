@@ -67,6 +67,35 @@ class GovernanceRoleAssignmentRepositoryAdapterTest {
     }
 
     @Test
+    void save_entityWithExistingId_doesNotOverwriteId() {
+        UUID existingId = UUID.fromString("eeeeeeee-0000-0000-0000-000000000005");
+        RoleAssignment domain = assignment(null);
+        RoleAssignmentEntity entity = entityWithId(existingId);
+        RoleAssignmentEntity saved = entityWithId(existingId);
+
+        when(mapper.toEntity(domain)).thenReturn(entity);
+        when(jpa.save(entity)).thenReturn(saved);
+        when(mapper.toDomain(saved)).thenReturn(mock(RoleAssignment.class));
+
+        adapter.save(domain);
+
+        assertThat(entity.getId()).isEqualTo(existingId);
+    }
+
+    @Test
+    void save_dataIntegrityViolation_withoutSpaceId_messageOmitsSpaceInfo() {
+        RoleAssignment domain = assignmentWithoutSpace();
+        RoleAssignmentEntity entity = entityWithoutId();
+
+        when(mapper.toEntity(domain)).thenReturn(entity);
+        when(jpa.save(any())).thenThrow(new DataIntegrityViolationException("duplicate"));
+
+        assertThatThrownBy(() -> adapter.save(domain))
+                .isInstanceOf(DuplicateAssignmentException.class)
+                .hasMessageNotContaining("and space");
+    }
+
+    @Test
     void save_dataIntegrityViolation_throwsDuplicateAssignmentException() {
         RoleAssignment domain = assignment(null);
         RoleAssignmentEntity entity = entityWithoutId();
@@ -88,6 +117,15 @@ class GovernanceRoleAssignmentRepositoryAdapterTest {
         );
     }
 
+    private RoleAssignment assignmentWithoutSpace() {
+        return new RoleAssignment(
+                null, ORG_ID, null,
+                new Identity(IdentityType.ACCOUNT, ACCOUNT_ID),
+                "R_ORG_ADMIN", RoleSource.TECHNICAL, null,
+                Instant.now(), "system", null, null
+        );
+    }
+
     private RoleAssignmentEntity entityWithoutId() {
         return RoleAssignmentEntity.builder()
                 .orgId(ORG_ID).spaceId(SPACE_ID)
@@ -98,8 +136,12 @@ class GovernanceRoleAssignmentRepositoryAdapterTest {
     }
 
     private RoleAssignmentEntity entityWithId() {
+        return entityWithId(UUID.randomUUID());
+    }
+
+    private RoleAssignmentEntity entityWithId(UUID id) {
         return RoleAssignmentEntity.builder()
-                .id(UUID.randomUUID())
+                .id(id)
                 .orgId(ORG_ID).spaceId(SPACE_ID)
                 .identityType(IdentityType.ACCOUNT.name())
                 .identityId(ACCOUNT_ID)
