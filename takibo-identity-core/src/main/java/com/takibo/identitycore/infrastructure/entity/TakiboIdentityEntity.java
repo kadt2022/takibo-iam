@@ -1,5 +1,6 @@
 package com.takibo.identitycore.infrastructure.entity;
 
+import com.takibo.identitycore.domain.model.IdentityStatus;
 import com.takibo.identitycore.domain.model.IdentityType;
 import jakarta.persistence.*;
 import lombok.*;
