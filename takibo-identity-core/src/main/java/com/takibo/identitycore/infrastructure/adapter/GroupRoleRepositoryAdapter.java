@@ -5,8 +5,10 @@ import com.takibo.identitycore.domain.repository.GroupRoleRepository;
 import com.takibo.identitycore.infrastructure.entity.GroupRoleEntity;
 import com.takibo.identitycore.infrastructure.jpa.mapper.GroupRoleJpaMapper;
 import com.takibo.identitycore.infrastructure.jpa.repository.JpaGroupRolesRepository;
-import org.springframework.stereotype.Component;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
 
@@ -24,9 +26,27 @@ public class GroupRoleRepositoryAdapter implements GroupRoleRepository {
     }
 
     @Override
+    @Transactional
     public GroupRole save(GroupRole groupRole) {
+        if (jpa.existsBySpaceIdAndGroupIdAndRoleId(
+                groupRole.getSpaceId().value(),
+                groupRole.getGroupId().value(),
+                groupRole.getRoleId().value())) {
+            return groupRole;
+        }
+
         GroupRoleEntity e = mapper.toEntity(groupRole);
-        GroupRoleEntity saved = jpa.save(e);
-        return mapper.toDomain(saved);
+        try {
+            GroupRoleEntity saved = jpa.saveAndFlush(e);
+            return mapper.toDomain(saved);
+        } catch (DataIntegrityViolationException ex) {
+            if (jpa.existsBySpaceIdAndGroupIdAndRoleId(
+                    groupRole.getSpaceId().value(),
+                    groupRole.getGroupId().value(),
+                    groupRole.getRoleId().value())) {
+                return groupRole;
+            }
+            throw ex;
+        }
     }
 }

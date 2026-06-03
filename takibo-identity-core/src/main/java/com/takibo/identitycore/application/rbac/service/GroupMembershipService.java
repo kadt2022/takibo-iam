@@ -1,40 +1,46 @@
 package com.takibo.identitycore.application.rbac.service;
 
-import com.takibo.identitycore.integration.space.port.SpaceStatusCheckerCase;
 import com.takibo.identitycore.domain.exception.UserCreationException;
+import com.takibo.identitycore.domain.repository.GroupRepository;
+import com.takibo.identitycore.domain.rbac.model.GroupReference;
+import com.takibo.identitycore.domain.rbac.model.UserGroupMembership;
+import com.takibo.identitycore.domain.rbac.repository.UserGroupMembershipRepository;
 import com.takibo.identitycore.domain.vo.SpaceId;
 import com.takibo.identitycore.domain.vo.UserId;
-import com.takibo.identitycore.infrastructure.entity.GroupEntity;
-import com.takibo.identitycore.infrastructure.entity.GroupMemberEntity;
-import com.takibo.identitycore.infrastructure.jpa.repository.JpaGroupMemberRepository;
-import com.takibo.identitycore.infrastructure.jpa.repository.JpaGroupRepository;
+import com.takibo.identitycore.integration.space.port.SpaceStatusCheckerCase;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.util.*;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
-@Slf4j
 public class GroupMembershipService {
-    private final JpaGroupRepository groupRepository;
-    private final JpaGroupMemberRepository groupMemberRepository;
+
+    private final GroupRepository groupRepository;
+    private final UserGroupMembershipRepository userGroupMembershipRepository;
     private final SpaceStatusCheckerCase spaceStatusCheckerCase;
     private final Clock clock;
 
-    @Transactional /* qualifier: "iamTxManager" si multi-DS */
+    @Transactional
     public void addToGroups(SpaceId spaceId, UserId userId, List<String> groupCodes) {
         spaceStatusCheckerCase.assertSpaceExistsAndActive(spaceId.value());
         List<String> normalizedGroupCodes = normalizeGroupCodes(groupCodes);
-        if (normalizedGroupCodes.isEmpty()) return;
+        if (normalizedGroupCodes.isEmpty()) {
+            return;
+        }
 
-        UUID spaceUuid = UUID.fromString(spaceId.value().toString());
+        UUID spaceUuid = spaceId.value();
         UUID userUuid = userId.value();
 
         Map<String, UUID> groupIdByCode = loadGroupIdsByCode(spaceUuid, normalizedGroupCodes);
@@ -42,79 +48,53 @@ public class GroupMembershipService {
 
         Set<UUID> targetGroupIds = new HashSet<>(groupIdByCode.values());
         Set<UUID> existingGroupIds =
-                groupMemberRepository.findExistingGroupIds(spaceUuid, userUuid, targetGroupIds);
+                userGroupMembershipRepository.findExistingGroupIds(spaceUuid, userUuid, targetGroupIds);
 
         targetGroupIds.removeAll(existingGroupIds);
-        if (targetGroupIds.isEmpty()) return;
+        if (targetGroupIds.isEmpty()) {
+            return;
+        }
 
-        List<GroupMemberEntity> membershipsToInsert =
-                buildMembershipEntities(spaceUuid, userUuid, targetGroupIds, clock.instant());
+        List<UserGroupMembership> membershipsToInsert =
+                buildMemberships(spaceUuid, userUuid, targetGroupIds, clock.instant());
 
-        saveMembershipsIdempotently(spaceId, userId, normalizedGroupCodes, membershipsToInsert);
+        userGroupMembershipRepository.saveAllIdempotently(membershipsToInsert);
     }
 
     private List<String> normalizeGroupCodes(List<String> codes) {
-        if (codes == null) return List.of();
+        if (codes == null) {
+            return List.of();
+        }
         return codes.stream()
                 .filter(Objects::nonNull)
                 .map(String::trim)
-                .filter(s -> !s.isEmpty())
+                .filter(code -> !code.isEmpty())
                 .distinct()
                 .toList();
     }
 
     private Map<String, UUID> loadGroupIdsByCode(UUID spaceUuid, List<String> codes) {
-        List<GroupEntity> groups = groupRepository.findBySpaceIdAndCodeIn(spaceUuid, codes);
-        return groups.stream().collect(Collectors.toMap(GroupEntity::getCode, GroupEntity::getId));
+        List<GroupReference> groups = groupRepository.findReferencesBySpaceIdAndCodeIn(spaceUuid, codes);
+        return groups.stream().collect(Collectors.toMap(GroupReference::code, GroupReference::id));
     }
 
     private void assertAllRequestedGroupsExist(UUID spaceUuid,
                                                List<String> requestedCodes,
                                                Map<String, UUID> groupIdByCode) {
         List<String> missingCodes = requestedCodes.stream()
-                .filter(c -> !groupIdByCode.containsKey(c))
+                .filter(code -> !groupIdByCode.containsKey(code))
                 .toList();
         if (!missingCodes.isEmpty()) {
             throw new UserCreationException("Unknown group codes in port " + spaceUuid + ": " + missingCodes);
         }
     }
 
-    private List<GroupMemberEntity> buildMembershipEntities(UUID spaceUuid,
-                                                            UUID userUuid,
-                                                            Collection<UUID> groupIds,
-                                                            Instant assignedAt) {
+    private List<UserGroupMembership> buildMemberships(UUID spaceUuid,
+                                                       UUID userUuid,
+                                                       Collection<UUID> groupIds,
+                                                       Instant assignedAt) {
         return groupIds.stream()
-                .map(groupId -> GroupMemberEntity.builder()
-                        .spaceId(spaceUuid)
-                        .userId(userUuid)
-                        .groupId(groupId)
-                        .assignedAt(assignedAt)
-                        .assignedBy(null)
-                        .build())
+                .map(groupId -> new UserGroupMembership(spaceUuid, userUuid, groupId, assignedAt, null))
                 .toList();
-    }
-
-    private void saveMembershipsIdempotently(SpaceId spaceId,
-                                             UserId userId,
-                                             List<String> normalizedGroupCodes,
-                                             List<GroupMemberEntity> membershipsToInsert) {
-        try {
-            groupMemberRepository.saveAllAndFlush(membershipsToInsert);
-        } catch (DataIntegrityViolationException ex) {
-            boolean allNowExist = membershipsToInsert.stream().allMatch(e ->
-                    groupMemberRepository.existsBySpaceIdAndUserIdAndGroupId(
-                            e.getSpaceId(), e.getUserId(), e.getGroupId()));
-            if (allNowExist) {
-                if (log.isDebugEnabled()) {
-                    log.debug("Idempotent group_members ignored (port={}, user={}, groups={})",
-                            spaceId.value(), userId.value(), normalizedGroupCodes);
-                    log.trace("Duplicate key detail", ex);
-                }
-            } else {
-                log.warn("Failed to persist group_members (port={}, user={}, groups={})",
-                        spaceId.value(), userId.value(), normalizedGroupCodes, ex);
-                throw ex;
-            }
-        }
     }
 }
