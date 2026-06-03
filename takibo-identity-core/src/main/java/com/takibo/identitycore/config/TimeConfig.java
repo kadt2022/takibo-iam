@@ -1,8 +1,5 @@
 package com.takibo.identitycore.config;
 
-// ───────────────────────────────────────────────────────────────────────────────
-// Spring config utilitaire (Clock bean) — optionnel
-// ───────────────────────────────────────────────────────────────────────────────
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import java.time.Clock;

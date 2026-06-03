@@ -1,6 +1,3 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// FILE 3 — interfaces/rest/request/InitialAssignments.java
-// ─────────────────────────────────────────────────────────────────────────────
 package com.takibo.identitycore.interfaces.rest.request;
 
 
