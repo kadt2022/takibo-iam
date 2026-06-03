@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 public record UserGroupMembership(
+        UUID organizationId,
         UUID spaceId,
         UUID userId,
         UUID groupId,

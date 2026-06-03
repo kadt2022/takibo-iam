@@ -19,17 +19,21 @@ public record CreateUserCommand(
         String firstName,
         String lastName,
         List<String> businessRoleCodes,
-        List<String> groupCodes,
+        List<String> initialBusinessGroupCodes,
         Map<String, Object> metadata
 ) {
+    public CreateUserCommand {
+        businessRoleCodes = businessRoleCodes != null ? businessRoleCodes : List.of();
+        initialBusinessGroupCodes = initialBusinessGroupCodes != null ? initialBusinessGroupCodes : List.of();
+    }
     public static CreateUserCommand from(UUID spaceId, CreateUserRequest r) {
 
         List<String> businessRoleCodes = r.initialAssignments() != null && r.initialAssignments().roleNames() != null
                 ? r.initialAssignments().roleNames()
                 : List.of();
 
-        List<String> groupCodes = r.initialAssignments() != null && r.initialAssignments().groupCodes() != null
-                ? r.initialAssignments().groupCodes()
+        List<String> initialBusinessGroupCodes = r.initialAssignments() != null && r.initialAssignments().initialBusinessGroupCodes() != null
+                ? r.initialAssignments().initialBusinessGroupCodes()
                 : List.of();
 
         return new CreateUserCommand(
@@ -41,7 +45,7 @@ public record CreateUserCommand(
                 r.firstName(),
                 r.lastName(),
                 businessRoleCodes,
-                groupCodes,
+                initialBusinessGroupCodes,
                 r.metadata()
         );
     }
@@ -55,7 +59,7 @@ public record CreateUserCommand(
                 ", firstName=" + firstName +
                 ", lastName=" + lastName +
                 ", businessRoleCodes=" + businessRoleCodes +
-                ", groupCodes=" + groupCodes +
+                ", initialBusinessGroupCodes=" + initialBusinessGroupCodes +
                 ", metadata=" + metadata + "]";
     }
 
@@ -69,7 +73,7 @@ public record CreateUserCommand(
                     ", firstName=" + firstName +
                     ", lastName=" + lastName +
                     ", businessRoleCodes=" + businessRoleCodes +
-                    ", groupCodes=" + groupCodes +
+                    ", initialBusinessGroupCodes=" + initialBusinessGroupCodes +
                     ", metadata=" + metadata + ")";
         }
     }

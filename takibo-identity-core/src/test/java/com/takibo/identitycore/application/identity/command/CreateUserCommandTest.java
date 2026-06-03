@@ -58,7 +58,7 @@ class CreateUserCommandTest {
         assertThat(command.firstName()).isEqualTo("John");
         assertThat(command.lastName()).isEqualTo("Doe");
         assertThat(command.businessRoleCodes()).containsExactly("MANAGER", "EDITOR");
-        assertThat(command.groupCodes()).containsExactly("GRP_A");
+        assertThat(command.initialBusinessGroupCodes()).containsExactly("GRP_A");
     }
 
     @Test
@@ -71,7 +71,7 @@ class CreateUserCommandTest {
         CreateUserCommand command = CreateUserCommand.from(SPACE_ID, request);
 
         assertThat(command.businessRoleCodes()).isEmpty();
-        assertThat(command.groupCodes()).isEmpty();
+        assertThat(command.initialBusinessGroupCodes()).isEmpty();
     }
 
     @Test
@@ -85,6 +85,6 @@ class CreateUserCommandTest {
         CreateUserCommand command = CreateUserCommand.from(SPACE_ID, request);
 
         assertThat(command.businessRoleCodes()).isEmpty();
-        assertThat(command.groupCodes()).isEmpty();
+        assertThat(command.initialBusinessGroupCodes()).isEmpty();
     }
 }

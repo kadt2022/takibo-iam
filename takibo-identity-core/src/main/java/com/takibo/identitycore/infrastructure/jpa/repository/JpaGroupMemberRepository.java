@@ -9,17 +9,19 @@ import java.util.Set;
 import java.util.UUID;
 
 public interface JpaGroupMemberRepository extends JpaRepository<GroupMemberEntity, UUID> {
-    boolean existsBySpaceIdAndUserIdAndGroupId(UUID spaceId, UUID userId, UUID groupId);
 
+    boolean existsByOrgIdAndSpaceIdAndUserIdAndGroupId(UUID orgId, UUID spaceId, UUID userId, UUID groupId);
 
     @Query("""
            select gm.groupId
            from GroupMemberEntity gm
-           where gm.spaceId = :spaceId
+           where gm.orgId   = :orgId
+             and gm.spaceId = :spaceId
              and gm.userId  = :userId
              and gm.groupId in :groupIds
            """)
-    Set<UUID> findExistingGroupIds(@Param("spaceId") UUID spaceId,
-                                   @Param("userId")  UUID userId,
+    Set<UUID> findExistingGroupIds(@Param("orgId")    UUID orgId,
+                                   @Param("spaceId")  UUID spaceId,
+                                   @Param("userId")   UUID userId,
                                    @Param("groupIds") Set<UUID> groupIds);
 }
