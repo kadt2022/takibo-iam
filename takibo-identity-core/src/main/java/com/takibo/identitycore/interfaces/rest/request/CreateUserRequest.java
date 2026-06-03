@@ -4,8 +4,6 @@ package com.takibo.identitycore.interfaces.rest.request;
 import com.takibo.audit.annotations.*;
 import com.takibo.audit.infrastructure.service.MaskingLogger;
 import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
 
 import java.util.Map;
 import java.util.UUID;
@@ -15,7 +13,7 @@ import java.util.UUID;
  * Payload V2 — either provide accountId OR (email + rawPassword).
  * Cross-field validation is enforced in the application service for simplicity.
  */
-public record CreateUserRequestV2(
+public record CreateUserRequest(
 
 
         UUID accountId,
