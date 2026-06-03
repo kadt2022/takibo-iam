@@ -32,8 +32,9 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class GroupMembershipServiceTest {
 
+    private static final UUID ORG_UUID   = UUID.fromString("aaaaaaaa-0000-0000-0000-000000000001");
     private static final UUID SPACE_UUID = UUID.fromString("bbbbbbbb-0000-0000-0000-000000000002");
-    private static final UUID USER_UUID = UUID.fromString("cccccccc-0000-0000-0000-000000000003");
+    private static final UUID USER_UUID  = UUID.fromString("cccccccc-0000-0000-0000-000000000003");
     private static final UUID GROUP_A_ID = UUID.fromString("dddddddd-0000-0000-0000-000000000004");
     private static final UUID GROUP_B_ID = UUID.fromString("eeeeeeee-0000-0000-0000-000000000005");
     private static final Instant NOW = Instant.parse("2026-01-01T00:00:00Z");
@@ -60,7 +61,7 @@ class GroupMembershipServiceTest {
 
     @Test
     void addToGroups_nullOrEmptyGroupCodes_returnsWithoutSaving() {
-        service.addToGroups(SPACE_ID, USER_ID, null);
+        service.addToGroups(ORG_UUID, SPACE_ID, USER_ID, null);
 
         verify(spaceStatusCheckerCase).assertSpaceExistsAndActive(SPACE_UUID);
         verify(groupRepository, never()).findReferencesBySpaceIdAndCodeIn(any(), any());
@@ -73,9 +74,9 @@ class GroupMembershipServiceTest {
         when(groupRepository.findReferencesBySpaceIdAndCodeIn(SPACE_UUID, groupCodes))
                 .thenReturn(List.of(new GroupReference(GROUP_A_ID, "G_A")));
 
-        assertThatThrownBy(() -> service.addToGroups(SPACE_ID, USER_ID, groupCodes))
+        assertThatThrownBy(() -> service.addToGroups(ORG_UUID, SPACE_ID, USER_ID, groupCodes))
                 .isInstanceOf(UserCreationException.class)
-                .hasMessageContaining("Unknown group codes")
+                .hasMessageContaining("Unknown business group codes")
                 .hasMessageContaining("G_B");
 
         verify(userGroupMembershipRepository, never()).saveAllIdempotently(any());
@@ -86,10 +87,10 @@ class GroupMembershipServiceTest {
         List<String> groupCodes = List.of("G_A");
         when(groupRepository.findReferencesBySpaceIdAndCodeIn(SPACE_UUID, groupCodes))
                 .thenReturn(List.of(new GroupReference(GROUP_A_ID, "G_A")));
-        when(userGroupMembershipRepository.findExistingGroupIds(SPACE_UUID, USER_UUID, Set.of(GROUP_A_ID)))
+        when(userGroupMembershipRepository.findExistingGroupIds(ORG_UUID, SPACE_UUID, USER_UUID, Set.of(GROUP_A_ID)))
                 .thenReturn(Set.of(GROUP_A_ID));
 
-        service.addToGroups(SPACE_ID, USER_ID, groupCodes);
+        service.addToGroups(ORG_UUID, SPACE_ID, USER_ID, groupCodes);
 
         verify(userGroupMembershipRepository, never()).saveAllIdempotently(any());
     }
@@ -103,17 +104,17 @@ class GroupMembershipServiceTest {
                         new GroupReference(GROUP_B_ID, "G_B")
                 ));
         when(userGroupMembershipRepository.findExistingGroupIds(
-                SPACE_UUID, USER_UUID, Set.of(GROUP_A_ID, GROUP_B_ID)))
+                ORG_UUID, SPACE_UUID, USER_UUID, Set.of(GROUP_A_ID, GROUP_B_ID)))
                 .thenReturn(Set.of(GROUP_A_ID));
 
-        service.addToGroups(SPACE_ID, USER_ID, groupCodes);
+        service.addToGroups(ORG_UUID, SPACE_ID, USER_ID, groupCodes);
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<UserGroupMembership>> captor = ArgumentCaptor.forClass(List.class);
         verify(userGroupMembershipRepository).saveAllIdempotently(captor.capture());
 
         assertThat(captor.getValue()).containsExactly(
-                new UserGroupMembership(SPACE_UUID, USER_UUID, GROUP_B_ID, NOW, null)
+                new UserGroupMembership(ORG_UUID, SPACE_UUID, USER_UUID, GROUP_B_ID, NOW, null)
         );
         verify(spaceStatusCheckerCase).assertSpaceExistsAndActive(SPACE_UUID);
     }

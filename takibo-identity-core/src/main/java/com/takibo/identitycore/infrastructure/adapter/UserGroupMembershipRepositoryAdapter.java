@@ -25,8 +25,8 @@ public class UserGroupMembershipRepositoryAdapter implements UserGroupMembership
     private final PlatformTransactionManager transactionManager;
 
     @Override
-    public Set<UUID> findExistingGroupIds(UUID spaceId, UUID userId, Collection<UUID> groupIds) {
-        return jpaGroupMemberRepository.findExistingGroupIds(spaceId, userId, Set.copyOf(groupIds));
+    public Set<UUID> findExistingGroupIds(UUID organizationId, UUID spaceId, UUID userId, Collection<UUID> groupIds) {
+        return jpaGroupMemberRepository.findExistingGroupIds(organizationId, spaceId, userId, Set.copyOf(groupIds));
     }
 
     @Override
@@ -47,8 +47,8 @@ public class UserGroupMembershipRepositoryAdapter implements UserGroupMembership
         } catch (DataIntegrityViolationException ex) {
             boolean allNowExist = executeInNewTransaction(
                     () -> entities.stream().allMatch(entity ->
-                            jpaGroupMemberRepository.existsBySpaceIdAndUserIdAndGroupId(
-                                    entity.getSpaceId(), entity.getUserId(), entity.getGroupId())),
+                            jpaGroupMemberRepository.existsByOrgIdAndSpaceIdAndUserIdAndGroupId(
+                                    entity.getOrgId(), entity.getSpaceId(), entity.getUserId(), entity.getGroupId())),
                     true
             );
             if (!allNowExist) {
@@ -59,6 +59,7 @@ public class UserGroupMembershipRepositoryAdapter implements UserGroupMembership
 
     private GroupMemberEntity toEntity(UserGroupMembership membership) {
         return GroupMemberEntity.builder()
+                .orgId(membership.organizationId())
                 .spaceId(membership.spaceId())
                 .userId(membership.userId())
                 .groupId(membership.groupId())
