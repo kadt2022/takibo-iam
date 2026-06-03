@@ -1,6 +1,6 @@
 package com.takibo.identitycore.application.rbac.governance.service;
 
-import com.takibo.identitycore.application.rbac.governance.port.RoleAssignmentCase;
+import com.takibo.identitycore.application.rbac.governance.port.in.RoleAssignmentCase;
 import com.takibo.identitycore.domain.catalogrbac.TechnicalRole;
 import com.takibo.identitycore.domain.catalogrbac.TechnicalScope;
 import com.takibo.identitycore.domain.exception.InvalidRoleScopeException;
