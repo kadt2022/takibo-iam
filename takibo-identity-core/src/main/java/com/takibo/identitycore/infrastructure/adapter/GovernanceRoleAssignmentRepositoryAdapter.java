@@ -3,7 +3,7 @@ package com.takibo.identitycore.infrastructure.adapter;
 import com.takibo.identitycore.domain.exception.DuplicateAssignmentException;
 import com.takibo.identitycore.domain.rbac.model.RoleAssignment;
 import com.takibo.identitycore.domain.rbac.model.RoleSource;
-import com.takibo.identitycore.domain.repository.GovernanceRoleAssignmentRepository;
+import com.takibo.identitycore.domain.rbac.repository.GovernanceRoleAssignmentRepository;
 import com.takibo.identitycore.infrastructure.entity.RoleAssignmentEntity;
 import com.takibo.identitycore.infrastructure.jpa.mapper.RoleJpaAssignmentMapper;
 import com.takibo.identitycore.infrastructure.jpa.repository.JpaRoleAssignmentRepository;

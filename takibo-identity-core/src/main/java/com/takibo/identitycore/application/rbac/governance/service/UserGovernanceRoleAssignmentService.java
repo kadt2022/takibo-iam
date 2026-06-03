@@ -1,10 +1,10 @@
-package com.takibo.identitycore.application.identity.service;
+package com.takibo.identitycore.application.rbac.governance.service;
 
 import com.takibo.identitycore.domain.exception.UserCreationException;
 import com.takibo.identitycore.domain.model.Role;
 import com.takibo.identitycore.domain.rbac.model.UserGovernanceRoleAssignment;
+import com.takibo.identitycore.domain.rbac.repository.UserGovernanceRoleRepository;
 import com.takibo.identitycore.domain.repository.RoleRepository;
-import com.takibo.identitycore.domain.repository.UserGovernanceRoleRepository;
 import com.takibo.identitycore.domain.vo.SpaceId;
 import com.takibo.identitycore.domain.vo.UserId;
 import com.takibo.identitycore.integration.space.port.SpaceStatusCheckerCase;
@@ -22,7 +22,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
-public class UserRoleAssignmentService {
+public class UserGovernanceRoleAssignmentService {
 
     private final RoleRepository roleRepository;
     private final UserGovernanceRoleRepository userGovernanceRoleRepository;

@@ -1,7 +1,7 @@
 package com.takibo.identitycore.infrastructure.adapter;
 
 import com.takibo.identitycore.domain.rbac.model.UserGovernanceRoleAssignment;
-import com.takibo.identitycore.domain.repository.UserGovernanceRoleRepository;
+import com.takibo.identitycore.domain.rbac.repository.UserGovernanceRoleRepository;
 import com.takibo.identitycore.infrastructure.entity.UserRoleEntity;
 import com.takibo.identitycore.infrastructure.jpa.repository.JpaUserRoleRepository;
 import lombok.RequiredArgsConstructor;

@@ -1,6 +1,7 @@
 package com.takibo.identitycore.application.identity.service;
 
 import com.takibo.identitycore.application.identity.command.CreateUserCommand;
+import com.takibo.identitycore.application.rbac.business.service.BusinessRoleAssignmentService;
 import com.takibo.identitycore.domain.model.Account;
 import com.takibo.identitycore.domain.model.SpaceContext;
 import com.takibo.identitycore.domain.model.User;
