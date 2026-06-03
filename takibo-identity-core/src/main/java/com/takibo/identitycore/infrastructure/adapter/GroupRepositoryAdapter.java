@@ -1,6 +1,7 @@
 package com.takibo.identitycore.infrastructure.adapter;
 
 import com.takibo.identitycore.domain.model.Group;
+import com.takibo.identitycore.domain.rbac.model.GroupReference;
 import com.takibo.identitycore.domain.vo.GroupId;
 import com.takibo.identitycore.domain.vo.SpaceId;
 import com.takibo.identitycore.domain.repository.GroupRepository;
@@ -27,8 +28,10 @@ public class GroupRepositoryAdapter implements GroupRepository {
     }
 
     @Override
-    public List<GroupEntity> findBySpaceIdAndCodeIn(UUID space, List<String> cleaned) {
-        return jpa.findBySpaceIdAndCodeIn(space, cleaned);
+    public List<GroupReference> findReferencesBySpaceIdAndCodeIn(UUID spaceId, List<String> groupCodes) {
+        return jpa.findBySpaceIdAndCodeIn(spaceId, groupCodes).stream()
+                .map(entity -> new GroupReference(entity.getId(), entity.getCode()))
+                .toList();
     }
 
     @Override

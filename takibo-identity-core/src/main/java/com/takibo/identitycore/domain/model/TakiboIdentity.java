@@ -3,7 +3,6 @@ package com.takibo.identitycore.domain.model;
 import com.takibo.identitycore.domain.vo.AccountId;
 import com.takibo.identitycore.domain.vo.OrganizationId;
 import com.takibo.identitycore.domain.vo.TakiboIdentityId;
-import com.takibo.identitycore.infrastructure.entity.IdentityStatus;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;

@@ -1,9 +1,9 @@
 package com.takibo.identitycore.domain.repository;
 
 import com.takibo.identitycore.domain.model.Group;
+import com.takibo.identitycore.domain.rbac.model.GroupReference;
 import com.takibo.identitycore.domain.vo.GroupId;
 import com.takibo.identitycore.domain.vo.SpaceId;
-import com.takibo.identitycore.infrastructure.entity.GroupEntity;
 
 import java.util.List;
 import java.util.Optional;
@@ -13,7 +13,7 @@ public interface GroupRepository {
     boolean existsBySpaceIdAndCode(SpaceId spaceId, String groupCode);
 
 
-    List<GroupEntity> findBySpaceIdAndCodeIn(UUID space, List<String> cleaned);
+    List<GroupReference> findReferencesBySpaceIdAndCodeIn(UUID spaceId, List<String> groupCodes);
 
     Optional<Group> findBySpaceIdAndCode(SpaceId spaceId, String code);
 
