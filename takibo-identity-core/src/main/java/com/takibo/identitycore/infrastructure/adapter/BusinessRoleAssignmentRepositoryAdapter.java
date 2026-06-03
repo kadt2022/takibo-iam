@@ -3,7 +3,7 @@ package com.takibo.identitycore.infrastructure.adapter;
 import com.takibo.identitycore.domain.model.IdentityType;
 import com.takibo.identitycore.domain.rbac.model.BusinessRoleAssignment;
 import com.takibo.identitycore.domain.rbac.model.RoleSource;
-import com.takibo.identitycore.domain.repository.BusinessRoleAssignmentRepository;
+import com.takibo.identitycore.domain.rbac.repository.BusinessRoleAssignmentRepository;
 import com.takibo.identitycore.infrastructure.entity.RoleAssignmentEntity;
 import com.takibo.identitycore.infrastructure.jpa.repository.JpaRoleAssignmentRepository;
 import lombok.RequiredArgsConstructor;

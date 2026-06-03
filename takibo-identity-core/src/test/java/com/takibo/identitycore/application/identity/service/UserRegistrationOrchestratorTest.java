@@ -8,6 +8,7 @@ import com.takibo.identitycore.domain.model.SpaceContext;
 import com.takibo.identitycore.domain.model.User;
 import com.takibo.identitycore.domain.model.UserRegistrationResult;
 import com.takibo.identitycore.domain.repository.UserRepository;
+import com.takibo.identitycore.application.rbac.business.service.BusinessRoleAssignmentService;
 import com.takibo.identitycore.domain.service.AccountDomainService;
 import com.takibo.identitycore.domain.service.UserDomainService;
 import com.takibo.identitycore.domain.vo.AccountId;

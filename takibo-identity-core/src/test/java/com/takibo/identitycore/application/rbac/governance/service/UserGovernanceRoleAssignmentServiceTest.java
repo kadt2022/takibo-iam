@@ -1,11 +1,12 @@
-package com.takibo.identitycore.application.identity.service;
+package com.takibo.identitycore.application.rbac.governance.service;
 
+import com.takibo.identitycore.domain.exception.SpaceNotActiveException;
 import com.takibo.identitycore.domain.exception.UserCreationException;
 import com.takibo.identitycore.domain.model.Role;
 import com.takibo.identitycore.domain.model.RoleNature;
 import com.takibo.identitycore.domain.rbac.model.UserGovernanceRoleAssignment;
+import com.takibo.identitycore.domain.rbac.repository.UserGovernanceRoleRepository;
 import com.takibo.identitycore.domain.repository.RoleRepository;
-import com.takibo.identitycore.domain.repository.UserGovernanceRoleRepository;
 import com.takibo.identitycore.domain.vo.RoleId;
 import com.takibo.identitycore.domain.vo.SpaceId;
 import com.takibo.identitycore.domain.vo.UserId;
@@ -28,7 +29,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-class UserRoleAssignmentServiceTest {
+class UserGovernanceRoleAssignmentServiceTest {
 
     private static final UUID ORG_ID     = UUID.fromString("aaaaaaaa-0000-0000-0000-000000000001");
     private static final UUID SPACE_UUID = UUID.fromString("bbbbbbbb-0000-0000-0000-000000000002");
@@ -44,7 +45,7 @@ class UserRoleAssignmentServiceTest {
     @Mock private Clock clock;
 
     @InjectMocks
-    private UserRoleAssignmentService service;
+    private UserGovernanceRoleAssignmentService service;
 
     @Test
     void assignRolesToUser_businessCodeNotFoundInGovernancePort_throws() {
@@ -62,11 +63,11 @@ class UserRoleAssignmentServiceTest {
     @Test
     void assignRolesToUser_inactiveSpace_throwsBeforeLoadingRoles() {
         List<String> roleCodes = List.of("R_SPACE_ADMIN");
-        doThrow(new com.takibo.identitycore.domain.exception.SpaceNotActiveException(SPACE_UUID))
+        doThrow(new SpaceNotActiveException(SPACE_UUID))
                 .when(spaceStatusCheckerCase).assertSpaceExistsAndActive(SPACE_UUID);
 
         assertThatThrownBy(() -> service.assignRolesToUser(ORG_ID, SPACE_ID, USER_ID, roleCodes))
-                .isInstanceOf(com.takibo.identitycore.domain.exception.SpaceNotActiveException.class);
+                .isInstanceOf(SpaceNotActiveException.class);
 
         verify(roleRepository, never()).findGovernanceRolesByOrgAndSpaceAndCodes(any(), any(), any());
     }
@@ -145,14 +146,10 @@ class UserRoleAssignmentServiceTest {
 
     private Role spaceAdminRole() {
         return Role.builder()
-                .id(RoleId.of(ROLE_ID))
-                .spaceId(SPACE_ID)
-                .code("R_SPACE_ADMIN")
-                .name("Space Admin")
+                .id(RoleId.of(ROLE_ID)).spaceId(SPACE_ID)
+                .code("R_SPACE_ADMIN").name("Space Admin")
                 .nature(RoleNature.GOVERNANCE)
-                .createdAt(Instant.now())
-                .updatedAt(Instant.now())
-                .version(0L)
+                .createdAt(Instant.now()).updatedAt(Instant.now()).version(0L)
                 .build();
     }
 }

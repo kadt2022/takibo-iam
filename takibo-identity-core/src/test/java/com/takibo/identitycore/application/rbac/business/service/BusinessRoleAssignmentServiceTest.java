@@ -1,10 +1,10 @@
-package com.takibo.identitycore.application.identity.service;
+package com.takibo.identitycore.application.rbac.business.service;
 
 import com.takibo.identitycore.domain.exception.UserCreationException;
 import com.takibo.identitycore.domain.model.Role;
 import com.takibo.identitycore.domain.model.RoleNature;
 import com.takibo.identitycore.domain.rbac.model.BusinessRoleAssignment;
-import com.takibo.identitycore.domain.repository.BusinessRoleAssignmentRepository;
+import com.takibo.identitycore.domain.rbac.repository.BusinessRoleAssignmentRepository;
 import com.takibo.identitycore.domain.repository.RoleRepository;
 import com.takibo.identitycore.domain.repository.TakiboIdentityRepository;
 import com.takibo.identitycore.domain.vo.RoleId;
@@ -123,12 +123,9 @@ class BusinessRoleAssignmentServiceTest {
         return Role.builder()
                 .id(RoleId.of(ROLE_ID))
                 .spaceId(SpaceId.of(SPACE_ID))
-                .code("MANAGER")
-                .name("Manager")
+                .code("MANAGER").name("Manager")
                 .nature(RoleNature.BUSINESS)
-                .createdAt(Instant.now())
-                .updatedAt(Instant.now())
-                .version(0L)
+                .createdAt(Instant.now()).updatedAt(Instant.now()).version(0L)
                 .build();
     }
 }

@@ -1,7 +1,7 @@
-package com.takibo.identitycore.application.rbac.assignement.port;
+package com.takibo.identitycore.application.rbac.governance.port.in;
 
-import com.takibo.identitycore.domain.rbac.model.GroupAssignment;
 import com.takibo.identitycore.domain.model.Identity;
+import com.takibo.identitycore.domain.rbac.model.GroupAssignment;
 
 import java.util.UUID;
 
