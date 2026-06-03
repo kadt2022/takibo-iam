@@ -1,17 +1,3 @@
-// =============================================================
-// Add User V1 Endpoint — Account + User (Single-call onboarding)
-// =============================================================
-// This patch introduces a new endpoint: POST /api/spaces/{spaceId}/users
-// supporting two modes:
-// - Attach existing Account: { accountId, username, ... }
-// - Create new Account + Credentials then User: { email, rawPassword, username, ... }
-//
-// It replaces the current header-based endpoint /api/users (X-Space-Id) and
-// removes email/password from the User aggregate in favor of Account(+Credentials).
-//
-// ─────────────────────────────────────────────────────────────────────────────
-// FILE 1 — interfaces/rest/api/UserControllerV2.java
-// ─────────────────────────────────────────────────────────────────────────────
 package com.takibo.identitycore.interfaces.rest.api;
 
 import com.takibo.audit.annotations.Audit;
