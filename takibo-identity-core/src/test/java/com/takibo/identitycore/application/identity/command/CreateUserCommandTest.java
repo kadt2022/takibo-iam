@@ -1,6 +1,6 @@
 package com.takibo.identitycore.application.identity.command;
 
-import com.takibo.identitycore.interfaces.rest.request.CreateUserRequestV2;
+import com.takibo.identitycore.interfaces.rest.request.CreateUserRequest;
 import com.takibo.identitycore.interfaces.rest.request.InitialAssignments;
 import org.junit.jupiter.api.Test;
 
@@ -45,7 +45,7 @@ class CreateUserCommandTest {
     @Test
     void from_withInitialAssignments_mapsAllFields() {
         InitialAssignments assignments = new InitialAssignments(List.of("MANAGER", "EDITOR"), List.of("GRP_A"));
-        CreateUserRequestV2 request = new CreateUserRequestV2(
+        CreateUserRequest request = new CreateUserRequest(
                 null, "user@example.com", "rawPass", "jdoe",
                 "John", "Doe", assignments, null
         );
@@ -63,7 +63,7 @@ class CreateUserCommandTest {
 
     @Test
     void from_withNullInitialAssignments_defaultsToEmptyLists() {
-        CreateUserRequestV2 request = new CreateUserRequestV2(
+        CreateUserRequest request = new CreateUserRequest(
                 null, "user@example.com", "rawPass", "jdoe",
                 null, null, null, null
         );
@@ -77,7 +77,7 @@ class CreateUserCommandTest {
     @Test
     void from_withEmptyAssignmentLists_defaultsToEmpty() {
         InitialAssignments emptyAssignments = new InitialAssignments(null, null);
-        CreateUserRequestV2 request = new CreateUserRequestV2(
+        CreateUserRequest request = new CreateUserRequest(
                 null, "user@example.com", "rawPass", "jdoe",
                 null, null, emptyAssignments, null
         );

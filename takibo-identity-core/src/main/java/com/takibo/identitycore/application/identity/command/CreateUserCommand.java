@@ -1,7 +1,7 @@
 package com.takibo.identitycore.application.identity.command;
 
 import com.takibo.audit.annotations.Sensitive;
-import com.takibo.identitycore.interfaces.rest.request.CreateUserRequestV2;
+import com.takibo.identitycore.interfaces.rest.request.CreateUserRequest;
 import lombok.Builder;
 
 import java.util.List;
@@ -22,7 +22,7 @@ public record CreateUserCommand(
         List<String> groupCodes,
         Map<String, Object> metadata
 ) {
-    public static CreateUserCommand from(UUID spaceId, CreateUserRequestV2 r) {
+    public static CreateUserCommand from(UUID spaceId, CreateUserRequest r) {
 
         List<String> businessRoleCodes = r.initialAssignments() != null && r.initialAssignments().roleNames() != null
                 ? r.initialAssignments().roleNames()

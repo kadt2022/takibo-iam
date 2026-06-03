@@ -22,7 +22,7 @@ import com.takibo.identitycore.integration.space.annotations.RequireActiveSpace;
 import com.takibo.identitycore.application.identity.command.CreateUserCommand;
 import com.takibo.identitycore.application.identity.service.UserApplicationService;
 import com.takibo.identitycore.domain.exception.UserNotFoundException;
-import com.takibo.identitycore.interfaces.rest.request.CreateUserRequestV2;
+import com.takibo.identitycore.interfaces.rest.request.CreateUserRequest;
 import com.takibo.identitycore.interfaces.rest.response.UserResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -73,7 +73,7 @@ public class UserController {
     @ApiResponse(responseCode = "400", description = "Invalid input data")
     @ApiResponse(responseCode = "409", description = "Username or email already exists")//errorResponse.class
     public ResponseEntity<UserResponse> create(@PathVariable("spaceId") UUID spaceId,
-                                               @Valid @RequestBody  CreateUserRequestV2 req) {
+                                               @Valid @RequestBody CreateUserRequest req) {
         // Log technique: payload masqué par CreateUserRequestV2.toString() + MaskingLogger
         log.info("Create user request received for spaceId={} payload={}", spaceId, req);
 

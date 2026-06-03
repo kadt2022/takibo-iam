@@ -1,6 +1,6 @@
 # Takibo IAM
 
-> **Disclaimer:** Takibo is an advanced, research-oriented IAM engineering project under active development. It is not yet a certified, externally audited, or production-ready IAM distribution. Any production deployment requires an independent security review, proper configuration, secret management, and compliance validation. Do not use default, sample, or development configurations in production environments. See [DISCLAIMER.md](./DISCLAIMER.md) for full details.
+> **Disclaimer:** Takibo is a research-oriented IAM engineering project under active development. It is not yet a certified, externally audited, or production-ready IAM distribution. Any production deployment requires an independent security review, proper configuration, secret management, and compliance validation. Do not use default, sample, or development configurations in production environments. See [DISCLAIMER.md](./DISCLAIMER.md) for full details.
 
 ---
 
