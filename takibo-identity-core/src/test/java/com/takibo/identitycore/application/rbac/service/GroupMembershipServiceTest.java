@@ -75,7 +75,7 @@ class GroupMembershipServiceTest {
 
         assertThatThrownBy(() -> service.addToGroups(SPACE_ID, USER_ID, groupCodes))
                 .isInstanceOf(UserCreationException.class)
-                .hasMessageContaining("Unknown group codes")
+                .hasMessageContaining("Unknown business group codes")
                 .hasMessageContaining("G_B");
 
         verify(userGroupMembershipRepository, never()).saveAllIdempotently(any());

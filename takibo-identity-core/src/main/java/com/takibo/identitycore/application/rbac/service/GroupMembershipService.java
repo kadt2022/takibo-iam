@@ -85,7 +85,7 @@ public class GroupMembershipService {
                 .filter(code -> !groupIdByCode.containsKey(code))
                 .toList();
         if (!missingCodes.isEmpty()) {
-            throw new UserCreationException("Unknown group codes in port " + spaceUuid + ": " + missingCodes);
+            throw new UserCreationException("Unknown business group codes in space " + spaceUuid + ": " + missingCodes);
         }
     }
 

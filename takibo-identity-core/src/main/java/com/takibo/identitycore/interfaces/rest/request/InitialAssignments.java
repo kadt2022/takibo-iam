@@ -9,6 +9,6 @@ import java.util.List;
 
 public record InitialAssignments(
         List<String> roleNames,
-        List<String> groupCodes
+        List<String> initialBusinessGroupCodes
 ) {
 }

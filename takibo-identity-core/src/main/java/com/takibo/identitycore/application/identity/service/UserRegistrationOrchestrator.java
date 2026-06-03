@@ -2,6 +2,7 @@ package com.takibo.identitycore.application.identity.service;
 
 import com.takibo.identitycore.application.identity.command.CreateUserCommand;
 import com.takibo.identitycore.application.rbac.business.service.BusinessRoleAssignmentService;
+import com.takibo.identitycore.application.rbac.service.GroupMembershipService;
 import com.takibo.identitycore.domain.model.Account;
 import com.takibo.identitycore.domain.model.SpaceContext;
 import com.takibo.identitycore.domain.model.User;
@@ -21,6 +22,7 @@ public class UserRegistrationOrchestrator {
     private final UserDomainService userDomainService;
     private final AccountDomainService accountDomaineService;
     private final BusinessRoleAssignmentService businessRoleAssignmentService;
+    private final GroupMembershipService groupMembershipService;
     private final UserRepository userRepository;
 
     public UserRegistrationResult registerUser(CreateUserCommand command) {
@@ -41,13 +43,23 @@ public class UserRegistrationOrchestrator {
         // 4) Persistance
         User saved = userRepository.save(user);
 
-        // 5) RBAC
+        // 5) Business roles explicites
         businessRoleAssignmentService.assignBusinessRoles(
                 spaceContext.organizationId(),
                 spaceContext.spaceId().value(),
                 account.getId().getValue(),
                 command.businessRoleCodes()
         );
+
+        // 6) Business group memberships explicites
+        if (!command.initialBusinessGroupCodes().isEmpty()) {
+            groupMembershipService.addToGroups(
+                    spaceContext.spaceId(),
+                    saved.getId(),
+                    command.initialBusinessGroupCodes()
+            );
+        }
+
         return new UserRegistrationResult(saved, account.getEmail());
     }
 }

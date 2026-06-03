@@ -1,6 +1,7 @@
 package com.takibo.identitycore.application.identity.service;
 
 import com.takibo.identitycore.application.identity.command.CreateUserCommand;
+import com.takibo.identitycore.application.rbac.service.GroupMembershipService;
 import com.takibo.identitycore.domain.exception.UserCreationException;
 import com.takibo.identitycore.domain.model.Account;
 import com.takibo.identitycore.domain.model.EmailAddress;
@@ -13,6 +14,7 @@ import com.takibo.identitycore.domain.service.AccountDomainService;
 import com.takibo.identitycore.domain.service.UserDomainService;
 import com.takibo.identitycore.domain.vo.AccountId;
 import com.takibo.identitycore.domain.vo.SpaceId;
+import com.takibo.identitycore.domain.vo.UserId;
 import com.takibo.identitycore.integration.space.SpaceContextVerifier;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -35,11 +37,13 @@ class UserRegistrationOrchestratorTest {
     private static final UUID ORG_ID       = UUID.fromString("aaaaaaaa-0000-0000-0000-000000000001");
     private static final UUID SPACE_UUID   = UUID.fromString("bbbbbbbb-0000-0000-0000-000000000002");
     private static final UUID ACCOUNT_UUID = UUID.fromString("cccccccc-0000-0000-0000-000000000003");
+    private static final UUID USER_UUID    = UUID.fromString("dddddddd-0000-0000-0000-000000000004");
 
     @Mock private SpaceContextVerifier spaceContextVerifier;
     @Mock private UserDomainService userDomainService;
     @Mock private AccountDomainService accountDomaineService;
     @Mock private BusinessRoleAssignmentService businessRoleAssignmentService;
+    @Mock private GroupMembershipService groupMembershipService;
     @Mock private UserRepository userRepository;
 
     @InjectMocks
@@ -77,6 +81,94 @@ class UserRegistrationOrchestratorTest {
         verify(userDomainService).createNativeUser(command, ORG_ID, spaceId, accountId);
         verify(userRepository).save(user);
         verify(businessRoleAssignmentService).assignBusinessRoles(ORG_ID, SPACE_UUID, ACCOUNT_UUID, List.of("MANAGER"));
+        verify(groupMembershipService, never()).addToGroups(any(), any(), any());
+    }
+
+    @Test
+    void registerUser_withInitialBusinessGroups_callsGroupMembershipService() {
+        SpaceId spaceId = SpaceId.of(SPACE_UUID);
+        SpaceContext spaceContext = new SpaceContext(spaceId, ORG_ID);
+        AccountId accountId = AccountId.of(ACCOUNT_UUID);
+        UserId userId = UserId.of(USER_UUID);
+        Account account = mock(Account.class);
+        User user = mock(User.class);
+        EmailAddress email = new EmailAddress("user@example.com");
+
+        when(spaceContextVerifier.validateSpaceContext(SPACE_UUID)).thenReturn(spaceContext);
+        when(accountDomaineService.resolveAccountForRegistration(any(), eq(ORG_ID))).thenReturn(account);
+        when(account.getId()).thenReturn(accountId);
+        when(account.getEmail()).thenReturn(email);
+        when(userDomainService.createNativeUser(any(), eq(ORG_ID), eq(spaceId), eq(accountId))).thenReturn(user);
+        when(userRepository.save(user)).thenReturn(user);
+        when(user.getId()).thenReturn(userId);
+
+        CreateUserCommand command = CreateUserCommand.builder()
+                .spaceId(SPACE_UUID)
+                .email("user@example.com")
+                .businessRoleCodes(List.of())
+                .initialBusinessGroupCodes(List.of("GRP_SUPPORT", "GRP_READ_ONLY"))
+                .build();
+
+        orchestrator.registerUser(command);
+
+        verify(groupMembershipService).addToGroups(spaceId, userId, List.of("GRP_SUPPORT", "GRP_READ_ONLY"));
+    }
+
+    @Test
+    void registerUser_withEmptyInitialBusinessGroups_doesNotCallGroupMembershipService() {
+        SpaceId spaceId = SpaceId.of(SPACE_UUID);
+        SpaceContext spaceContext = new SpaceContext(spaceId, ORG_ID);
+        AccountId accountId = AccountId.of(ACCOUNT_UUID);
+        Account account = mock(Account.class);
+        User user = mock(User.class);
+        EmailAddress email = new EmailAddress("user@example.com");
+
+        when(spaceContextVerifier.validateSpaceContext(SPACE_UUID)).thenReturn(spaceContext);
+        when(accountDomaineService.resolveAccountForRegistration(any(), eq(ORG_ID))).thenReturn(account);
+        when(account.getId()).thenReturn(accountId);
+        when(account.getEmail()).thenReturn(email);
+        when(userDomainService.createNativeUser(any(), eq(ORG_ID), eq(spaceId), eq(accountId))).thenReturn(user);
+        when(userRepository.save(user)).thenReturn(user);
+
+        CreateUserCommand command = CreateUserCommand.builder()
+                .spaceId(SPACE_UUID)
+                .email("user@example.com")
+                .businessRoleCodes(List.of())
+                .initialBusinessGroupCodes(List.of())
+                .build();
+
+        orchestrator.registerUser(command);
+
+        verify(groupMembershipService, never()).addToGroups(any(), any(), any());
+    }
+
+    @Test
+    void registerUser_groupMembershipUsesSpaceIdFromContext() {
+        SpaceId spaceId = SpaceId.of(SPACE_UUID);
+        SpaceContext spaceContext = new SpaceContext(spaceId, ORG_ID);
+        AccountId accountId = AccountId.of(ACCOUNT_UUID);
+        UserId userId = UserId.of(USER_UUID);
+        Account account = mock(Account.class);
+        User user = mock(User.class);
+        EmailAddress email = new EmailAddress("user@example.com");
+
+        when(spaceContextVerifier.validateSpaceContext(SPACE_UUID)).thenReturn(spaceContext);
+        when(accountDomaineService.resolveAccountForRegistration(any(), eq(ORG_ID))).thenReturn(account);
+        when(account.getId()).thenReturn(accountId);
+        when(account.getEmail()).thenReturn(email);
+        when(userDomainService.createNativeUser(any(), eq(ORG_ID), eq(spaceId), eq(accountId))).thenReturn(user);
+        when(userRepository.save(user)).thenReturn(user);
+        when(user.getId()).thenReturn(userId);
+
+        CreateUserCommand command = CreateUserCommand.builder()
+                .spaceId(SPACE_UUID)
+                .email("user@example.com")
+                .initialBusinessGroupCodes(List.of("GRP_A"))
+                .build();
+
+        orchestrator.registerUser(command);
+
+        verify(groupMembershipService).addToGroups(eq(spaceId), eq(userId), any());
     }
 
     @Test
@@ -97,6 +189,7 @@ class UserRegistrationOrchestratorTest {
         verify(userDomainService, never()).createNativeUser(any(), any(), any(), any());
         verify(userRepository, never()).save(any());
         verify(businessRoleAssignmentService, never()).assignBusinessRoles(any(), any(), any(), any());
+        verify(groupMembershipService, never()).addToGroups(any(), any(), any());
     }
 
     @Test
@@ -119,5 +212,6 @@ class UserRegistrationOrchestratorTest {
 
         verify(userRepository, never()).save(any());
         verify(businessRoleAssignmentService, never()).assignBusinessRoles(any(), any(), any(), any());
+        verify(groupMembershipService, never()).addToGroups(any(), any(), any());
     }
 }
