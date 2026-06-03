@@ -1,4 +1,4 @@
-package com.takibo.identitycore.infrastructure.entity;
+package com.takibo.identitycore.domain.model;
 
 public enum IdentityStatus {
     ACTIVE,

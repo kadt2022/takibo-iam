@@ -2,7 +2,6 @@ package com.takibo.identitycore.domain.rbac.model;
 
 import com.takibo.identitycore.domain.model.Identity;
 import com.takibo.identitycore.domain.model.IdentityType;
-import com.takibo.identitycore.infrastructure.entity.GroupRefKind;
 
 import java.time.Instant;
 import java.util.UUID;
