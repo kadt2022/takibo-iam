@@ -56,6 +56,7 @@ public class UserRegistrationOrchestrator {
         // 6) Business group memberships explicites
         if (!command.initialBusinessGroupCodes().isEmpty()) {
             groupMembershipService.addToGroups(
+                    spaceContext.organizationId(),
                     spaceContext.spaceId(),
                     saved.getId(),
                     command.initialBusinessGroupCodes()

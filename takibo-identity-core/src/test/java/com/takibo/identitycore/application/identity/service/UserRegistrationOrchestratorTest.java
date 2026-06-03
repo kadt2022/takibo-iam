@@ -81,7 +81,7 @@ class UserRegistrationOrchestratorTest {
         verify(userDomainService).createNativeUser(command, ORG_ID, spaceId, accountId);
         verify(userRepository).save(user);
         verify(businessRoleAssignmentService).assignBusinessRoles(ORG_ID, SPACE_UUID, ACCOUNT_UUID, List.of("MANAGER"));
-        verify(groupMembershipService, never()).addToGroups(any(), any(), any());
+        verify(groupMembershipService, never()).addToGroups(any(), any(), any(), any());
     }
 
     @Test
@@ -111,7 +111,7 @@ class UserRegistrationOrchestratorTest {
 
         orchestrator.registerUser(command);
 
-        verify(groupMembershipService).addToGroups(spaceId, userId, List.of("GRP_SUPPORT", "GRP_READ_ONLY"));
+        verify(groupMembershipService).addToGroups(ORG_ID, spaceId, userId, List.of("GRP_SUPPORT", "GRP_READ_ONLY"));
     }
 
     @Test
@@ -139,7 +139,7 @@ class UserRegistrationOrchestratorTest {
 
         orchestrator.registerUser(command);
 
-        verify(groupMembershipService, never()).addToGroups(any(), any(), any());
+        verify(groupMembershipService, never()).addToGroups(any(), any(), any(), any());
     }
 
     @Test
@@ -168,7 +168,7 @@ class UserRegistrationOrchestratorTest {
 
         orchestrator.registerUser(command);
 
-        verify(groupMembershipService).addToGroups(eq(spaceId), eq(userId), any());
+        verify(groupMembershipService).addToGroups(eq(ORG_ID), eq(spaceId), eq(userId), any());
     }
 
     @Test
@@ -189,7 +189,7 @@ class UserRegistrationOrchestratorTest {
         verify(userDomainService, never()).createNativeUser(any(), any(), any(), any());
         verify(userRepository, never()).save(any());
         verify(businessRoleAssignmentService, never()).assignBusinessRoles(any(), any(), any(), any());
-        verify(groupMembershipService, never()).addToGroups(any(), any(), any());
+        verify(groupMembershipService, never()).addToGroups(any(), any(), any(), any());
     }
 
     @Test
@@ -208,7 +208,7 @@ class UserRegistrationOrchestratorTest {
         when(userRepository.save(user)).thenReturn(user);
         when(user.getId()).thenReturn(userId);
         doThrow(new UserCreationException("Unknown business group codes in space"))
-                .when(groupMembershipService).addToGroups(any(), any(), any());
+                .when(groupMembershipService).addToGroups(any(), any(), any(), any());
 
         CreateUserCommand command = CreateUserCommand.builder()
                 .spaceId(SPACE_UUID)
@@ -241,6 +241,6 @@ class UserRegistrationOrchestratorTest {
 
         verify(userRepository, never()).save(any());
         verify(businessRoleAssignmentService, never()).assignBusinessRoles(any(), any(), any(), any());
-        verify(groupMembershipService, never()).addToGroups(any(), any(), any());
+        verify(groupMembershipService, never()).addToGroups(any(), any(), any(), any());
     }
 }

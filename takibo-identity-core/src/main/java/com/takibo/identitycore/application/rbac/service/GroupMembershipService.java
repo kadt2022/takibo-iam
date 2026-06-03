@@ -33,7 +33,7 @@ public class GroupMembershipService {
     private final Clock clock;
 
     @Transactional
-    public void addToGroups(SpaceId spaceId, UserId userId, List<String> groupCodes) {
+    public void addToGroups(UUID organizationId, SpaceId spaceId, UserId userId, List<String> groupCodes) {
         spaceStatusCheckerCase.assertSpaceExistsAndActive(spaceId.value());
         List<String> normalizedGroupCodes = normalizeGroupCodes(groupCodes);
         if (normalizedGroupCodes.isEmpty()) {
@@ -48,7 +48,7 @@ public class GroupMembershipService {
 
         Set<UUID> targetGroupIds = new HashSet<>(groupIdByCode.values());
         Set<UUID> existingGroupIds =
-                userGroupMembershipRepository.findExistingGroupIds(spaceUuid, userUuid, targetGroupIds);
+                userGroupMembershipRepository.findExistingGroupIds(organizationId, spaceUuid, userUuid, targetGroupIds);
 
         targetGroupIds.removeAll(existingGroupIds);
         if (targetGroupIds.isEmpty()) {
@@ -56,7 +56,7 @@ public class GroupMembershipService {
         }
 
         List<UserGroupMembership> membershipsToInsert =
-                buildMemberships(spaceUuid, userUuid, targetGroupIds, clock.instant());
+                buildMemberships(organizationId, spaceUuid, userUuid, targetGroupIds, clock.instant());
 
         userGroupMembershipRepository.saveAllIdempotently(membershipsToInsert);
     }
@@ -89,12 +89,13 @@ public class GroupMembershipService {
         }
     }
 
-    private List<UserGroupMembership> buildMemberships(UUID spaceUuid,
+    private List<UserGroupMembership> buildMemberships(UUID organizationId,
+                                                       UUID spaceUuid,
                                                        UUID userUuid,
                                                        Collection<UUID> groupIds,
                                                        Instant assignedAt) {
         return groupIds.stream()
-                .map(groupId -> new UserGroupMembership(spaceUuid, userUuid, groupId, assignedAt, null))
+                .map(groupId -> new UserGroupMembership(organizationId, spaceUuid, userUuid, groupId, assignedAt, null))
                 .toList();
     }
 }

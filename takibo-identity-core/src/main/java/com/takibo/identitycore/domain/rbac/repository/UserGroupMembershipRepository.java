@@ -9,7 +9,7 @@ import java.util.UUID;
 
 public interface UserGroupMembershipRepository {
 
-    Set<UUID> findExistingGroupIds(UUID spaceId, UUID userId, Collection<UUID> groupIds);
+    Set<UUID> findExistingGroupIds(UUID organizationId, UUID spaceId, UUID userId, Collection<UUID> groupIds);
 
     void saveAllIdempotently(List<UserGroupMembership> memberships);
 }
