@@ -10,6 +10,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.SimpleTransactionStatus;
 
 import java.time.Instant;
 import java.util.List;
@@ -30,9 +32,11 @@ class UserGroupMembershipRepositoryAdapterTest {
     private static final UUID SPACE_ID = UUID.fromString("bbbbbbbb-0000-0000-0000-000000000002");
     private static final UUID USER_ID = UUID.fromString("cccccccc-0000-0000-0000-000000000003");
     private static final UUID GROUP_ID = UUID.fromString("dddddddd-0000-0000-0000-000000000004");
+    private static final UUID ASSIGNED_BY = UUID.fromString("eeeeeeee-0000-0000-0000-000000000005");
     private static final Instant ASSIGNED_AT = Instant.parse("2026-01-01T00:00:00Z");
 
     @Mock private JpaGroupMemberRepository jpaGroupMemberRepository;
+    @Mock private PlatformTransactionManager transactionManager;
 
     @InjectMocks
     private UserGroupMembershipRepositoryAdapter adapter;
@@ -51,8 +55,9 @@ class UserGroupMembershipRepositoryAdapterTest {
 
     @Test
     void saveAllIdempotently_mapsMembershipsToEntitiesAndFlushes() {
+        allowTransactions();
         UserGroupMembership membership =
-                new UserGroupMembership(SPACE_ID, USER_ID, GROUP_ID, ASSIGNED_AT, null);
+                new UserGroupMembership(SPACE_ID, USER_ID, GROUP_ID, ASSIGNED_AT, ASSIGNED_BY.toString());
 
         adapter.saveAllIdempotently(List.of(membership));
 
@@ -65,11 +70,12 @@ class UserGroupMembershipRepositoryAdapterTest {
         assertThat(entity.getUserId()).isEqualTo(USER_ID);
         assertThat(entity.getGroupId()).isEqualTo(GROUP_ID);
         assertThat(entity.getAssignedAt()).isEqualTo(ASSIGNED_AT);
-        assertThat(entity.getAssignedBy()).isNull();
+        assertThat(entity.getAssignedBy()).isEqualTo(ASSIGNED_BY);
     }
 
     @Test
     void saveAllIdempotently_concurrentDuplicateIsIgnoredIfMembershipNowExists() {
+        allowTransactions();
         UserGroupMembership membership =
                 new UserGroupMembership(SPACE_ID, USER_ID, GROUP_ID, ASSIGNED_AT, null);
         List<UserGroupMembership> memberships = List.of(membership);
@@ -83,6 +89,7 @@ class UserGroupMembershipRepositoryAdapterTest {
 
     @Test
     void saveAllIdempotently_nonIdempotentConflictIsPropagated() {
+        allowTransactions();
         UserGroupMembership membership =
                 new UserGroupMembership(SPACE_ID, USER_ID, GROUP_ID, ASSIGNED_AT, null);
         List<UserGroupMembership> memberships = List.of(membership);
@@ -93,5 +100,10 @@ class UserGroupMembershipRepositoryAdapterTest {
 
         assertThatThrownBy(() -> adapter.saveAllIdempotently(memberships))
                 .isSameAs(cause);
+    }
+
+    private void allowTransactions() {
+        when(transactionManager.getTransaction(any()))
+                .thenAnswer(invocation -> new SimpleTransactionStatus());
     }
 }

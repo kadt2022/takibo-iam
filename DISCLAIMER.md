@@ -1,6 +1,6 @@
 # Disclaimer
 
-Takibo is an advanced, research-oriented IAM engineering project under active development.
+Takibo is a research-oriented IAM engineering project under active development.
 
 The goal of this repository is to explore, design, and validate advanced IAM architecture patterns, including identity management, OAuth2/OpenID Connect concepts, multi-tenant authorization, adaptive security decisions, auditability, and modular security boundaries.
 

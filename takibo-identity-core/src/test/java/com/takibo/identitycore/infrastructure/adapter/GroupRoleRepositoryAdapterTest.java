@@ -13,11 +13,14 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.SimpleTransactionStatus;
 
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -32,12 +35,14 @@ class GroupRoleRepositoryAdapterTest {
 
     @Mock private GroupRoleJpaMapper mapper;
     @Mock private JpaGroupRolesRepository jpa;
+    @Mock private PlatformTransactionManager transactionManager;
 
     @InjectMocks
     private GroupRoleRepositoryAdapter adapter;
 
     @Test
     void save_existingGroupRole_returnsWithoutWriting() {
+        allowTransactions();
         GroupRole groupRole = groupRole();
         when(jpa.existsBySpaceIdAndGroupIdAndRoleId(SPACE_ID, GROUP_ID, ROLE_ID))
                 .thenReturn(true);
@@ -50,6 +55,7 @@ class GroupRoleRepositoryAdapterTest {
 
     @Test
     void save_newGroupRole_mapsAndFlushes() {
+        allowTransactions();
         GroupRole groupRole = groupRole();
         GroupRoleEntity entity = new GroupRoleEntity();
         GroupRole saved = groupRole();
@@ -67,6 +73,7 @@ class GroupRoleRepositoryAdapterTest {
 
     @Test
     void save_concurrentDuplicateIsIgnoredIfGroupRoleNowExists() {
+        allowTransactions();
         GroupRole groupRole = groupRole();
         GroupRoleEntity entity = new GroupRoleEntity();
         when(jpa.existsBySpaceIdAndGroupIdAndRoleId(SPACE_ID, GROUP_ID, ROLE_ID))
@@ -82,6 +89,7 @@ class GroupRoleRepositoryAdapterTest {
 
     @Test
     void save_nonIdempotentConflictIsPropagated() {
+        allowTransactions();
         GroupRole groupRole = groupRole();
         GroupRoleEntity entity = new GroupRoleEntity();
         DataIntegrityViolationException cause = new DataIntegrityViolationException("duplicate");
@@ -92,6 +100,11 @@ class GroupRoleRepositoryAdapterTest {
 
         assertThatThrownBy(() -> adapter.save(groupRole))
                 .isSameAs(cause);
+    }
+
+    private void allowTransactions() {
+        when(transactionManager.getTransaction(any()))
+                .thenAnswer(invocation -> new SimpleTransactionStatus());
     }
 
     private GroupRole groupRole() {
