@@ -193,6 +193,35 @@ class UserRegistrationOrchestratorTest {
     }
 
     @Test
+    void registerUser_groupAssignmentFails_propagatesException() {
+        SpaceId spaceId = SpaceId.of(SPACE_UUID);
+        SpaceContext spaceContext = new SpaceContext(spaceId, ORG_ID);
+        AccountId accountId = AccountId.of(ACCOUNT_UUID);
+        UserId userId = UserId.of(USER_UUID);
+        Account account = mock(Account.class);
+        User user = mock(User.class);
+
+        when(spaceContextVerifier.validateSpaceContext(SPACE_UUID)).thenReturn(spaceContext);
+        when(accountDomaineService.resolveAccountForRegistration(any(), eq(ORG_ID))).thenReturn(account);
+        when(account.getId()).thenReturn(accountId);
+        when(userDomainService.createNativeUser(any(), eq(ORG_ID), eq(spaceId), eq(accountId))).thenReturn(user);
+        when(userRepository.save(user)).thenReturn(user);
+        when(user.getId()).thenReturn(userId);
+        doThrow(new UserCreationException("Unknown business group codes in space"))
+                .when(groupMembershipService).addToGroups(any(), any(), any());
+
+        CreateUserCommand command = CreateUserCommand.builder()
+                .spaceId(SPACE_UUID)
+                .email("user@example.com")
+                .initialBusinessGroupCodes(List.of("GRP_UNKNOWN"))
+                .build();
+
+        assertThatThrownBy(() -> orchestrator.registerUser(command))
+                .isInstanceOf(UserCreationException.class)
+                .hasMessageContaining("Unknown business group codes in space");
+    }
+
+    @Test
     void registerUser_accountResolutionFails_throwsBeforeSavingUser() {
         SpaceId spaceId = SpaceId.of(SPACE_UUID);
         SpaceContext spaceContext = new SpaceContext(spaceId, ORG_ID);

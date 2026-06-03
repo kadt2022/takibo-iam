@@ -13,6 +13,7 @@ import com.takibo.identitycore.integration.space.SpaceContextVerifier;
 import com.takibo.identitycore.domain.service.UserDomainService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -25,6 +26,7 @@ public class UserRegistrationOrchestrator {
     private final GroupMembershipService groupMembershipService;
     private final UserRepository userRepository;
 
+    @Transactional
     public UserRegistrationResult registerUser(CreateUserCommand command) {
         // 1) Contexte
         SpaceContext spaceContext = spaceContextVerifier.validateSpaceContext(command.spaceId());
