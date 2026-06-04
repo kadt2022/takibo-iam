@@ -49,7 +49,7 @@ public class AccountDomainService {
             Map<String, Object> metadata
     ) {
         EmailAddress emailAddress = new EmailAddress(email);
-        validateEmailUniqueness(emailAddress);
+        validateEmailUniqueness(organizationId, emailAddress);
         passwordPolicyValidator.validatePasswordCompliance(rawPassword);
 
         Account account = createAccountEntity(organizationId, emailAddress, metadata);
@@ -130,10 +130,10 @@ public class AccountDomainService {
         }
     }
 
-    private void validateEmailUniqueness(EmailAddress email) {
-        if (accountRepository.findByEmail(email).isPresent()) {
+    private void validateEmailUniqueness(UUID organizationId, EmailAddress email) {
+        if (accountRepository.findByEmail(OrganizationId.of(organizationId), email).isPresent()) {
             throw new UserCreationException(
-                    "Email already registered. Provide accountId or authenticate to link accounts."
+                    "Email already registered in this organization. Provide accountId or use an existing account."
             );
         }
     }
@@ -141,7 +141,7 @@ public class AccountDomainService {
     private void validateAccountOrganizationAlignment(Account account, UUID expectedOrganizationId) {
         if (!account.getOrgId().equals(expectedOrganizationId)) {
             throw new UserCreationException(
-                    "Account organization misalignment. Account belongs to %s, but port requires %s"
+                    "Account organization misalignment. Account belongs to %s, but organization requires %s"
                             .formatted(account.getOrgId(), expectedOrganizationId)
             );
         }

@@ -11,6 +11,7 @@ import com.takibo.identitycore.domain.repository.TakiboIdentityRepository;
 import com.takibo.identitycore.domain.security.PasswordHashingComponent;
 import com.takibo.identitycore.domain.security.policy.password.PasswordPolicyValidator;
 import com.takibo.identitycore.domain.vo.AccountId;
+import com.takibo.identitycore.domain.vo.OrganizationId;
 import com.takibo.identitycore.domain.vo.PasswordHash;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -34,16 +35,16 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class AccountDomainServiceTest {
 
-    private static final UUID ORG_ID      = UUID.fromString("aaaaaaaa-0000-0000-0000-000000000001");
-    private static final UUID ACCOUNT_ID  = UUID.fromString("bbbbbbbb-0000-0000-0000-000000000002");
-    private static final UUID OTHER_ORG   = UUID.fromString("cccccccc-0000-0000-0000-000000000003");
+    private static final UUID ORG_ID     = UUID.fromString("aaaaaaaa-0000-0000-0000-000000000001");
+    private static final UUID ACCOUNT_ID = UUID.fromString("bbbbbbbb-0000-0000-0000-000000000002");
+    private static final UUID OTHER_ORG  = UUID.fromString("cccccccc-0000-0000-0000-000000000003");
 
-    @Mock private AccountRepository             accountRepository;
-    @Mock private AccountCredentialsRepository  credentialsRepository;
-    @Mock private TakiboIdentityRepository      takiboIdentityRepository;
-    @Mock private PasswordPolicyValidator       passwordPolicyValidator;
-    @Mock private PasswordHashingComponent      passwordHashingComponent;
-    @Mock private Clock                         clock;
+    @Mock private AccountRepository            accountRepository;
+    @Mock private AccountCredentialsRepository credentialsRepository;
+    @Mock private TakiboIdentityRepository     takiboIdentityRepository;
+    @Mock private PasswordPolicyValidator      passwordPolicyValidator;
+    @Mock private PasswordHashingComponent     passwordHashingComponent;
+    @Mock private Clock                        clock;
 
     @InjectMocks
     private AccountDomainService service;
@@ -56,8 +57,7 @@ class AccountDomainServiceTest {
         when(accountRepository.findById(AccountId.of(ACCOUNT_ID))).thenReturn(Optional.of(existing));
         when(takiboIdentityRepository.existsByOrgIdAndAccountId(ORG_ID, ACCOUNT_ID)).thenReturn(true);
 
-        CreateUserCommand command = commandWithAccountId(ACCOUNT_ID);
-        Account result = service.resolveAccountForRegistration(command, ORG_ID);
+        Account result = service.resolveAccountForRegistration(commandWithAccountId(ACCOUNT_ID), ORG_ID);
 
         assertThat(result).isSameAs(existing);
         verify(accountRepository).findById(AccountId.of(ACCOUNT_ID));
@@ -67,7 +67,8 @@ class AccountDomainServiceTest {
     @Test
     void resolveAccountForRegistration_withoutAccountId_provisionsNewAccount() {
         Account saved = mockAccount(ACCOUNT_ID, ORG_ID);
-        when(accountRepository.findByEmail(any(EmailAddress.class))).thenReturn(Optional.empty());
+        when(accountRepository.findByEmail(any(OrganizationId.class), any(EmailAddress.class)))
+                .thenReturn(Optional.empty());
         doNothing().when(passwordPolicyValidator).validatePasswordCompliance(any());
         when(passwordHashingComponent.hashPassword(any())).thenReturn(mock(PasswordHash.class));
         when(accountRepository.save(any())).thenReturn(saved);
@@ -75,8 +76,7 @@ class AccountDomainServiceTest {
         when(takiboIdentityRepository.existsByOrgIdAndAccountId(ORG_ID, ACCOUNT_ID)).thenReturn(false);
         when(takiboIdentityRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
-        CreateUserCommand command = commandWithEmail("new@example.com", "P@ssword1");
-        Account result = service.resolveAccountForRegistration(command, ORG_ID);
+        Account result = service.resolveAccountForRegistration(commandWithEmail("new@example.com", "P@ssword1"), ORG_ID);
 
         assertThat(result).isSameAs(saved);
         verify(accountRepository).save(any());
@@ -88,8 +88,7 @@ class AccountDomainServiceTest {
     void resolveExistingAccount_accountNotFound_throws() {
         when(accountRepository.findById(AccountId.of(ACCOUNT_ID))).thenReturn(Optional.empty());
 
-        CreateUserCommand command = commandWithAccountId(ACCOUNT_ID);
-        assertThatThrownBy(() -> service.resolveAccountForRegistration(command, ORG_ID))
+        assertThatThrownBy(() -> service.resolveAccountForRegistration(commandWithAccountId(ACCOUNT_ID), ORG_ID))
                 .isInstanceOf(UserCreationException.class)
                 .hasMessageContaining("Account not found");
     }
@@ -99,8 +98,7 @@ class AccountDomainServiceTest {
         Account wrongOrgAccount = mockAccount(ACCOUNT_ID, OTHER_ORG);
         when(accountRepository.findById(AccountId.of(ACCOUNT_ID))).thenReturn(Optional.of(wrongOrgAccount));
 
-        CreateUserCommand command = commandWithAccountId(ACCOUNT_ID);
-        assertThatThrownBy(() -> service.resolveAccountForRegistration(command, ORG_ID))
+        assertThatThrownBy(() -> service.resolveAccountForRegistration(commandWithAccountId(ACCOUNT_ID), ORG_ID))
                 .isInstanceOf(UserCreationException.class)
                 .hasMessageContaining("organization misalignment");
     }
@@ -134,7 +132,8 @@ class AccountDomainServiceTest {
     @Test
     void provisionTakiboIdentity_phaseA_identityIdEqualsAccountId() {
         Account account = mockAccount(ACCOUNT_ID, ORG_ID);
-        when(accountRepository.findByEmail(any(EmailAddress.class))).thenReturn(Optional.empty());
+        when(accountRepository.findByEmail(any(OrganizationId.class), any(EmailAddress.class)))
+                .thenReturn(Optional.empty());
         doNothing().when(passwordPolicyValidator).validatePasswordCompliance(any());
         when(passwordHashingComponent.hashPassword(any())).thenReturn(mock(PasswordHash.class));
         when(accountRepository.save(any())).thenReturn(account);
@@ -148,23 +147,18 @@ class AccountDomainServiceTest {
         verify(takiboIdentityRepository).save(captor.capture());
 
         TakiboIdentity identity = captor.getValue();
-
-        // Phase A : identity_id doit être égal à account_id
         assertThat(identity.getId().getValue())
                 .as("Phase A : TakiboIdentity.identityId doit être égal à Account.id")
                 .isEqualTo(ACCOUNT_ID);
-
-        assertThat(identity.getAccountId().getValue())
-                .isEqualTo(ACCOUNT_ID);
-
-        assertThat(identity.getOrgId().getValue())
-                .isEqualTo(ORG_ID);
+        assertThat(identity.getAccountId().getValue()).isEqualTo(ACCOUNT_ID);
+        assertThat(identity.getOrgId().getValue()).isEqualTo(ORG_ID);
     }
 
     @Test
     void provisionTakiboIdentity_ifAlreadyExists_doesNotCreateDuplicate() {
         Account account = mockAccount(ACCOUNT_ID, ORG_ID);
-        when(accountRepository.findByEmail(any(EmailAddress.class))).thenReturn(Optional.empty());
+        when(accountRepository.findByEmail(any(OrganizationId.class), any(EmailAddress.class)))
+                .thenReturn(Optional.empty());
         doNothing().when(passwordPolicyValidator).validatePasswordCompliance(any());
         when(passwordHashingComponent.hashPassword(any())).thenReturn(mock(PasswordHash.class));
         when(accountRepository.save(any())).thenReturn(account);
@@ -177,20 +171,39 @@ class AccountDomainServiceTest {
         verify(takiboIdentityRepository, never()).flush();
     }
 
-    // ─── validateEmailUniqueness ───────────────────────────────────────────────
+    // ─── validateEmailUniqueness — org-scoped ─────────────────────────────────
 
     @Test
-    void provisionAccountWithCredentials_duplicateEmail_throws() {
-        when(accountRepository.findByEmail(any(EmailAddress.class)))
+    void provisionAccountWithCredentials_duplicateEmail_sameOrg_throws() {
+        when(accountRepository.findByEmail(eq(OrganizationId.of(ORG_ID)), any(EmailAddress.class)))
                 .thenReturn(Optional.of(mock(Account.class)));
 
         assertThatThrownBy(() ->
                 service.provisionAccountWithCredentials(ORG_ID, "taken@example.com", "P@ssword1", Map.of()))
                 .isInstanceOf(UserCreationException.class)
-                .hasMessageContaining("Email already registered");
+                .hasMessageContaining("Email already registered in this organization");
 
         verify(accountRepository, never()).save(any());
         verify(takiboIdentityRepository, never()).save(any());
+    }
+
+    @Test
+    void provisionAccountWithCredentials_sameEmail_differentOrg_succeeds() {
+        Account saved = mockAccount(ACCOUNT_ID, OTHER_ORG);
+        when(accountRepository.findByEmail(eq(OrganizationId.of(OTHER_ORG)), any(EmailAddress.class)))
+                .thenReturn(Optional.empty());
+        doNothing().when(passwordPolicyValidator).validatePasswordCompliance(any());
+        when(passwordHashingComponent.hashPassword(any())).thenReturn(mock(PasswordHash.class));
+        when(accountRepository.save(any())).thenReturn(saved);
+        when(clock.instant()).thenReturn(Instant.now());
+        when(takiboIdentityRepository.existsByOrgIdAndAccountId(OTHER_ORG, ACCOUNT_ID)).thenReturn(false);
+        when(takiboIdentityRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        Account result = service.provisionAccountWithCredentials(OTHER_ORG, "shared@example.com", "P@ssword1", Map.of());
+
+        assertThat(result).isSameAs(saved);
+        verify(accountRepository).findByEmail(eq(OrganizationId.of(OTHER_ORG)), any(EmailAddress.class));
+        verify(accountRepository, never()).findByEmail(any(EmailAddress.class));
     }
 
     // ─── provisionNewAccount guards ───────────────────────────────────────────
