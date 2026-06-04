@@ -47,6 +47,11 @@ public class GroupRepositoryAdapter implements GroupRepository {
     }
 
     @Override
+    public Optional<Group> findById(GroupId id) {
+        return jpa.findById(id.getValue()).map(mapper::toDomain);
+    }
+
+    @Override
     @Transactional
     public Group save(Group group) {
         GroupEntity entity = mapper.toEntity(group);

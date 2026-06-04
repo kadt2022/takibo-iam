@@ -18,6 +18,7 @@ public interface GroupJpaMapper {
     @Mapping(target = "id", source = "id", qualifiedByName = "groupIdToUuid")
     @Mapping(target = "spaceId", source = "spaceId", qualifiedByName = "spaceIdToUuid")
     @Mapping(target = "orgId", ignore = true)
+    @Mapping(target = "nature", source = "nature")
     @Mapping(target = "code", source = "code")
     @Mapping(target = "name", source = "name")
     @Mapping(target = "description", source = "description")
@@ -29,6 +30,7 @@ public interface GroupJpaMapper {
     // Entity -> Domain
     @Mapping(target = "id", source = "id", qualifiedByName = "uuidToGroupId")
     @Mapping(target = "spaceId", source = "spaceId", qualifiedByName = "uuidToSpaceId")
+    @Mapping(target = "nature", source = "nature")
     @Mapping(target = "code", source = "code")
     @Mapping(target = "name", source = "name")
     @Mapping(target = "description", source = "description")

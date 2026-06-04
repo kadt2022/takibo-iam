@@ -1,5 +1,6 @@
 package com.takibo.identitycore.infrastructure.entity;
 
+import com.takibo.identitycore.domain.model.GroupNature;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -36,6 +37,10 @@ public class GroupEntity {
 
     @Column(name = "space_id", nullable = false, updatable = false)
     private UUID spaceId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "nature", nullable = false, length = 20)
+    private GroupNature nature;
 
     @Column(name = "code", nullable = false, length = 120)
     private String code;

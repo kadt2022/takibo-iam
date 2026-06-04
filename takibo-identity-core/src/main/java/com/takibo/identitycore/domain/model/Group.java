@@ -16,6 +16,7 @@ public class Group {
     @EqualsAndHashCode.Include @ToString.Include
     private final GroupId id;
     private final SpaceId spaceId;
+    private final GroupNature nature;
 
     @ToString.Include
     private String name;
@@ -25,16 +26,18 @@ public class Group {
     private Instant updatedAt;
     private long version;
 
-    public static Group createNew(SpaceId spaceId, String code, String name, String description) {
+    public static Group createNew(SpaceId spaceId, String code, String name, String description, GroupNature nature) {
         Instant now = Instant.now();
 
         Objects.requireNonNull(spaceId, "spaceId");
         Objects.requireNonNull(code, "code");
         Objects.requireNonNull(name, "name");
+        Objects.requireNonNull(nature, "nature");
 
         return Group.builder()
                 .id(GroupId.generate())
                 .spaceId(spaceId)
+                .nature(nature)
                 .code(code)
                 .name(name)
                 .description(description)

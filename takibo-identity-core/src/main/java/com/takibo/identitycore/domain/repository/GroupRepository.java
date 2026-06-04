@@ -10,8 +10,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface GroupRepository {
-    boolean existsBySpaceIdAndCode(SpaceId spaceId, String groupCode);
 
+    boolean existsBySpaceIdAndCode(SpaceId spaceId, String groupCode);
 
     List<GroupReference> findReferencesBySpaceIdAndCodeIn(UUID spaceId, List<String> groupCodes);
 
@@ -19,7 +19,7 @@ public interface GroupRepository {
 
     Optional<GroupId> findIdBySpaceIdAndCode(SpaceId spaceId, String code);
 
-    Group save(Group group);
+    Optional<Group> findById(GroupId id);
 
-  //  boolean existsBySpaceIdAndCode(SpaceId spaceId, String code);
+    Group save(Group group);
 }
