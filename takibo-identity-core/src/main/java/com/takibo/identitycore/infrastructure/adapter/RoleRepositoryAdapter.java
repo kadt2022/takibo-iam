@@ -3,6 +3,7 @@ package com.takibo.identitycore.infrastructure.adapter;
 import com.takibo.identitycore.domain.model.Role;
 import com.takibo.identitycore.domain.model.RoleNature;
 import com.takibo.identitycore.domain.repository.RoleRepository;
+import com.takibo.identitycore.domain.vo.RoleId;
 import com.takibo.identitycore.domain.vo.SpaceId;
 import com.takibo.identitycore.infrastructure.entity.RoleEntity;
 import com.takibo.identitycore.infrastructure.jpa.mapper.RoleJpaMapper;
@@ -29,6 +30,11 @@ public class RoleRepositoryAdapter implements RoleRepository {
     @Override
     public Optional<UUID> findIdBySpaceIdAndCode(SpaceId spaceId, String roleCode) {
         return jpa.findIdBySpaceIdAndCode(spaceId.value(), roleCode);
+    }
+
+    @Override
+    public Optional<Role> findById(RoleId id) {
+        return jpa.findById(id.getValue()).map(roleJpaMapper::toDomain);
     }
 
     @Override

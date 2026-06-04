@@ -2,6 +2,7 @@ package com.takibo.identitycore.application.rbac.service;
 
 import com.takibo.identitycore.integration.space.port.SpaceStatusCheckerCase;
 import com.takibo.identitycore.domain.model.Group;
+import com.takibo.identitycore.domain.model.GroupNature;
 import com.takibo.identitycore.domain.vo.SpaceId;
 import com.takibo.identitycore.domain.repository.GroupRepository;
 import lombok.RequiredArgsConstructor;
@@ -25,7 +26,7 @@ public class GroupApplicationService {
             return;
         }
 
-        Group group = Group.createNew(spaceId, code, name, description);
+        Group group = Group.createNew(spaceId, code, name, description, GroupNature.GOVERNANCE);
 
         try {
             groupRepository.save(group);
@@ -42,7 +43,8 @@ public class GroupApplicationService {
                 SpaceId.of(spaceId),
                 code,
                 name != null ? name : code,
-                desc
+                desc,
+                GroupNature.GOVERNANCE
         );
 
         Group saved = groupRepository.save(group);

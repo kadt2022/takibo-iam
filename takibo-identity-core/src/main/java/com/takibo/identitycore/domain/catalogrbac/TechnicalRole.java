@@ -13,7 +13,7 @@ import static com.takibo.identitycore.domain.catalogrbac.TechnicalScope.*;
 public enum TechnicalRole {
 
     SYSTEM_ADMIN(
-            "R_SYSTEM_ADMIN",
+            "R_TAKIBO_PLATFORM_ADMIN",
             SYSTEM,
             Set.of(
                     CREATE_ORG,
@@ -33,7 +33,7 @@ public enum TechnicalRole {
     ),
 
     SYSTEM_AUDITOR(
-            "R_SYSTEM_AUDITOR",
+            "R_TAKIBO_PLATFORM_AUDITOR",
             SYSTEM,
             Set.of(
                     READ_ORG,

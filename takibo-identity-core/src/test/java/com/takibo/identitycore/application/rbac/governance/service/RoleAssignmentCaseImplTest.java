@@ -70,7 +70,7 @@ class RoleAssignmentCaseImplTest {
     @Test
     void assignTechnicalRole_systemRoleWithOrgId_throwsScopeViolation() {
         assertThatThrownBy(() ->
-                service.assignTechnicalRole(ORG_ID, null, FOUNDER, "R_SYSTEM_ADMIN", "system"))
+                service.assignTechnicalRole(ORG_ID, null, FOUNDER, "R_TAKIBO_PLATFORM_ADMIN", "system"))
                 .isInstanceOf(InvalidRoleScopeException.class)
                 .hasMessageContaining("must not be scoped");
 
