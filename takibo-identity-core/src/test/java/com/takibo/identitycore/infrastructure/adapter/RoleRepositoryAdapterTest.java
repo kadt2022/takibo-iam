@@ -15,6 +15,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -77,6 +78,20 @@ class RoleRepositoryAdapterTest {
                 ORG_ID, SPACE_ID, List.of("R_SPACE_ADMIN"));
 
         assertThat(result).isEmpty();
+    }
+
+    @Test
+    void findById_delegatesToJpaAndMapsToDomain() {
+        RoleEntity entity = roleEntity(RoleNature.BUSINESS, "MANAGER");
+        Role domain = domainRole(RoleNature.BUSINESS, "MANAGER");
+
+        when(jpa.findById(ROLE_ID)).thenReturn(Optional.of(entity));
+        when(roleJpaMapper.toDomain(entity)).thenReturn(domain);
+
+        Optional<Role> result = adapter.findById(RoleId.of(ROLE_ID));
+
+        assertThat(result).contains(domain);
+        verify(jpa).findById(ROLE_ID);
     }
 
     private RoleEntity roleEntity(RoleNature nature, String code) {
