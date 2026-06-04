@@ -12,21 +12,21 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
 
-
 @Service
 @RequiredArgsConstructor
 public class GroupApplicationService {
+
     private final GroupRepository groupRepository;
     private final SpaceStatusCheckerCase spaceStatusCheckerCase;
 
     @Transactional
-    public void ensure(SpaceId spaceId, String code, String name, String description) {
+    public void ensure(SpaceId spaceId, String code, String name, String description, GroupNature nature) {
         spaceStatusCheckerCase.assertSpaceExistsAndActive(spaceId.getValue());
         if (groupRepository.findBySpaceIdAndCode(spaceId, code).isPresent()) {
             return;
         }
 
-        Group group = Group.createNew(spaceId, code, name, description, GroupNature.GOVERNANCE);
+        Group group = Group.createNew(spaceId, code, name, description, nature);
 
         try {
             groupRepository.save(group);
@@ -35,7 +35,7 @@ public class GroupApplicationService {
         }
     }
 
-    public UUID ensureGroup(UUID spaceId, String code, String name, String desc) {
+    public UUID ensureGroup(UUID spaceId, String code, String name, String desc, GroupNature nature) {
         var existingId = groupRepository.findIdBySpaceIdAndCode(SpaceId.of(spaceId), code);
         if (existingId.isPresent()) return existingId.get().value();
 
@@ -44,7 +44,7 @@ public class GroupApplicationService {
                 code,
                 name != null ? name : code,
                 desc,
-                GroupNature.GOVERNANCE
+                nature
         );
 
         Group saved = groupRepository.save(group);

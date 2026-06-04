@@ -40,13 +40,25 @@ class GroupApplicationServiceTest {
         when(groupRepository.findBySpaceIdAndCode(SPACE_ID, "G_ADMINS")).thenReturn(Optional.empty());
         when(groupRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
-        service.ensure(SPACE_ID, "G_ADMINS", "Admins", "Admin group");
+        service.ensure(SPACE_ID, "G_ADMINS", "Admins", "Admin group", GroupNature.GOVERNANCE);
 
         ArgumentCaptor<Group> captor = ArgumentCaptor.forClass(Group.class);
         verify(groupRepository).save(captor.capture());
 
         assertThat(captor.getValue().getNature()).isEqualTo(GroupNature.GOVERNANCE);
         assertThat(captor.getValue().getCode()).isEqualTo("G_ADMINS");
+    }
+
+    @Test
+    void ensure_businessNature_savesWithBusinessNature() {
+        when(groupRepository.findBySpaceIdAndCode(SPACE_ID, "GRP_FINANCE")).thenReturn(java.util.Optional.empty());
+        when(groupRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        service.ensure(SPACE_ID, "GRP_FINANCE", "Finance", null, GroupNature.BUSINESS);
+
+        ArgumentCaptor<Group> captor = ArgumentCaptor.forClass(Group.class);
+        verify(groupRepository).save(captor.capture());
+        assertThat(captor.getValue().getNature()).isEqualTo(GroupNature.BUSINESS);
     }
 
     @Test
@@ -61,7 +73,7 @@ class GroupApplicationServiceTest {
         when(groupRepository.findIdBySpaceIdAndCode(SPACE_ID, "G_OPS")).thenReturn(Optional.empty());
         when(groupRepository.save(any())).thenReturn(saved);
 
-        UUID result = service.ensureGroup(SPACE_UUID, "G_OPS", null, null);
+        UUID result = service.ensureGroup(SPACE_UUID, "G_OPS", null, null, GroupNature.GOVERNANCE);
 
         assertThat(result).isEqualTo(GROUP_UUID);
 
