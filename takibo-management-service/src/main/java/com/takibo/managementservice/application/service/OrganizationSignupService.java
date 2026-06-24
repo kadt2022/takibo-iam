@@ -1,8 +1,9 @@
 package com.takibo.managementservice.application.service;
 
-import com.takibo.identitycore.application.identity.command.CreateUserCommand;
+import com.takibo.identitycore.application.identity.command.ProvisionFounderUserCommand;
 import com.takibo.identitycore.application.identity.port.AccountApplicationCase;
-import com.takibo.identitycore.application.identity.port.UserApplicationCase;
+import com.takibo.identitycore.application.identity.port.FounderUserProvisioningCase;
+import com.takibo.identitycore.integration.security.port.CurrentOrganizationContextCase;
 import com.takibo.identitycore.interfaces.rest.response.AccountResponse;
 import com.takibo.identitycore.interfaces.rest.response.UserResponse;
 import com.takibo.managementservice.application.command.CreateSpaceCommand;
@@ -15,11 +16,11 @@ import com.takibo.managementservice.interfaces.rest.response.OrganizationSignupR
 import com.takibo.managementservice.interfaces.rest.response.SpaceResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.Assert;
 
-import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -30,7 +31,8 @@ public class OrganizationSignupService {
     private final OrganizationApplicationService orgApp;
     private final SpaceApplicationService spaceApp;
     private final AccountApplicationCase accountApp;
-    private final UserApplicationCase userApp;
+    private final FounderUserProvisioningCase founderProvisioning;
+    private final CurrentOrganizationContextCase currentOrganizationContext;
     private final TechnicalRbacProvision technicalRbacProvision;
 
     @Transactional
@@ -62,18 +64,17 @@ public class OrganizationSignupService {
         log.info("Space created - spaceId={}", space.id());
 
 
-        CreateUserCommand founderInSpace = CreateUserCommand.builder()
-                .spaceId(space.id())
-                .accountId(account.id())
-                .email(null)
-                .rawPassword(null)
-                .username(req.profile().username())
-                .firstName(req.profile().firstName())
-                .lastName(req.profile().lastName())
-                .metadata(Map.of())
-                .build();
+        // Provisioning fondateur : acte de bootstrap, indépendant du contexte d'org du token.
+        ProvisionFounderUserCommand founderCommand = new ProvisionFounderUserCommand(
+                orgId,
+                space.id(),
+                account.id(),
+                req.profile().username(),
+                req.profile().firstName(),
+                req.profile().lastName()
+        );
 
-        UserResponse founder = userApp.createUser(founderInSpace);
+        UserResponse founder = founderProvisioning.provisionFounder(founderCommand);
         log.info("User created - userId={}", founder.id());
 
         technicalRbacProvision.provisionFounder(
@@ -98,10 +99,17 @@ public class OrganizationSignupService {
     private UUID resolveOrganization(OrganizationInput org) {
         Assert.notNull(org, "organization is required");
 
+        // Org existante : ce n'est PAS un bootstrap. On exige que l'appelant en soit propriétaire
+        // (sinon n'importe quel appelant authentifié pourrait provisionner un fondateur ailleurs).
         if (org.id() != null) {
+            UUID currentOrgId = currentOrganizationContext.requireCurrentOrganizationId();
+            if (!org.id().equals(currentOrgId)) {
+                throw new AccessDeniedException("ORG_OWNERSHIP_REQUIRED");
+            }
             return org.id();
         }
 
+        // Org absente : création d'une nouvelle frontière (self-service signup), aucun contexte requis.
         Assert.hasText(org.code(), "organization.code is required when id is absent");
         Assert.hasText(org.name(), "organization.name is required when id is absent");
 

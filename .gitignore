@@ -90,6 +90,7 @@ application-secret.yml
 application-prive.yml
 application-secrets.yml
 application-private.yml
+application-secret.example.yml
 
 ### Couverture / rapports ###
 coverage/

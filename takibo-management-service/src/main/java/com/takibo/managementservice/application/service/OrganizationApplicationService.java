@@ -1,6 +1,8 @@
 package com.takibo.managementservice.application.service;
 
 import com.takibo.managementservice.application.command.CreateOrganizationCommand;
+import com.takibo.managementservice.application.common.TakiboCodeNormalizer;
+import com.takibo.managementservice.domain.exception.OrganizationCodeAlreadyExistsException;
 import com.takibo.managementservice.domain.model.OrganizationStatus;
 import com.takibo.managementservice.infrastructure.entity.OrganizationEntity;
 import com.takibo.managementservice.infrastructure.jpa.repository.JpaOrganizationRepository;
@@ -16,9 +18,14 @@ public class OrganizationApplicationService {
 
   @Transactional
   public CreateOrganizationCommand create(String code, String name) {
+    String normalizedCode = TakiboCodeNormalizer.normalizeOrg(code);
+    if (organizations.existsByCode(normalizedCode)) {
+      throw new OrganizationCodeAlreadyExistsException(normalizedCode);
+    }
+
     var e = new OrganizationEntity();
     e.setId(UUID.randomUUID());
-    e.setCode(code);
+    e.setCode(normalizedCode);
     e.setName(name);
     e.setStatus(OrganizationStatus.ACTIVE);
     organizations.saveAndFlush(e);

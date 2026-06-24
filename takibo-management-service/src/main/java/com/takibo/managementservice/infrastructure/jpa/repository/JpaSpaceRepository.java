@@ -10,16 +10,14 @@ import java.util.UUID;
 
 public interface JpaSpaceRepository extends JpaRepository<SpaceEntity, UUID> {
 
-    Optional<SpaceEntity> findByCode(String code);
-
-    boolean existsByCode(String code);
-
+    // Résolution toujours scopée à l'organisation : un space.code n'est unique que dans une org.
+    // (Les anciennes méthodes globales findByCode/existsByCode ont été retirées : ambiguës et inutilisées.)
     boolean existsByOrgIdAndCode(UUID orgId, String code);
 
     Optional<SpaceEntity> findByOrgIdAndCode(UUID orgId, String code);
 
     /**
-     * Retourne l'orgId d'un port à partir de son id.
+     * Retourne l'orgId d'un space à partir de son id.
      * Portable MySQL/Postgres : aucun appel à UUID_TO_BIN/BIN_TO_UUID.
      */
     @Query("""
