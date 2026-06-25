@@ -1,8 +1,9 @@
 package com.takibo.identitycore.interfaces.rest.api;
 
 import com.takibo.identitycore.application.identity.command.CreateUserCommand;
-import com.takibo.identitycore.application.identity.service.UserApplicationService;
+import com.takibo.identitycore.application.identity.port.UserApplicationCase;
 import com.takibo.identitycore.domain.exception.OrganizationNotFoundException;
+import com.takibo.identitycore.domain.exception.SpaceNotFoundException;
 import com.takibo.identitycore.integration.space.port.ResolvedSpaceKey;
 import com.takibo.identitycore.integration.space.port.SpaceKeyResolutionCase;
 import com.takibo.identitycore.interfaces.rest.request.CreateUserRequest;
@@ -32,7 +33,7 @@ class ReadableUserControllerTest {
     private static final UUID USER_ID  = UUID.fromString("cccccccc-0000-0000-0000-000000000003");
 
     @Mock private SpaceKeyResolutionCase spaceKeyResolution;
-    @Mock private UserApplicationService service;
+    @Mock private UserApplicationCase service;
 
     @InjectMocks private ReadableUserController controller;
 
@@ -51,11 +52,11 @@ class ReadableUserControllerTest {
 
     @Test
     void resolves_then_delegates_with_resolved_space_id() {
-        when(spaceKeyResolution.resolve("takibo", "finance"))
-                .thenReturn(new ResolvedSpaceKey(ORG_ID, SPACE_ID, "takibo", "finance"));
+        when(spaceKeyResolution.resolve("takibo-iam", "finance"))
+                .thenReturn(new ResolvedSpaceKey(ORG_ID, SPACE_ID, "takibo-iam", "finance"));
         when(service.createUser(any(CreateUserCommand.class))).thenReturn(userResponse());
 
-        ResponseEntity<UserResponse> response = controller.create("takibo", "finance", request());
+        ResponseEntity<UserResponse> response = controller.create("takibo-iam", "finance", request());
 
         assertThat(response.getStatusCode().value()).isEqualTo(HttpStatus.CREATED.value());
         assertThat(response.getBody()).isNotNull();
@@ -65,6 +66,8 @@ class ReadableUserControllerTest {
         ArgumentCaptor<CreateUserCommand> captor = ArgumentCaptor.forClass(CreateUserCommand.class);
         verify(service).createUser(captor.capture());
         assertThat(captor.getValue().spaceId()).isEqualTo(SPACE_ID);
+        assertThat(captor.getValue().email()).isEqualTo("alice@takibo.io");
+        assertThat(captor.getValue().rawPassword()).isEqualTo("Str0ng!Passw0rd");
         assertThat(captor.getValue().username()).isEqualTo("alice");
     }
 
@@ -75,6 +78,17 @@ class ReadableUserControllerTest {
 
         assertThatThrownBy(() -> controller.create("ghost", "finance", request()))
                 .isInstanceOf(OrganizationNotFoundException.class);
+
+        verify(service, org.mockito.Mockito.never()).createUser(any());
+    }
+
+    @Test
+    void propagates_space_resolution_failure_without_calling_service() {
+        when(spaceKeyResolution.resolve("takibo-iam", "ghost"))
+                .thenThrow(new SpaceNotFoundException("Space not found: ghost"));
+
+        assertThatThrownBy(() -> controller.create("takibo-iam", "ghost", request()))
+                .isInstanceOf(SpaceNotFoundException.class);
 
         verify(service, org.mockito.Mockito.never()).createUser(any());
     }

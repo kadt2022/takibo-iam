@@ -36,7 +36,7 @@ public final class TakiboCodeNormalizer {
     public static String normalizeSpace(String input, int suffix) {
         String result = normalize(input);
         if (result.length() < 3) {
-            result = result + "-" + suffix;
+            result = result.isBlank() ? "space-" + suffix : result + "-" + suffix;
         }
         return result;
     }

@@ -5,7 +5,7 @@ import com.takibo.audit.annotations.LogAction;
 import com.takibo.audit.annotations.TriggerAlertOnFailure;
 import com.takibo.audit.domain.AuditType;
 import com.takibo.identitycore.application.identity.command.CreateUserCommand;
-import com.takibo.identitycore.application.identity.service.UserApplicationService;
+import com.takibo.identitycore.application.identity.port.UserApplicationCase;
 import com.takibo.identitycore.domain.exception.OrganizationNotFoundException;
 import com.takibo.identitycore.domain.exception.SpaceNotFoundException;
 import com.takibo.identitycore.integration.space.port.ResolvedSpaceKey;
@@ -34,7 +34,7 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>
  * Reçoit les codes humains {@code orgCode}/{@code spaceCode}, les résout en
  * {@code spaceId} via le port externe {@link SpaceKeyResolutionCase} (implémenté par le TMS),
- * puis délègue à la MÊME logique de création que la route par UUID ({@link UserApplicationService}).
+ * puis délègue à la MÊME logique de création que la route par UUID ({@link UserApplicationCase}).
  * <p>
  * Aucune logique métier n'est dupliquée et aucune entité de persistance n'est manipulée ici.
  * <p>
@@ -50,7 +50,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class ReadableUserController {
 
     private final SpaceKeyResolutionCase spaceKeyResolution;
-    private final UserApplicationService service;
+    private final UserApplicationCase service;
 
     @PostMapping
     @LogAction("Registration of a new user (readable route)")

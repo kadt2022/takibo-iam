@@ -62,7 +62,11 @@ class FounderUserProvisioningServiceTest {
         assertThat(built.spaceId()).isEqualTo(SPACE_ID);
         assertThat(built.accountId()).isEqualTo(ACCOUNT_ID);
         assertThat(built.username()).isEqualTo("founder");
+        assertThat(built.firstName()).isEqualTo("Tresor");
+        assertThat(built.lastName()).isEqualTo("Kadima");
         assertThat(built.metadata()).containsEntry("provisioning", "organization-signup-founder");
+        verify(spaceContextVerifier).validateSpaceContext(SPACE_ID);
+        verify(userMapper).toUserResponse(result.user(), result.accountEmail());
     }
 
     @Test
