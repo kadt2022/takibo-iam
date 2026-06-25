@@ -4,6 +4,7 @@ import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.output.MigrateResult;
 import org.junit.jupiter.api.Test;
 
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -15,7 +16,25 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 class DatabaseMigrationTest {
 
     @Test
-    void flywayMigrationsApplyOnConfiguredDatabase() throws Exception {
+    void given_tms_code_normalization_migration_when_non_ascii_guard_is_checked_then_it_runs_before_sql_normalization() throws Exception {
+        String migration = readMigration("db/migration/V202606240001__tms__normalize_org_space_codes.sql");
+
+        int nonAsciiDiagnostic = migration.indexOf("DIAGNOSTIC: non-ASCII legacy codes");
+        int orgAsciiGuard = migration.indexOf("WHERE  code !~ '^[A-Za-z0-9 _.-]+$'");
+        int firstCollisionDiagnostic = migration.indexOf("would collide after normalization");
+        int firstUpdate = migration.indexOf("UPDATE organizations");
+
+        assertThat(nonAsciiDiagnostic).isGreaterThanOrEqualTo(0);
+        assertThat(orgAsciiGuard).isGreaterThan(nonAsciiDiagnostic);
+        assertThat(firstCollisionDiagnostic).isGreaterThan(orgAsciiGuard);
+        assertThat(firstUpdate).isGreaterThan(firstCollisionDiagnostic);
+        assertThat(migration).contains("MIGRATION BLOCKED: % organization code(s) contain non-ASCII characters");
+        assertThat(migration).contains("MIGRATION BLOCKED: % space code(s) contain non-ASCII characters");
+        assertThat(migration).contains("THEN 'space-' || lpad(");
+    }
+
+    @Test
+    void given_configured_database_check_environment_when_flyway_migrates_then_all_migrations_apply() throws Exception {
         assumeTrue("true".equalsIgnoreCase(System.getenv("TAKIBO_DATABASE_CHECK")),
                 "Only runs in the database-check CI job");
 
@@ -48,5 +67,12 @@ class DatabaseMigrationTest {
                 .as(name + " must be set by the database-check job")
                 .isNotBlank();
         return value;
+    }
+
+    private static String readMigration(String resourcePath) throws Exception {
+        try (var stream = DatabaseMigrationTest.class.getClassLoader().getResourceAsStream(resourcePath)) {
+            assertThat(stream).as(resourcePath + " must exist").isNotNull();
+            return new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+        }
     }
 }

@@ -27,6 +27,12 @@ subprojects {
             toolchain { languageVersion = JavaLanguageVersion.of(21) }
         }
 
+        // Conserve les noms de paramètres dans le bytecode : requis par Spring Data JPA
+        // pour lier les parametres nommes (:param) sans @Param. Aligne Gradle sur l'IDE.
+        tasks.withType(JavaCompile).configureEach {
+            options.compilerArgs.add('-parameters')
+        }
+
         sourceSets {
             main {
                 java {
