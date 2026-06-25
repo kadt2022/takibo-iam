@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 class DatabaseMigrationTest {
 
     @Test
-    void tmsCodeNormalizationMigrationBlocksNonAsciiBeforeSqlNormalization() throws Exception {
+    void given_tms_code_normalization_migration_when_non_ascii_guard_is_checked_then_it_runs_before_sql_normalization() throws Exception {
         String migration = readMigration("db/migration/V202606240001__tms__normalize_org_space_codes.sql");
 
         int nonAsciiDiagnostic = migration.indexOf("DIAGNOSTIC: non-ASCII legacy codes");
@@ -34,7 +34,7 @@ class DatabaseMigrationTest {
     }
 
     @Test
-    void flywayMigrationsApplyOnConfiguredDatabase() throws Exception {
+    void given_configured_database_check_environment_when_flyway_migrates_then_all_migrations_apply() throws Exception {
         assumeTrue("true".equalsIgnoreCase(System.getenv("TAKIBO_DATABASE_CHECK")),
                 "Only runs in the database-check CI job");
 

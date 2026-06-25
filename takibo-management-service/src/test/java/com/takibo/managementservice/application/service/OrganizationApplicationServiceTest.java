@@ -25,7 +25,7 @@ class OrganizationApplicationServiceTest {
     @InjectMocks private OrganizationApplicationService service;
 
     @Test
-    void normalizes_code_and_saves_active_organization() {
+    void given_new_organization_when_create_then_saves_normalized_active_organization() {
         when(organizations.existsByCode("takibo-iam")).thenReturn(false);
 
         var result = service.create("Takibo IAM", "Takibo");
@@ -44,7 +44,7 @@ class OrganizationApplicationServiceTest {
     }
 
     @Test
-    void refuses_existing_normalized_code() {
+    void given_existing_normalized_code_when_create_then_throws_code_already_exists() {
         when(organizations.existsByCode("takibo-iam")).thenReturn(true);
 
         assertThatThrownBy(() -> service.create("Takibo IAM", "Takibo"))

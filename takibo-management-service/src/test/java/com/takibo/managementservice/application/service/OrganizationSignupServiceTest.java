@@ -51,7 +51,7 @@ class OrganizationSignupServiceTest {
     @InjectMocks private OrganizationSignupService service;
 
     @Test
-    void creates_organization_account_space_founder_and_technical_rbac_when_org_id_absent() {
+    void given_missing_organization_id_when_signup_then_creates_organization_account_space_founder_and_rbac() {
         OrganizationSignupRequest req = request(new OrganizationInput(null, "Takibo IAM", "Takibo"));
         when(orgApp.create("Takibo IAM", "Takibo"))
                 .thenReturn(new CreateOrganizationCommand(ORG_ID, "takibo-iam", "Takibo"));
@@ -86,7 +86,7 @@ class OrganizationSignupServiceTest {
     }
 
     @Test
-    void continues_when_existing_org_matches_current_context() {
+    void given_existing_organization_matching_current_context_when_signup_then_continues_without_creating_organization() {
         OrganizationSignupRequest req = request(new OrganizationInput(ORG_ID, "Takibo IAM", "Takibo"));
         when(currentOrganizationContext.requireCurrentOrganizationId()).thenReturn(ORG_ID);
         when(accountApp.createAccountInOrg(ORG_ID, "founder@takibo.io", "Str0ng!Passw0rd"))
@@ -103,7 +103,7 @@ class OrganizationSignupServiceTest {
     }
 
     @Test
-    void rejects_existing_org_when_current_context_differs() {
+    void given_existing_organization_not_matching_current_context_when_signup_then_throws_access_denied() {
         UUID otherOrg = UUID.fromString("eeeeeeee-0000-0000-0000-000000000005");
         OrganizationSignupRequest req = request(new OrganizationInput(ORG_ID, "Takibo IAM", "Takibo"));
         when(currentOrganizationContext.requireCurrentOrganizationId()).thenReturn(otherOrg);

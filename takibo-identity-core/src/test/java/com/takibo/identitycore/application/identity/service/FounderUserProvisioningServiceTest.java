@@ -44,7 +44,7 @@ class FounderUserProvisioningServiceTest {
     }
 
     @Test
-    void provisions_founder_via_orchestrator_bypassing_token_org() {
+    void given_matching_space_context_when_provision_founder_then_registers_user_with_signup_metadata() {
         when(spaceContextVerifier.validateSpaceContext(SPACE_ID))
                 .thenReturn(new SpaceContext(new SpaceId(SPACE_ID), ORG_ID));
         UserRegistrationResult result = mock(UserRegistrationResult.class);
@@ -70,7 +70,7 @@ class FounderUserProvisioningServiceTest {
     }
 
     @Test
-    void rejects_when_space_does_not_belong_to_declared_org() {
+    void given_space_context_from_another_organization_when_provision_founder_then_throws_access_denied() {
         UUID otherOrg = UUID.fromString("dddddddd-0000-0000-0000-000000000009");
         when(spaceContextVerifier.validateSpaceContext(SPACE_ID))
                 .thenReturn(new SpaceContext(new SpaceId(SPACE_ID), otherOrg));

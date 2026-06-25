@@ -9,19 +9,19 @@ class SpaceCodeGeneratorTest {
     private final SpaceCodeGenerator generator = new SpaceCodeGenerator();
 
     @Test
-    void generates_from_requested_code_when_provided() {
+    void given_requested_code_when_normalize_or_generate_then_uses_requested_code() {
         assertThat(generator.normalizeOrGenerate("BUSA Finance", "Ignored Name"))
                 .isEqualTo("busa-finance");
     }
 
     @Test
-    void generates_from_name_when_requested_code_is_absent() {
+    void given_missing_requested_code_when_normalize_or_generate_then_uses_name() {
         assertThat(generator.normalizeOrGenerate(null, "Takibo IAM"))
                 .isEqualTo("takibo-iam");
     }
 
     @Test
-    void returns_lowercase_kebab_case_limited_to_thirty_characters() {
+    void given_long_requested_code_when_normalize_or_generate_then_returns_lowercase_kebab_case_limited_to_thirty_characters() {
         String code = generator.normalizeOrGenerate(
                 "Identity Core Finance Security Operations",
                 "Ignored");
@@ -31,7 +31,7 @@ class SpaceCodeGeneratorTest {
     }
 
     @Test
-    void never_returns_empty_or_edge_hyphenated_code() {
+    void given_blank_inputs_when_normalize_or_generate_then_returns_non_empty_code_without_edge_hyphens() {
         String code = generator.normalizeOrGenerate("", "!!!");
 
         assertThat(code).isNotBlank();

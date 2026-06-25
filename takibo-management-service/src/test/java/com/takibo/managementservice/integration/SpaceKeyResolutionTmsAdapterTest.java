@@ -34,7 +34,7 @@ class SpaceKeyResolutionTmsAdapterTest {
     @InjectMocks private SpaceKeyResolutionTmsAdapter adapter;
 
     @Test
-    void resolves_and_normalizes_raw_codes() {
+    void given_raw_org_and_space_codes_when_resolve_then_returns_normalized_scoped_space_key() {
         // Inputs non normalisés : doivent être canonicalisés avant lookup.
         when(organizations.findByCode("takibo-iam"))
                 .thenReturn(Optional.of(OrganizationEntity.builder().id(ORG_ID).code("takibo-iam").build()));
@@ -53,7 +53,7 @@ class SpaceKeyResolutionTmsAdapterTest {
     }
 
     @Test
-    void throws_when_organization_unknown() {
+    void given_unknown_organization_code_when_resolve_then_throws_organization_not_found() {
         when(organizations.findByCode("ghost")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> adapter.resolve("Ghost", "finance"))
@@ -64,7 +64,7 @@ class SpaceKeyResolutionTmsAdapterTest {
     }
 
     @Test
-    void throws_when_space_unknown_in_org() {
+    void given_unknown_space_code_in_organization_when_resolve_then_throws_space_not_found() {
         when(organizations.findByCode("takibo"))
                 .thenReturn(Optional.of(OrganizationEntity.builder().id(ORG_ID).code("takibo").build()));
         when(spaces.findByOrgIdAndCode(ORG_ID, "unknown")).thenReturn(Optional.empty());

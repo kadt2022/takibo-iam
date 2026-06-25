@@ -51,7 +51,7 @@ class ReadableUserControllerTest {
     }
 
     @Test
-    void resolves_then_delegates_with_resolved_space_id() {
+    void given_readable_org_and_space_codes_when_create_user_then_delegates_with_resolved_space_id() {
         when(spaceKeyResolution.resolve("takibo-iam", "finance"))
                 .thenReturn(new ResolvedSpaceKey(ORG_ID, SPACE_ID, "takibo-iam", "finance"));
         when(service.createUser(any(CreateUserCommand.class))).thenReturn(userResponse());
@@ -72,7 +72,7 @@ class ReadableUserControllerTest {
     }
 
     @Test
-    void propagates_resolution_failure_without_calling_service() {
+    void given_unknown_organization_when_create_user_then_propagates_resolution_failure_without_calling_service() {
         when(spaceKeyResolution.resolve("ghost", "finance"))
                 .thenThrow(new OrganizationNotFoundException("Organization not found: ghost"));
 
@@ -83,7 +83,7 @@ class ReadableUserControllerTest {
     }
 
     @Test
-    void propagates_space_resolution_failure_without_calling_service() {
+    void given_unknown_space_when_create_user_then_propagates_resolution_failure_without_calling_service() {
         when(spaceKeyResolution.resolve("takibo-iam", "ghost"))
                 .thenThrow(new SpaceNotFoundException("Space not found: ghost"));
 

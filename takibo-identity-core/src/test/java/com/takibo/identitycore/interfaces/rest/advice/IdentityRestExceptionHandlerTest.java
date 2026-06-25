@@ -13,7 +13,7 @@ class IdentityRestExceptionHandlerTest {
     private final IdentityRestExceptionHandler handler = new IdentityRestExceptionHandler();
 
     @Test
-    void maps_organization_not_found_to_not_found_problem_detail() {
+    void given_organization_not_found_when_handle_not_found_then_returns_not_found_problem_detail() {
         ProblemDetail problem = handler.handleNotFound(
                 new OrganizationNotFoundException("Organization not found: takibo-iam"));
 
@@ -23,7 +23,7 @@ class IdentityRestExceptionHandlerTest {
     }
 
     @Test
-    void maps_space_not_found_to_not_found_problem_detail() {
+    void given_space_not_found_when_handle_not_found_then_returns_not_found_problem_detail() {
         ProblemDetail problem = handler.handleNotFound(
                 new SpaceNotFoundException("Space not found: finance"));
 
