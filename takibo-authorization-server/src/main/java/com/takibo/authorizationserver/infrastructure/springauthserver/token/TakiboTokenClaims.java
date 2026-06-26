@@ -1,0 +1,34 @@
+package com.takibo.authorizationserver.infrastructure.springauthserver.token;
+
+/**
+ * Noms canoniques des claims/settings « situés » TAKIBO.
+ * <p>
+ * Source de vérité partagée entre les producteurs (les {@code RegisteredClientRepository} qui
+ * posent ces valeurs dans les {@code ClientSettings}) et le {@code TakiboOAuth2TokenCustomizer}
+ * qui les transcrit en claims de token. Aucun de ces noms ne doit diverger entre les deux côtés.
+ */
+public final class TakiboTokenClaims {
+
+    private TakiboTokenClaims() {
+    }
+
+    // Clés (claims ET settings)
+    public static final String SCOPE_LEVEL = "takibo_scope_level";
+    public static final String TENANT_SOURCE = "takibo_tenant_source";
+    public static final String ORG_ID = "org_id";
+    public static final String SPACE_ID = "space_id";
+    public static final String SUBJECT_TYPE = "subject_type";
+    public static final String AUTH_METHOD = "auth_method";
+
+    // Valeurs de scope
+    public static final String SCOPE_SPACE = "SPACE";
+    public static final String SCOPE_PLATFORM = "PLATFORM";
+
+    // Valeurs de source de tenant
+    public static final String SOURCE_OAUTH2_CLIENT = "oauth2_client";
+    public static final String SOURCE_PLATFORM = "platform_client";
+
+    // Valeurs sujet / auth (flux client_credentials)
+    public static final String SUBJECT_CLIENT_APP = "CLIENT_APP";
+    public static final String AUTH_CLIENT_CREDENTIALS = "OAUTH2_CLIENT_CREDENTIALS";
+}

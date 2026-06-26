@@ -8,16 +8,18 @@ import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import org.springframework.security.oauth2.server.authorization.client.InMemoryRegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
-import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
+import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
+import com.takibo.authorizationserver.infrastructure.springauthserver.token.TakiboTokenClaims;
 
 import java.util.UUID;
 
 @Configuration
 public class InMemoryDevRegisteredClientConfiguration {
 
-    // Temporary dev client - will be replaced by the Takibo/TMS registered client adapter
+    // Client PLATFORM (bootstrap/signup/dev). Volontairement SANS org_id/space_id :
+    // le token émis ne porte aucun tenant -> fail-closed sur les routes tenant.
     @Bean
-    public RegisteredClientRepository registeredClientRepository(
+    public InMemoryRegisteredClientRepository platformRegisteredClientRepository(
             PasswordEncoder passwordEncoder,
             @Value("${takibo.dev.postman-client.secret}") String postmanClientSecret
     ) {
@@ -28,6 +30,10 @@ public class InMemoryDevRegisteredClientConfiguration {
                 .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
                 .scope("api.read")
                 .scope("api.write")
+                .clientSettings(ClientSettings.builder()
+                        .setting(TakiboTokenClaims.SCOPE_LEVEL, TakiboTokenClaims.SCOPE_PLATFORM)
+                        .setting(TakiboTokenClaims.TENANT_SOURCE, TakiboTokenClaims.SOURCE_PLATFORM)
+                        .build())
                 .build();
 
         return new InMemoryRegisteredClientRepository(postmanClient);
