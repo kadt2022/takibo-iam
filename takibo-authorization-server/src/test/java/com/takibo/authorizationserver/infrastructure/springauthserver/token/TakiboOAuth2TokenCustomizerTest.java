@@ -1,11 +1,15 @@
 package com.takibo.authorizationserver.infrastructure.springauthserver.token;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
+import org.springframework.security.oauth2.jwt.JwsHeader;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
+import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
+import org.springframework.security.oauth2.server.authorization.token.JwtEncodingContext;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -44,7 +48,7 @@ class TakiboOAuth2TokenCustomizerTest {
     }
 
     @Test
-    void space_client_emits_real_tenant_and_scope() {
+    void given_space_client_when_apply_tenant_claims_then_emits_real_tenant_and_scope() {
         JwtClaimsSet.Builder claims = JwtClaimsSet.builder();
         TakiboOAuth2TokenCustomizer.applyTenantClaims(spaceClient(), claims);
         JwtClaimsSet set = claims.build();
@@ -56,7 +60,7 @@ class TakiboOAuth2TokenCustomizerTest {
     }
 
     @Test
-    void platform_client_emits_no_tenant() {
+    void given_platform_client_when_apply_tenant_claims_then_emits_no_tenant() {
         JwtClaimsSet.Builder claims = JwtClaimsSet.builder();
         TakiboOAuth2TokenCustomizer.applyTenantClaims(platformClient(), claims);
         JwtClaimsSet set = claims.build();
@@ -68,7 +72,7 @@ class TakiboOAuth2TokenCustomizerTest {
     }
 
     @Test
-    void no_token_ever_contains_the_stub_org() {
+    void given_platform_client_when_apply_tenant_claims_then_no_token_contains_stub_org() {
         JwtClaimsSet.Builder claims = JwtClaimsSet.builder();
         TakiboOAuth2TokenCustomizer.applyTenantClaims(platformClient(), claims);
         JwtClaimsSet set = claims.build();
@@ -77,7 +81,7 @@ class TakiboOAuth2TokenCustomizerTest {
     }
 
     @Test
-    void space_client_without_org_or_space_fails_closed() {
+    void given_space_client_without_org_or_space_when_apply_tenant_claims_then_fails_closed() {
         RegisteredClient broken = baseClient("3", "broken-space")
                 .clientSettings(ClientSettings.builder()
                         .setting(TakiboTokenClaims.SCOPE_LEVEL, TakiboTokenClaims.SCOPE_SPACE)
@@ -90,7 +94,7 @@ class TakiboOAuth2TokenCustomizerTest {
     }
 
     @Test
-    void subject_claims_set_only_for_client_credentials() {
+    void given_client_credentials_grant_when_apply_subject_claims_then_sets_client_subject_claims() {
         JwtClaimsSet.Builder cc = JwtClaimsSet.builder().subject("x");
         TakiboOAuth2TokenCustomizer.applySubjectClaims(AuthorizationGrantType.CLIENT_CREDENTIALS, cc);
         JwtClaimsSet ccSet = cc.build();
@@ -102,5 +106,45 @@ class TakiboOAuth2TokenCustomizerTest {
         JwtClaimsSet acSet = ac.build();
         assertThat((Object) acSet.getClaim("subject_type")).isNull();
         assertThat((Object) acSet.getClaim("auth_method")).isNull();
+    }
+
+    @Test
+    void given_access_token_context_when_token_customizer_runs_then_applies_tenant_and_subject_claims() {
+        JwtClaimsSet.Builder claims = JwtClaimsSet.builder().subject("busa-finance");
+        JwtEncodingContext context = jwtContext(OAuth2TokenType.ACCESS_TOKEN, spaceClient(), claims);
+
+        new TakiboOAuth2TokenCustomizer().tokenCustomizer().customize(context);
+        JwtClaimsSet set = claims.build();
+
+        assertThat(set.getClaimAsString("takibo_scope_level")).isEqualTo("SPACE");
+        assertThat(set.getClaimAsString("org_id")).isEqualTo(ORG);
+        assertThat(set.getClaimAsString("space_id")).isEqualTo(SPACE);
+        assertThat(set.getClaimAsString("subject_type")).isEqualTo("CLIENT_APP");
+        assertThat(set.getClaimAsString("auth_method")).isEqualTo("OAUTH2_CLIENT_CREDENTIALS");
+    }
+
+    @Test
+    void given_non_access_token_context_when_token_customizer_runs_then_claims_are_unchanged() {
+        JwtClaimsSet.Builder claims = JwtClaimsSet.builder().subject("busa-finance");
+        JwtEncodingContext context = jwtContext(OAuth2TokenType.REFRESH_TOKEN, spaceClient(), claims);
+
+        new TakiboOAuth2TokenCustomizer().tokenCustomizer().customize(context);
+        JwtClaimsSet set = claims.build();
+
+        assertThat((Object) set.getClaim("takibo_scope_level")).isNull();
+        assertThat((Object) set.getClaim("org_id")).isNull();
+        assertThat((Object) set.getClaim("space_id")).isNull();
+        assertThat((Object) set.getClaim("subject_type")).isNull();
+    }
+
+    private JwtEncodingContext jwtContext(
+            OAuth2TokenType tokenType,
+            RegisteredClient registeredClient,
+            JwtClaimsSet.Builder claims) {
+        return JwtEncodingContext.with(JwsHeader.with(SignatureAlgorithm.RS256), claims)
+                .tokenType(tokenType)
+                .registeredClient(registeredClient)
+                .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
+                .build();
     }
 }

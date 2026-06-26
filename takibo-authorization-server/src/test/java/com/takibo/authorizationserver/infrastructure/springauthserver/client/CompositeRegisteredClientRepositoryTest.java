@@ -29,7 +29,7 @@ class CompositeRegisteredClientRepositoryTest {
             .build();
 
     @Test
-    void platform_hit_short_circuits_db() {
+    void given_platform_client_id_hit_when_find_by_client_id_then_db_is_not_called() {
         when(platform.findByClientId("c")).thenReturn(sample);
         var repo = new CompositeRegisteredClientRepository(platform, db);
 
@@ -38,7 +38,7 @@ class CompositeRegisteredClientRepositoryTest {
     }
 
     @Test
-    void falls_through_to_db_when_platform_misses() {
+    void given_platform_client_id_miss_when_find_by_client_id_then_db_result_is_returned() {
         when(platform.findByClientId("c")).thenReturn(null);
         when(db.findByClientId("c")).thenReturn(sample);
         var repo = new CompositeRegisteredClientRepository(platform, db);
@@ -47,7 +47,7 @@ class CompositeRegisteredClientRepositoryTest {
     }
 
     @Test
-    void returns_null_when_no_delegate_matches() {
+    void given_no_delegate_matches_client_id_when_find_by_client_id_then_returns_null() {
         when(platform.findByClientId("x")).thenReturn(null);
         when(db.findByClientId("x")).thenReturn(null);
         var repo = new CompositeRegisteredClientRepository(platform, db);
@@ -56,8 +56,26 @@ class CompositeRegisteredClientRepositoryTest {
     }
 
     @Test
-    void save_is_read_only() {
+    void given_any_registered_client_when_save_then_throws_read_only_exception() {
         var repo = new CompositeRegisteredClientRepository(platform, db);
         assertThatThrownBy(() -> repo.save(sample)).isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    @Test
+    void given_platform_id_hit_when_find_by_id_then_db_is_not_called() {
+        when(platform.findById("1")).thenReturn(sample);
+        var repo = new CompositeRegisteredClientRepository(platform, db);
+
+        assertThat(repo.findById("1")).isSameAs(sample);
+        verify(db, never()).findById(any());
+    }
+
+    @Test
+    void given_platform_id_miss_when_find_by_id_then_db_result_is_returned() {
+        when(platform.findById("1")).thenReturn(null);
+        when(db.findById("1")).thenReturn(sample);
+        var repo = new CompositeRegisteredClientRepository(platform, db);
+
+        assertThat(repo.findById("1")).isSameAs(sample);
     }
 }

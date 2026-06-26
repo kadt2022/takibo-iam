@@ -19,6 +19,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -36,24 +37,12 @@ class TakiboRegisteredClientRepositoryTest {
     @InjectMocks private TakiboRegisteredClientRepository repository;
 
     @Test
-    void maps_db_client_to_registered_client_with_scope_bound_settings() {
-        OAuth2ClientLookupEntity entity = mock(OAuth2ClientLookupEntity.class);
-        when(entity.getId()).thenReturn(ID);
-        when(entity.getClientId()).thenReturn("busa-finance");
-        when(entity.getOrgId()).thenReturn(ORG);
-        when(entity.getSpaceId()).thenReturn(SPACE);
-        when(entity.getTokenEndpointAuthMethod()).thenReturn("client_secret_basic");
-        when(entity.getRequireClientSecret()).thenReturn(true);
-        when(entity.getClientSecretHash()).thenReturn("$2a$12$hashvalue");
+    void given_db_client_when_find_by_client_id_then_maps_to_registered_client_with_scope_bound_settings() {
+        OAuth2ClientLookupEntity entity = clientEntity("busa-finance", true, "$2a$12$hashvalue");
         when(clients.findByClientId("busa-finance")).thenReturn(Optional.of(entity));
 
-        OAuth2ClientGrantTypeEntity grant = mock(OAuth2ClientGrantTypeEntity.class);
-        when(grant.getGrantType()).thenReturn("client_credentials");
-        when(grantTypes.findByClientId(ID)).thenReturn(List.of(grant));
-
-        OAuth2ClientScopeEntity scope = mock(OAuth2ClientScopeEntity.class);
-        when(scope.getScope()).thenReturn("api.read");
-        when(scopes.findByClientId(ID)).thenReturn(List.of(scope));
+        givenGrantTypes("client_credentials");
+        givenScopes("api.read");
 
         RegisteredClient rc = repository.findByClientId("busa-finance");
 
@@ -69,7 +58,36 @@ class TakiboRegisteredClientRepositoryTest {
     }
 
     @Test
-    void client_without_grant_types_is_treated_as_not_found() {
+    void given_db_client_id_when_find_by_id_then_maps_to_registered_client() {
+        OAuth2ClientLookupEntity entity = clientEntity("busa-finance", true, "$2a$12$hashvalue");
+        when(clients.findById(ID)).thenReturn(Optional.of(entity));
+        givenGrantTypes("client_credentials");
+        givenScopes("api.read");
+
+        RegisteredClient rc = repository.findById(ID.toString());
+
+        assertThat(rc).isNotNull();
+        assertThat(rc.getId()).isEqualTo(ID.toString());
+        assertThat(rc.getClientId()).isEqualTo("busa-finance");
+    }
+
+    @Test
+    void given_public_db_client_when_find_by_client_id_then_registered_client_has_no_secret() {
+        OAuth2ClientLookupEntity entity = clientEntity("public-client", false, null);
+        when(clients.findByClientId("public-client")).thenReturn(Optional.of(entity));
+        givenGrantTypes("client_credentials");
+        givenScopes("openid");
+
+        RegisteredClient rc = repository.findByClientId("public-client");
+
+        assertThat(rc).isNotNull();
+        assertThat(rc.getClientSecret()).isNull();
+        assertThat(rc.getAuthorizationGrantTypes()).contains(AuthorizationGrantType.CLIENT_CREDENTIALS);
+        assertThat(rc.getScopes()).contains("openid");
+    }
+
+    @Test
+    void given_client_without_grant_types_when_find_by_client_id_then_it_is_treated_as_not_found() {
         OAuth2ClientLookupEntity entity = mock(OAuth2ClientLookupEntity.class);
         when(entity.getId()).thenReturn(ID);
         when(entity.getClientId()).thenReturn("broken-client");
@@ -80,8 +98,56 @@ class TakiboRegisteredClientRepositoryTest {
     }
 
     @Test
-    void unknown_client_returns_null() {
+    void given_unknown_client_when_find_by_client_id_then_returns_null() {
         when(clients.findByClientId("nope")).thenReturn(Optional.empty());
         assertThat(repository.findByClientId("nope")).isNull();
+    }
+
+    @Test
+    void given_registered_client_when_save_then_throws_read_only_exception() {
+        RegisteredClient client = RegisteredClient.withId(ID.toString())
+                .clientId("busa-finance")
+                .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
+                .build();
+
+        assertThatThrownBy(() -> repository.save(client))
+                .isInstanceOf(UnsupportedOperationException.class)
+                .hasMessageContaining("management-service");
+    }
+
+    private OAuth2ClientLookupEntity clientEntity(String clientId, boolean requireClientSecret, String secretHash) {
+        OAuth2ClientLookupEntity entity = mock(OAuth2ClientLookupEntity.class);
+        when(entity.getId()).thenReturn(ID);
+        when(entity.getClientId()).thenReturn(clientId);
+        when(entity.getOrgId()).thenReturn(ORG);
+        when(entity.getSpaceId()).thenReturn(SPACE);
+        when(entity.getTokenEndpointAuthMethod()).thenReturn(requireClientSecret ? "client_secret_basic" : "none");
+        when(entity.getRequireClientSecret()).thenReturn(requireClientSecret);
+        if (requireClientSecret) {
+            when(entity.getClientSecretHash()).thenReturn(secretHash);
+        }
+        return entity;
+    }
+
+    private void givenGrantTypes(String... values) {
+        List<OAuth2ClientGrantTypeEntity> grants = List.of(values).stream()
+                .map(value -> {
+                    OAuth2ClientGrantTypeEntity grant = mock(OAuth2ClientGrantTypeEntity.class);
+                    when(grant.getGrantType()).thenReturn(value);
+                    return grant;
+                })
+                .toList();
+        when(grantTypes.findByClientId(ID)).thenReturn(grants);
+    }
+
+    private void givenScopes(String... values) {
+        List<OAuth2ClientScopeEntity> clientScopes = List.of(values).stream()
+                .map(value -> {
+                    OAuth2ClientScopeEntity scope = mock(OAuth2ClientScopeEntity.class);
+                    when(scope.getScope()).thenReturn(value);
+                    return scope;
+                })
+                .toList();
+        when(scopes.findByClientId(ID)).thenReturn(clientScopes);
     }
 }
