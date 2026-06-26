@@ -77,6 +77,7 @@ class TakiboOAuth2TokenCustomizerTest {
         TakiboOAuth2TokenCustomizer.applyTenantClaims(platformClient(), claims);
         JwtClaimsSet set = claims.build();
 
+        assertThat(set.getClaims()).isNotEmpty();
         assertThat(set.getClaims().values()).doesNotContain(STUB_ORG);
     }
 
