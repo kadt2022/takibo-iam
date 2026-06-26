@@ -16,8 +16,14 @@ import java.util.UUID;
 @Configuration
 public class InMemoryDevRegisteredClientConfiguration {
 
-    // Client PLATFORM (bootstrap/signup/dev). Volontairement SANS org_id/space_id :
-    // le token émis ne porte aucun tenant -> fail-closed sur les routes tenant.
+    // Client de bootstrap DEV / INSTANCE — PAS un rôle SaaS exposé au tenant.
+    // takibo_scope_level=PLATFORM dénote ici l'autorité d'INSTANCE TAKIBO :
+    //   - en SaaS    : opérateur TAKIBO uniquement (jamais un client tenant) ;
+    //   - en on-prem : propriétaire de l'installation.
+    // Un client SaaS commence à ORG, jamais à PLATFORM. La création d'org est un flux
+    // d'onboarding, pas un pouvoir d'administration plateforme.
+    // Volontairement SANS org_id/space_id : le token ne porte aucun tenant -> fail-closed
+    // sur les routes tenant.
     @Bean
     public InMemoryRegisteredClientRepository platformRegisteredClientRepository(
             PasswordEncoder passwordEncoder,

@@ -57,6 +57,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/platform/**").hasRole("PLATFORM_ADMIN")
 
                         .requestMatchers("/api/organizations/**").access(policyBasedAuthorizationManager)
+                        .requestMatchers("/api/orgs/**").access(policyBasedAuthorizationManager)
                         .requestMatchers("/api/spaces/**").access(policyBasedAuthorizationManager)
                         .requestMatchers("/api/users/**").access(policyBasedAuthorizationManager)
                         .requestMatchers("/api/roles/**").access(policyBasedAuthorizationManager)
