@@ -2,9 +2,12 @@ package com.takibo.authorizationserver.infrastructure.springauthserver.client;
 
 import com.takibo.authorizationserver.infrastructure.jpa.entity.OAuth2ClientGrantTypeEntity;
 import com.takibo.authorizationserver.infrastructure.jpa.entity.OAuth2ClientLookupEntity;
+import com.takibo.authorizationserver.infrastructure.jpa.entity.OAuth2ClientRedirectUriEntity;
 import com.takibo.authorizationserver.infrastructure.jpa.entity.OAuth2ClientScopeEntity;
 import com.takibo.authorizationserver.infrastructure.jpa.repository.OAuth2ClientGrantTypeRepository;
 import com.takibo.authorizationserver.infrastructure.jpa.repository.OAuth2ClientLookupRepository;
+import com.takibo.authorizationserver.infrastructure.jpa.repository.OAuth2ClientPostLogoutRedirectUriRepository;
+import com.takibo.authorizationserver.infrastructure.jpa.repository.OAuth2ClientRedirectUriRepository;
 import com.takibo.authorizationserver.infrastructure.jpa.repository.OAuth2ClientScopeRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -33,6 +36,8 @@ class TakiboRegisteredClientRepositoryTest {
     @Mock private OAuth2ClientLookupRepository clients;
     @Mock private OAuth2ClientScopeRepository scopes;
     @Mock private OAuth2ClientGrantTypeRepository grantTypes;
+    @Mock private OAuth2ClientRedirectUriRepository redirectUris;
+    @Mock private OAuth2ClientPostLogoutRedirectUriRepository postLogoutRedirectUris;
 
     @InjectMocks private TakiboRegisteredClientRepository repository;
 
@@ -84,6 +89,21 @@ class TakiboRegisteredClientRepositoryTest {
         assertThat(rc.getClientSecret()).isNull();
         assertThat(rc.getAuthorizationGrantTypes()).contains(AuthorizationGrantType.CLIENT_CREDENTIALS);
         assertThat(rc.getScopes()).contains("openid");
+    }
+
+    @Test
+    void given_authorization_code_client_with_redirect_uris_when_find_then_maps_redirect_uris() {
+        OAuth2ClientLookupEntity entity = clientEntity("web-app", true, "$2a$12$hashvalue");
+        when(clients.findByClientId("web-app")).thenReturn(Optional.of(entity));
+        givenGrantTypes("authorization_code");
+        givenScopes("openid");
+        givenRedirectUris("https://app.takibo.io/callback");
+
+        RegisteredClient rc = repository.findByClientId("web-app");
+
+        assertThat(rc).isNotNull();
+        assertThat(rc.getAuthorizationGrantTypes()).contains(AuthorizationGrantType.AUTHORIZATION_CODE);
+        assertThat(rc.getRedirectUris()).contains("https://app.takibo.io/callback");
     }
 
     @Test
@@ -149,5 +169,16 @@ class TakiboRegisteredClientRepositoryTest {
                 })
                 .toList();
         when(scopes.findByClientId(ID)).thenReturn(clientScopes);
+    }
+
+    private void givenRedirectUris(String... values) {
+        List<OAuth2ClientRedirectUriEntity> uris = List.of(values).stream()
+                .map(value -> {
+                    OAuth2ClientRedirectUriEntity uri = mock(OAuth2ClientRedirectUriEntity.class);
+                    when(uri.getUri()).thenReturn(value);
+                    return uri;
+                })
+                .toList();
+        when(redirectUris.findByClientId(ID)).thenReturn(uris);
     }
 }

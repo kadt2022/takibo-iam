@@ -3,6 +3,8 @@ package com.takibo.authorizationserver.infrastructure.springauthserver.client;
 import com.takibo.authorizationserver.infrastructure.jpa.entity.OAuth2ClientLookupEntity;
 import com.takibo.authorizationserver.infrastructure.jpa.repository.OAuth2ClientGrantTypeRepository;
 import com.takibo.authorizationserver.infrastructure.jpa.repository.OAuth2ClientLookupRepository;
+import com.takibo.authorizationserver.infrastructure.jpa.repository.OAuth2ClientPostLogoutRedirectUriRepository;
+import com.takibo.authorizationserver.infrastructure.jpa.repository.OAuth2ClientRedirectUriRepository;
 import com.takibo.authorizationserver.infrastructure.jpa.repository.OAuth2ClientScopeRepository;
 import com.takibo.authorizationserver.infrastructure.springauthserver.token.TakiboTokenClaims;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +36,8 @@ public class TakiboRegisteredClientRepository implements RegisteredClientReposit
     private final OAuth2ClientLookupRepository clients;
     private final OAuth2ClientScopeRepository scopes;
     private final OAuth2ClientGrantTypeRepository grantTypes;
+    private final OAuth2ClientRedirectUriRepository redirectUris;
+    private final OAuth2ClientPostLogoutRedirectUriRepository postLogoutRedirectUris;
 
     @Override
     public void save(RegisteredClient registeredClient) {
@@ -73,6 +77,7 @@ public class TakiboRegisteredClientRepository implements RegisteredClientReposit
                 .clientId(entity.getClientId())
                 .clientAuthenticationMethod(new ClientAuthenticationMethod(entity.getTokenEndpointAuthMethod()))
                 .clientSettings(ClientSettings.builder()
+                        .requireProofKey(Boolean.TRUE.equals(entity.getRequirePkce()))
                         .setting(TakiboTokenClaims.SCOPE_LEVEL, TakiboTokenClaims.SCOPE_SPACE)
                         .setting(TakiboTokenClaims.TENANT_SOURCE, TakiboTokenClaims.SOURCE_OAUTH2_CLIENT)
                         .setting(TakiboTokenClaims.ORG_ID, entity.getOrgId().toString())
@@ -81,6 +86,9 @@ public class TakiboRegisteredClientRepository implements RegisteredClientReposit
 
         grants.forEach(builder::authorizationGrantType);
         scopes.findByClientId(entity.getId()).forEach(s -> builder.scope(s.getScope()));
+        // Requis par SAS pour les clients authorization_code (sinon build() échoue).
+        redirectUris.findByClientId(entity.getId()).forEach(r -> builder.redirectUri(r.getUri()));
+        postLogoutRedirectUris.findByClientId(entity.getId()).forEach(r -> builder.postLogoutRedirectUri(r.getUri()));
 
         if (Boolean.TRUE.equals(entity.getRequireClientSecret()) && entity.getClientSecretHash() != null) {
             // Le hash est passé tel quel : il a été produit par le même PasswordEncoder partagé.
