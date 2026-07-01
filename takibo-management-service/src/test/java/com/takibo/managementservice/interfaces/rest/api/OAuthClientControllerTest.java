@@ -1,5 +1,7 @@
 package com.takibo.managementservice.interfaces.rest.api;
 
+import com.takibo.identitycore.integration.security.port.CurrentOrganizationContextCase;
+import com.takibo.identitycore.integration.space.port.SpaceOwnershipGuardCase;
 import com.takibo.managementservice.application.command.RegisterClientCommand;
 import com.takibo.managementservice.application.mapper.ClientRegistrationMapper;
 import com.takibo.managementservice.application.service.OAuthClientService;
@@ -8,6 +10,7 @@ import com.takibo.managementservice.domain.model.OAuthClient;
 import com.takibo.managementservice.domain.model.RegisteredClientResult;
 import com.takibo.managementservice.domain.vo.SpaceId;
 import com.takibo.managementservice.interfaces.rest.response.ClientRegistrationResponse;
+import org.springframework.security.access.AccessDeniedException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -21,8 +24,11 @@ import java.time.Instant;
 import java.util.Set;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -40,11 +46,19 @@ class OAuthClientControllerTest {
     @Mock
     private ClientRegistrationMapper mapper;
 
+    @Mock
+    private CurrentOrganizationContextCase currentOrganizationContext;
+
+    @Mock
+    private SpaceOwnershipGuardCase spaceOwnershipGuard;
+
+    private OAuthClientController controller;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new OAuthClientController(service, mapper)).build();
+        controller = new OAuthClientController(service, mapper, currentOrganizationContext, spaceOwnershipGuard);
+        mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
     }
 
     @Test
@@ -52,6 +66,7 @@ class OAuthClientControllerTest {
         Instant expiresAt = Instant.parse("2026-03-20T00:00:00Z");
         OAuthClient domainClient = OAuthClient.create(ORG_ID, SpaceId.of(SPACE_ID), "conf-client", "Conf Client", ClientType.CONFIDENTIAL);
 
+        when(currentOrganizationContext.requireCurrentOrganizationId()).thenReturn(ORG_ID);
         when(mapper.toCommand(any())).thenReturn(commandFor(ClientType.CONFIDENTIAL));
         when(service.register(eq(ORG_ID), eq(SpaceId.of(SPACE_ID)), any(RegisterClientCommand.class)))
                 .thenReturn(new RegisteredClientResult(domainClient, "one-time-secret"));
@@ -91,6 +106,7 @@ class OAuthClientControllerTest {
     void register_public_returns_null_secret_and_no_top_level_expiration() throws Exception {
         OAuthClient domainClient = OAuthClient.create(ORG_ID, SpaceId.of(SPACE_ID), "pub-client", "Pub Client", ClientType.PUBLIC);
 
+        when(currentOrganizationContext.requireCurrentOrganizationId()).thenReturn(ORG_ID);
         when(mapper.toCommand(any())).thenReturn(commandFor(ClientType.PUBLIC));
         when(service.register(eq(ORG_ID), eq(SpaceId.of(SPACE_ID)), any(RegisterClientCommand.class)))
                 .thenReturn(new RegisteredClientResult(domainClient, null));
@@ -123,6 +139,30 @@ class OAuthClientControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.oneTimePlainSecret").isEmpty())
                 .andExpect(jsonPath("$.clientSecretExpiresAt").doesNotExist());
+    }
+
+    @Test
+    void register_without_org_context_is_denied_and_does_not_register() {
+        when(currentOrganizationContext.requireCurrentOrganizationId())
+                .thenThrow(new AccessDeniedException("ORG_CONTEXT_REQUIRED"));
+
+        assertThatThrownBy(() -> controller.register(ORG_ID, SPACE_ID, null))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("ORG_CONTEXT_REQUIRED");
+
+        verify(service, never()).register(any(), any(), any());
+    }
+
+    @Test
+    void register_for_another_org_is_denied_and_does_not_register() {
+        UUID otherOrg = UUID.fromString("99999999-9999-9999-9999-999999999999");
+        when(currentOrganizationContext.requireCurrentOrganizationId()).thenReturn(otherOrg);
+
+        assertThatThrownBy(() -> controller.register(ORG_ID, SPACE_ID, null))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("ORG_MISMATCH");
+
+        verify(service, never()).register(any(), any(), any());
     }
 
     private static RegisterClientCommand commandFor(ClientType type) {

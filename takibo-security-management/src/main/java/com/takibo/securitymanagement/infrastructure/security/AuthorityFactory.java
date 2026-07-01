@@ -83,11 +83,26 @@ public final class AuthorityFactory {
         if (claims == null) return;
 
         Object v = claims.get("scope");
-        if (!(v instanceof String s) || s.isBlank()) return;
 
-        for (String token : s.split("\\s+")) {
-            if (token.isBlank()) continue;
-            out.add("SCOPE_" + token);
+        // Le claim "scope" peut arriver en String espace-délimitée (OAuth2 classique)
+        // OU en tableau JSON (cas des access tokens émis par Spring Authorization Server).
+        if (v instanceof String s) {
+            for (String token : s.split("\\s+")) {
+                if (!token.isBlank()) {
+                    out.add("SCOPE_" + token);
+                }
+            }
+            return;
+        }
+
+        if (v instanceof Collection<?> scopes) {
+            for (Object scope : scopes) {
+                if (scope == null) continue;
+                String token = scope.toString();
+                if (!token.isBlank()) {
+                    out.add("SCOPE_" + token);
+                }
+            }
         }
     }
 }

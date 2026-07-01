@@ -33,6 +33,15 @@ public class OAuth2ClientLookupEntity {
     @Column(name = "require_pkce", nullable = false)
     private Boolean requirePkce;
 
+    @Column(name = "require_client_secret", nullable = false)
+    private Boolean requireClientSecret;
+
+    @Column(name = "client_secret_hash")
+    private String clientSecretHash;
+
+    @Column(name = "token_endpoint_auth_method", nullable = false, length = 64)
+    private String tokenEndpointAuthMethod;
+
     public UUID getId() {
         return id;
     }
@@ -55,6 +64,18 @@ public class OAuth2ClientLookupEntity {
 
     public Boolean getRequirePkce() {
         return requirePkce;
+    }
+
+    public Boolean getRequireClientSecret() {
+        return requireClientSecret;
+    }
+
+    public String getClientSecretHash() {
+        return clientSecretHash;
+    }
+
+    public String getTokenEndpointAuthMethod() {
+        return tokenEndpointAuthMethod;
     }
 
     public enum ClientType {
