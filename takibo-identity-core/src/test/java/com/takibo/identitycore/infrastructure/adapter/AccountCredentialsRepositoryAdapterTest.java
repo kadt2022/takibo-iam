@@ -88,6 +88,41 @@ class AccountCredentialsRepositoryAdapterTest {
     }
 
     @Test
+    void save_existingRow_updatesLoadedEntity_neverReinserts() {
+        // Chemin login (échec de password / reset) : la ligne existe déjà.
+        // Un passage par toEntity() (isNew=true) provoquerait un INSERT en doublon de PK.
+        AccountId accountId = AccountId.of(ACCOUNT_UUID);
+        AccountCredentials domain = AccountCredentials.builder()
+                .accountId(accountId)
+                .passwordHash(PasswordHash.of("$2a$hash", "bcrypt", 1))
+                .failedAttempts(3)
+                .mustChangeNextLogin(false)
+                .build();
+
+        AccountCredentialsEntity.AccountCredentialsId id =
+                new AccountCredentialsEntity.AccountCredentialsId(ORG_ID, ACCOUNT_UUID);
+        AccountCredentialsEntity loaded = new AccountCredentialsEntity();
+        loaded.setOrgId(ORG_ID);
+        loaded.setAccountId(ACCOUNT_UUID);
+        loaded.setFailedAttempts(2);
+
+        AccountCredentials expectedResult = mock(AccountCredentials.class);
+        when(jpa.findById(id)).thenReturn(Optional.of(loaded));
+        when(jpa.saveAndFlush(loaded)).thenReturn(loaded);
+        when(mapper.toDomain(loaded)).thenReturn(expectedResult);
+
+        AccountCredentials result = adapter.save(domain, ORG_ID);
+
+        assertThat(result).isSameAs(expectedResult);
+        assertThat(loaded.getFailedAttempts()).isEqualTo(3);
+        assertThat(loaded.getPasswordHash()).isEqualTo("$2a$hash");
+
+        verify(mapper, never()).toEntity(any(), any());
+        verify(em, never()).getReference(any(), any());
+        verify(jpa).saveAndFlush(loaded);
+    }
+
+    @Test
     void find_existingCredentials_returnsMappedDomain() {
         AccountCredentialsEntity.AccountCredentialsId id =
                 new AccountCredentialsEntity.AccountCredentialsId(ORG_ID, ACCOUNT_UUID);

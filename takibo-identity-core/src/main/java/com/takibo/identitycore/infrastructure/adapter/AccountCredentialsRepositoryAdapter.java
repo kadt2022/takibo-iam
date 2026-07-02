@@ -29,10 +29,20 @@ public class AccountCredentialsRepositoryAdapter implements AccountCredentialsRe
     @Override
     @Transactional
     public AccountCredentials save(AccountCredentials domain, UUID orgId) {
+        UUID accountId = domain.getAccountId().getValue();
+        AccountCredentialsEntity.AccountCredentialsId id =
+                new AccountCredentialsEntity.AccountCredentialsId(orgId, accountId);
+
+        // Ligne existante (échec/reset de login, rotation de mot de passe) : on mute
+        // l'entité CHARGÉE. mapper.toEntity() marque isNew=true (Persistable) et
+        // provoquerait un INSERT en doublon de la PK (org_id, account_id).
+        Optional<AccountCredentialsEntity> existing = jpa.findById(id);
+        if (existing.isPresent()) {
+            AccountCredentialsEntity entity = applyMutableState(existing.get(), domain);
+            return mapper.toDomain(jpa.saveAndFlush(entity));
+        }
 
         AccountCredentialsEntity entity = mapper.toEntity(domain, orgId);
-
-        UUID accountId = domain.getAccountId().getValue();
         AccountEntity accountRef = em.getReference(AccountEntity.class, accountId);
 
         entity.setAccount(accountRef);
@@ -40,6 +50,17 @@ public class AccountCredentialsRepositoryAdapter implements AccountCredentialsRe
         entity.setAccountId(accountId);
 
         return mapper.toDomain(jpa.saveAndFlush(entity));
+    }
+
+    private AccountCredentialsEntity applyMutableState(AccountCredentialsEntity entity, AccountCredentials domain) {
+        entity.setPasswordHash(domain.getPasswordHash().getHash());
+        entity.setPasswordAlgo(domain.getPasswordHash().getAlgo());
+        entity.setPasswordVersion(domain.getPasswordHash().getVersion());
+        entity.setPasswordUpdatedAt(domain.getPasswordUpdatedAt());
+        entity.setMustChangeNextLogin(domain.isMustChangeNextLogin());
+        entity.setFailedAttempts(domain.getFailedAttempts());
+        entity.setLockedUntil(domain.getLockedUntil());
+        return entity;
     }
 
     @Override

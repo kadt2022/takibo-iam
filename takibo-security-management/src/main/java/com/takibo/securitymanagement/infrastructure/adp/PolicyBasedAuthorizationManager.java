@@ -7,6 +7,12 @@ import com.takibo.adp.spring.adapter.RequestVelocityTracker;
 import com.takibo.securitycontext.exception.TakiboSecurityContextNotAvailableException;
 import com.takibo.securitycontext.model.TakiboSecurityContext;
 import com.takibo.securitycontext.spi.CurrentTakiboSecurityContextProvider;
+import com.takibo.securitymanagement.domain.model.Action;
+import com.takibo.securitymanagement.domain.model.Environment;
+import com.takibo.securitymanagement.domain.model.PolicyDecision;
+import com.takibo.securitymanagement.domain.model.Resource;
+import com.takibo.securitymanagement.domain.model.Subject;
+import com.takibo.securitymanagement.domain.service.PolicyEvaluator;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,6 +38,7 @@ public class PolicyBasedAuthorizationManager implements AuthorizationManager<Req
     private final AdaptiveDecisionPort adaptiveDecisionPort;
     private final RequestVelocityTracker velocityTracker;
     private final CurrentTakiboSecurityContextProvider currentTakiboSecurityContextProvider;
+    private final PolicyEvaluator policyEvaluator;
 
     @Override
     public AuthorizationDecision authorize(
@@ -66,6 +73,26 @@ public class PolicyBasedAuthorizationManager implements AuthorizationManager<Req
         Set<String> roles = extractRoles(authentication, ctx);
         Set<String> permissions = extractPermissions(authentication);
 
+        // 1) Politique déterministe (deny-wins) : frontières tenant et exigences de rôle.
+        //    L'ADP évalue ensuite le risque adaptatif — il ne peut jamais ré-autoriser un DENY.
+        String ipAddress = ctx.transport() != null ? ctx.transport().ipAddress() : request.getRemoteAddr();
+        PolicyDecision policyDecision = policyEvaluator.evaluate(
+                new Subject(subjectId, roles, permissions, organizationId, spaceId),
+                new Resource(request.getRequestURI(), null, null),
+                Action.fromHttpMethod(request.getMethod()),
+                new Environment(Instant.now(), ipAddress, 0));
+
+        if (policyDecision.isDeny()) {
+            log.warn("Policy DENY: user={} path={} method={} policy={} reason={}",
+                    subjectId,
+                    request.getRequestURI(),
+                    request.getMethod(),
+                    policyDecision.getPolicyId(),
+                    policyDecision.getReason());
+            return new AuthorizationDecision(false);
+        }
+
+        // 2) Risque adaptatif (ADP)
         RequestVelocityTracker.VelocitySnapshot velocity = velocityTracker.getVelocity(subjectId);
 
         DecisionRequest decisionRequest = new DecisionRequest(
@@ -77,7 +104,7 @@ public class PolicyBasedAuthorizationManager implements AuthorizationManager<Req
                 request.getRequestURI(),
                 request.getMethod(),
                 Instant.now(),
-                ctx.transport() != null ? ctx.transport().ipAddress() : request.getRemoteAddr(),
+                ipAddress,
                 extractDeviceFingerprint(request),
                 request.getHeader("User-Agent"),
                 null, // country
