@@ -23,7 +23,7 @@ public class SpaceContextVerifier {
         spaceStatusCheckerCase.assertSpaceExistsAndActive(space.getValue());
 
         UUID organizationId = spaceManagementCase.findOrgIdBySpaceId(space)
-                .orElseThrow(() -> new UserCreationException("Organization not found for port " + space.value()));
+                .orElseThrow(() -> new UserCreationException("Organization not found for space " + space.value()));
 
         return new SpaceContext(space, organizationId);
     }

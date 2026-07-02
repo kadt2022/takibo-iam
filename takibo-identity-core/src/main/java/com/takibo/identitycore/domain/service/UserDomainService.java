@@ -51,13 +51,13 @@ public class UserDomainService {
 
     private void validateUsernameAvailability(SpaceId spaceId, String username) {
         if (userRepository.findByUsername(spaceId, username).isPresent()) {
-            throw new UserAlreadyExistsException("Username '" + username + "' already exists in this port");
+            throw new UserAlreadyExistsException("Username '" + username + "' already exists in this space");
         }
     }
 
     private void validateAccountNotInSpace(SpaceId spaceId, AccountId accountId) {
         if (userRepository.existsBySpaceAndAccount(spaceId, accountId)) {
-            throw new UserAlreadyExistsException("Account already has a profile in this port");
+            throw new UserAlreadyExistsException("Account already has a profile in this space");
         }
     }
 }
