@@ -1,0 +1,55 @@
+package com.takibo.securitymanagement.sentinel.rule;
+
+import com.takibo.identitycore.domain.exception.AccountLockedException;
+import com.takibo.identitycore.domain.exception.InvalidCredentialsException;
+import com.takibo.identitycore.domain.exception.OrganizationNotFoundException;
+import com.takibo.identitycore.domain.exception.UserNotActiveException;
+import com.takibo.identitycore.domain.exception.UserNotMemberOfSpaceException;
+import com.takibo.identitycore.domain.status.UserStatus;
+import com.takibo.securitymanagement.sentinel.advice.SentinelErrorCode;
+import com.takibo.securitymanagement.sentinel.advice.SentinelResponse;
+import org.junit.jupiter.api.Test;
+import org.springframework.security.access.AccessDeniedException;
+
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class SentinelRuleRegistrarTest {
+
+    private static final String PATH = "/api/v1/auth/login";
+    private static final String TRACE_ID = "trace-123";
+    private static final UUID USER_ID = UUID.fromString("cccccccc-0000-0000-0000-000000000003");
+    private static final UUID SPACE_ID = UUID.fromString("bbbbbbbb-0000-0000-0000-000000000002");
+
+    private final SentinelRuleRegistry registry = registeredRegistry();
+
+    @Test
+    void registerDefaults_resolvesHumanLoginRules() {
+        assertResolved(new InvalidCredentialsException(), 401, SentinelErrorCode.BAD_CREDENTIALS);
+        assertResolved(new AccountLockedException(), 403, SentinelErrorCode.ACCOUNT_LOCKED);
+        assertResolved(new UserNotMemberOfSpaceException(SPACE_ID), 403, SentinelErrorCode.USER_NOT_MEMBER_OF_SPACE);
+        assertResolved(new UserNotActiveException(USER_ID, UserStatus.SUSPENDED), 403, SentinelErrorCode.USER_NOT_ACTIVE);
+        assertResolved(new OrganizationNotFoundException("Organization not found: takibo-iam"), 404, SentinelErrorCode.ORGANIZATION_NOT_FOUND);
+    }
+
+    @Test
+    void registerDefaults_resolvesSpringSecuritySoftDependency() {
+        assertResolved(new AccessDeniedException("denied"), 403, SentinelErrorCode.ACCESS_DENIED);
+    }
+
+    private void assertResolved(Throwable throwable, int status, SentinelErrorCode code) {
+        SentinelResponse response = registry.resolve(throwable).toResponse(throwable, PATH, TRACE_ID);
+
+        assertThat(response.status()).isEqualTo(status);
+        assertThat(response.code()).isEqualTo(code.name());
+        assertThat(response.path()).isEqualTo(PATH);
+        assertThat(response.traceId()).isEqualTo(TRACE_ID);
+    }
+
+    private SentinelRuleRegistry registeredRegistry() {
+        SentinelRuleRegistry registry = new SentinelRuleRegistry(SentinelRuleHandlers.genericRule());
+        SentinelRuleRegistrar.registerDefaults(registry);
+        return registry;
+    }
+}

@@ -3,7 +3,9 @@ package com.takibo.securitymanagement.sentinel.rule;
 import com.takibo.identitycore.domain.exception.AccountLockedException;
 import com.takibo.identitycore.domain.exception.InvalidCredentialsException;
 import com.takibo.identitycore.domain.exception.OrganizationNotFoundException;
+import com.takibo.identitycore.domain.exception.UserNotActiveException;
 import com.takibo.identitycore.domain.exception.UserNotMemberOfSpaceException;
+import com.takibo.identitycore.domain.status.UserStatus;
 import com.takibo.securitymanagement.sentinel.advice.SentinelErrorCode;
 import com.takibo.securitymanagement.sentinel.advice.SentinelResponse;
 import org.junit.jupiter.api.Test;
@@ -17,6 +19,7 @@ class SentinelRuleHandlersTest {
     private static final String PATH = "/api/v1/auth/login";
     private static final String TRACE_ID = "trace-123";
     private static final UUID SPACE_ID = UUID.fromString("bbbbbbbb-0000-0000-0000-000000000002");
+    private static final UUID USER_ID = UUID.fromString("cccccccc-0000-0000-0000-000000000003");
 
     @Test
     void invalidCredentials_mapsToBadCredentials401() {
@@ -60,6 +63,18 @@ class SentinelRuleHandlersTest {
         );
 
         assertResponse(response, 404, SentinelErrorCode.ORGANIZATION_NOT_FOUND, "Organization not found: takibo-iam");
+    }
+
+    @Test
+    void userNotActive_mapsToForbidden403() {
+        SentinelResponse response = SentinelRuleHandlers.ruleUserNotActive(
+                new UserNotActiveException(USER_ID, UserStatus.SUSPENDED),
+                PATH,
+                TRACE_ID
+        );
+
+        assertResponse(response, 403, SentinelErrorCode.USER_NOT_ACTIVE,
+                "User " + USER_ID + " is not active (status: SUSPENDED)");
     }
 
     private void assertResponse(SentinelResponse response, int status, SentinelErrorCode code, String message) {
