@@ -1,5 +1,6 @@
 package com.takibo.identitycore.application.identity.mapper;
 
+import com.takibo.identitycore.application.identity.readmodel.UserReadModel;
 import com.takibo.identitycore.domain.model.EmailAddress;
 import com.takibo.identitycore.domain.model.User;
 import com.takibo.identitycore.interfaces.rest.response.UserResponse;
@@ -25,4 +26,7 @@ public interface UserMapper {
     @Mapping(target = "updatedAt",     source = "user.updatedAt")
     @Mapping(target = "version",       source = "user.version")
     UserResponse toUserResponse(User user, EmailAddress email);
+
+    // accountId du read model volontairement absent de la réponse (contrat UserResponse).
+    UserResponse toUserResponse(UserReadModel readModel);
 }

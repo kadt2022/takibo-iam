@@ -28,9 +28,32 @@ public class UserRepositoryAdapter implements UserRepository {
     @Override
     @Transactional
     public User save(User user) {
+        // Ligne existante (lifecycle: profil/statut) : on mute l'entité CHARGÉE.
+        // toEntity() ignore version (@Version) -> Spring Data la traiterait comme
+        // nouvelle et tenterait un INSERT en doublon de l'id.
+        Optional<UserEntity> existing = jpa.findById(user.getId().value());
+        if (existing.isPresent()) {
+            UserEntity entity = applyMutableState(existing.get(), user);
+            return mapper.toDomain(jpa.saveAndFlush(entity));
+        }
+
         UserEntity entity = mapper.toEntity(user);
         UserEntity saved = jpa.save(entity);
         return mapper.toDomain(saved);
+    }
+
+    private UserEntity applyMutableState(UserEntity entity, User user) {
+        entity.setUsername(user.getUsername());
+        entity.setFirstName(user.getFirstName());
+        entity.setLastName(user.getLastName());
+        entity.setStatus(user.getStatus());
+        entity.setMfaEnabled(user.isMfaEnabled());
+        entity.setPasswordExpired(user.isPasswordExpired());
+        entity.setLastLoginAt(user.getLastLoginAt());
+        entity.setMetadata(user.getMetadata());
+        // orgId/spaceId/accountId : ancres d'identité, jamais modifiées.
+        // updatedAt/version : gérés par @UpdateTimestamp/@Version.
+        return entity;
     }
 
     @Override

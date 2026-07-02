@@ -8,6 +8,7 @@ import com.takibo.identitycore.application.auth.port.HumanAccessTokenIssuer;
 import com.takibo.identitycore.application.auth.port.HumanLoginCase;
 import com.takibo.identitycore.domain.exception.AccountLockedException;
 import com.takibo.identitycore.domain.exception.InvalidCredentialsException;
+import com.takibo.identitycore.domain.exception.UserNotActiveException;
 import com.takibo.identitycore.domain.exception.UserNotMemberOfSpaceException;
 import com.takibo.identitycore.domain.model.Account;
 import com.takibo.identitycore.domain.model.AccountCredentials;
@@ -18,6 +19,7 @@ import com.takibo.identitycore.domain.repository.AccountCredentialsRepository;
 import com.takibo.identitycore.domain.repository.AccountRepository;
 import com.takibo.identitycore.domain.repository.UserRepository;
 import com.takibo.identitycore.domain.security.port.PasswordHasherCase;
+import com.takibo.identitycore.domain.status.UserStatus;
 import com.takibo.identitycore.domain.vo.OrganizationId;
 import com.takibo.identitycore.domain.vo.SpaceId;
 import com.takibo.identitycore.integration.space.SpaceContextVerifier;
@@ -102,6 +104,14 @@ public class HumanLoginService implements HumanLoginCase {
         // 3) Situation : pas de token SPACE sans user local dans le space demandé.
         User user = userRepository.findBySpaceAndAccount(new SpaceId(key.spaceId()), account.getId())
                 .orElseThrow(() -> new UserNotMemberOfSpaceException(key.spaceId()));
+
+        // 3b) Le statut du user est une frontière d'accès : seul ACTIVE reçoit une preuve.
+        //     (Password déjà prouvé : révéler l'état local n'est plus un oracle.)
+        if (user.getStatus() != UserStatus.ACTIVE) {
+            log.warn("Login refused: user not active userId={} status={} spaceId={}",
+                    user.getId().value(), user.getStatus(), key.spaceId());
+            throw new UserNotActiveException(user.getId().value(), user.getStatus());
+        }
 
         // 4) Snapshot minimal des rôles techniques (pas le RBAC complet dans le JWT).
         List<String> roles = roleAssignments.findAssignedTechnicalRoleCodes(

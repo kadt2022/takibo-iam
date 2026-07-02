@@ -24,12 +24,16 @@ class PolicyEvaluatorTest {
         return new Subject("actor", roles, Set.of(), ORG, SPACE);
     }
 
-    private PolicyDecision evaluateCreateUser(Set<String> roles) {
+    private PolicyDecision evaluateUsersRoute(Set<String> roles, String path, Action action) {
         return evaluator.evaluate(
                 subject(roles),
-                new Resource(READABLE_USERS_PATH, ORG, SPACE),
-                Action.CREATE,
+                new Resource(path, ORG, SPACE),
+                action,
                 new Environment(Instant.now(), "127.0.0.1", 0));
+    }
+
+    private PolicyDecision evaluateCreateUser(Set<String> roles) {
+        return evaluateUsersRoute(roles, READABLE_USERS_PATH, Action.CREATE);
     }
 
     @Test
@@ -53,7 +57,46 @@ class PolicyEvaluatorTest {
         PolicyDecision decision = evaluateCreateUser(Set.of());
 
         assertThat(decision.isDeny()).isTrue();
-        assertThat(decision.getPolicyId()).isEqualTo("POL_USER_CREATE_ADMIN_REQUIRED");
+        assertThat(decision.getPolicyId()).isEqualTo("POL_USER_ADMIN_REQUIRED");
+    }
+
+    @Test
+    void readableRoute_userRead_deniedWithoutAdminRole() {
+        // La lecture de l'annuaire d'un space est aussi un acte d'admin (PR #24).
+        PolicyDecision list = evaluateUsersRoute(Set.of(), READABLE_USERS_PATH, Action.READ);
+        PolicyDecision get = evaluateUsersRoute(Set.of(),
+                READABLE_USERS_PATH + "/dddddddd-0000-0000-0000-000000000004", Action.READ);
+
+        assertThat(list.isDeny()).isTrue();
+        assertThat(list.getPolicyId()).isEqualTo("POL_USER_ADMIN_REQUIRED");
+        assertThat(get.isDeny()).isTrue();
+    }
+
+    @Test
+    void readableRoute_userUpdateAndLifecycle_deniedWithoutAdminRole() {
+        String userPath = READABLE_USERS_PATH + "/dddddddd-0000-0000-0000-000000000004";
+
+        assertThat(evaluateUsersRoute(Set.of(), userPath, Action.UPDATE).isDeny()).isTrue();
+        assertThat(evaluateUsersRoute(Set.of(), userPath + "/suspend", Action.CREATE).isDeny()).isTrue();
+        assertThat(evaluateUsersRoute(Set.of(), userPath + "/activate", Action.CREATE).isDeny()).isTrue();
+        assertThat(evaluateUsersRoute(Set.of(), userPath + "/lock", Action.CREATE).isDeny()).isTrue();
+        assertThat(evaluateUsersRoute(Set.of(), userPath + "/deactivate", Action.CREATE).isDeny()).isTrue();
+    }
+
+    @Test
+    void readableRoute_readAndLifecycle_allowedWithAdminRole() {
+        String userPath = READABLE_USERS_PATH + "/dddddddd-0000-0000-0000-000000000004";
+
+        assertThat(evaluateUsersRoute(Set.of("R_SPACE_ADMIN"), READABLE_USERS_PATH, Action.READ).isDeny()).isFalse();
+        assertThat(evaluateUsersRoute(Set.of("R_SPACE_ADMIN"), userPath, Action.UPDATE).isDeny()).isFalse();
+        assertThat(evaluateUsersRoute(Set.of("R_ORG_OWNER"), userPath + "/suspend", Action.CREATE).isDeny()).isFalse();
+    }
+
+    @Test
+    void signupRoute_isNotCaughtByUsersRule() {
+        PolicyDecision decision = evaluateUsersRoute(Set.of(), "/api/v1/orgs/signup", Action.CREATE);
+
+        assertThat(decision.isDeny()).isFalse();
     }
 
     @Test

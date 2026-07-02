@@ -40,6 +40,7 @@ public final class SentinelRuleRegistrar {
         registry.register(InvalidCredentialsException.class, SentinelRuleHandlers::ruleInvalidCredentials);
         registry.register(AccountLockedException.class, SentinelRuleHandlers::ruleAccountLocked);
         registry.register(UserNotMemberOfSpaceException.class, SentinelRuleHandlers::ruleUserNotMemberOfSpace);
+        registry.register(UserNotActiveException.class, SentinelRuleHandlers::ruleUserNotActive);
 
         registry.register(InvalidTokenException.class, SentinelRuleHandlers::ruleInvalidToken);
 

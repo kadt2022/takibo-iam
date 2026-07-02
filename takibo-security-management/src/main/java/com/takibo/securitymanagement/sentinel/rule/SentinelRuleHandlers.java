@@ -112,8 +112,10 @@ public final class SentinelRuleHandlers {
         return response(HttpStatus.BAD_REQUEST, SentinelErrorCode.USER_CREATION_ERROR, ex.getMessage(), path, traceId);
     }
 
+    // 409 : une transition invalide est un conflit avec l'état courant de la ressource,
+    // pas une requête malformée (décision PR #24).
     static SentinelResponse ruleInvalidStatusTransition(InvalidStatusTransitionException ex, String path, String traceId) {
-        return response(HttpStatus.BAD_REQUEST, SentinelErrorCode.INVALID_STATUS_TRANSITION, ex.getMessage(), path, traceId);
+        return response(HttpStatus.CONFLICT, SentinelErrorCode.INVALID_STATUS_TRANSITION, ex.getMessage(), path, traceId);
     }
 
     static SentinelResponse ruleSpaceGuard(SpaceGuardException ex, String path, String traceId) {
@@ -157,6 +159,12 @@ public final class SentinelRuleHandlers {
 
     static SentinelResponse ruleUserNotMemberOfSpace(UserNotMemberOfSpaceException ex, String path, String traceId) {
         return response(HttpStatus.FORBIDDEN, SentinelErrorCode.USER_NOT_MEMBER_OF_SPACE, ex.getMessage(), path, traceId);
+    }
+
+    // Password déjà prouvé : révéler l'état local n'est plus un oracle. Le statut
+    // du user est une frontière d'accès -> 403, pas 401.
+    static SentinelResponse ruleUserNotActive(UserNotActiveException ex, String path, String traceId) {
+        return response(HttpStatus.FORBIDDEN, SentinelErrorCode.USER_NOT_ACTIVE, ex.getMessage(), path, traceId);
     }
 
     static SentinelResponse ruleOrganizationNotFound(OrganizationNotFoundException ex, String path, String traceId) {

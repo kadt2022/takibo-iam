@@ -1,5 +1,8 @@
 package com.takibo.identitycore.infrastructure.jpa.repository;
 
+import com.takibo.identitycore.application.identity.readmodel.UserReadModel;
+import com.takibo.identitycore.domain.status.UserStatus;
+import com.takibo.identitycore.domain.type.UserType;
 import com.takibo.identitycore.infrastructure.entity.UserEntity;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -12,6 +15,46 @@ import java.util.UUID;
 
 @Repository
 public interface JpaUserRepository extends JpaRepository<UserEntity, UUID>, JpaSpecificationExecutor<UserEntity> {
+
+    String READ_MODEL_SELECT = """
+            select new com.takibo.identitycore.application.identity.readmodel.UserReadModel(
+                u.id, u.spaceId, u.accountId, a.email, u.username, u.firstName, u.lastName,
+                u.status, u.type, u.mfaEnabled, u.passwordExpired, u.lastLoginAt,
+                u.createdAt, u.updatedAt, u.version)
+            from UserEntity u join u.account a
+            """;
+
+    @Query(value = READ_MODEL_SELECT + """
+            where u.spaceId = :spaceId
+              and (:status is null or u.status = :status)
+              and (:type is null or u.type = :type)
+              and (:q is null
+                   or lower(u.username) like lower(concat('%', :q, '%'))
+                   or lower(a.email) like lower(concat('%', :q, '%'))
+                   or lower(u.firstName) like lower(concat('%', :q, '%'))
+                   or lower(u.lastName) like lower(concat('%', :q, '%')))
+            """,
+            countQuery = """
+            select count(u)
+              from UserEntity u join u.account a
+             where u.spaceId = :spaceId
+               and (:status is null or u.status = :status)
+               and (:type is null or u.type = :type)
+               and (:q is null
+                    or lower(u.username) like lower(concat('%', :q, '%'))
+                    or lower(a.email) like lower(concat('%', :q, '%'))
+                    or lower(u.firstName) like lower(concat('%', :q, '%'))
+                    or lower(u.lastName) like lower(concat('%', :q, '%')))
+            """)
+    Page<UserReadModel> findReadModelsBySpace(@Param("spaceId") UUID spaceId,
+                                              @Param("status") UserStatus status,
+                                              @Param("type") UserType type,
+                                              @Param("q") String q,
+                                              Pageable pageable);
+
+    @Query(READ_MODEL_SELECT + " where u.spaceId = :spaceId and u.id = :userId")
+    Optional<UserReadModel> findReadModelBySpaceAndId(@Param("spaceId") UUID spaceId,
+                                                      @Param("userId") UUID userId);
 
 
     boolean existsBySpaceIdAndUsernameIgnoreCase(UUID spaceId, String username);

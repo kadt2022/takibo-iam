@@ -1,4 +1,5 @@
 package com.takibo.identitycore.domain.model;
+import com.takibo.identitycore.domain.exception.InvalidStatusTransitionException;
 import com.takibo.identitycore.domain.status.UserStatus;
 import com.takibo.identitycore.domain.vo.AccountId;
 import com.takibo.identitycore.domain.vo.SpaceId;
@@ -38,6 +39,38 @@ public class User {
     @Builder.Default
     private Long version = 0L;
 
+    /**
+     * Modifie le visage local du user dans son space. Les ancres d'identité
+     * (id, orgId, spaceId, accountId) et le statut sont intouchables ici.
+     */
+    public User updateProfile(String username,
+                              String firstName,
+                              String lastName,
+                              Map<String, Object> metadata) {
+        Objects.requireNonNull(username, "username");
+        return this.toBuilder()
+                .username(username)
+                .firstName(firstName)
+                .lastName(lastName)
+                .metadata(metadata)
+                .updatedAt(Instant.now())
+                .build();
+    }
+
+    /**
+     * Le domaine décide si la transition est légitime ; le service ne fait qu'orchestrer.
+     * @throws InvalidStatusTransitionException si {@link UserStatus#canTransitionTo} refuse
+     */
+    public User changeStatus(UserStatus target) {
+        Objects.requireNonNull(target, "target status");
+        if (!this.status.canTransitionTo(target)) {
+            throw new InvalidStatusTransitionException(this.status, target);
+        }
+        return this.toBuilder()
+                .status(target)
+                .updatedAt(Instant.now())
+                .build();
+    }
 
     @SuppressWarnings("java:S107")
     public static User createNative(UserId id,
