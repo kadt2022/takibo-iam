@@ -42,6 +42,7 @@ public class OrgBoundaryFilter extends OncePerRequestFilter {
             new SkipRule(parser.parse("/v3/api-docs/**"), null),
             new SkipRule(parser.parse("/api/public/**"), null),
             new SkipRule(parser.parse("/api/auth/**"), null),
+            new SkipRule(parser.parse("/api/v1/auth/login"), "POST"),
             // signups publics éventuels
             new SkipRule(parser.parse("/api/spaces/signup"), "POST"),
             new SkipRule(parser.parse("/api/v1/spaces/signup"), "POST"),

@@ -2,6 +2,8 @@ package com.takibo.identitycore.infrastructure.adapter;
 
 import com.takibo.identitycore.domain.model.AccountCredentials;
 import com.takibo.identitycore.domain.repository.AccountCredentialsRepository;
+import com.takibo.identitycore.domain.vo.AccountId;
+import com.takibo.identitycore.domain.vo.OrganizationId;
 import com.takibo.identitycore.infrastructure.entity.AccountCredentialsEntity;
 import com.takibo.identitycore.infrastructure.entity.AccountEntity;
 import com.takibo.identitycore.infrastructure.jpa.mapper.AccountCredentialsJpaMapper;
@@ -11,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Optional;
 import java.util.UUID;
 
 
@@ -37,5 +40,12 @@ public class AccountCredentialsRepositoryAdapter implements AccountCredentialsRe
         entity.setAccountId(accountId);
 
         return mapper.toDomain(jpa.saveAndFlush(entity));
+    }
+
+    @Override
+    public Optional<AccountCredentials> find(OrganizationId orgId, AccountId accountId) {
+        AccountCredentialsEntity.AccountCredentialsId id =
+                new AccountCredentialsEntity.AccountCredentialsId(orgId.getValue(), accountId.getValue());
+        return jpa.findById(id).map(mapper::toDomain);
     }
 }

@@ -16,4 +16,9 @@ public class SpringPasswordHasherCase implements PasswordHasherCase {
     public String hash(String raw) {
         return encoder.encode(raw);
     }
+
+    @Override
+    public boolean matches(String raw, String hash) {
+        return encoder.matches(raw, hash);
+    }
 }

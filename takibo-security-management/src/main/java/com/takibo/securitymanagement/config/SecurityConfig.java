@@ -54,6 +54,10 @@ public class SecurityConfig {
                                 "/api/auth/**"
                         ).permitAll()
 
+                        // Login humain : public par nature (l'appelant n'a pas encore de token).
+                        // Volontairement limité à cette route exacte — pas tout /api/v1/auth/**.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
+
                         .requestMatchers("/api/platform/**").hasRole("PLATFORM_ADMIN")
 
                         .requestMatchers("/api/organizations/**").access(policyBasedAuthorizationManager)

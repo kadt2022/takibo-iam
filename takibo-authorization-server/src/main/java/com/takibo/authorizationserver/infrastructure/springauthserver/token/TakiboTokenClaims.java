@@ -17,6 +17,9 @@ public final class TakiboTokenClaims {
     public static final String TENANT_SOURCE = "takibo_tenant_source";
     public static final String ORG_ID = "org_id";
     public static final String SPACE_ID = "space_id";
+    public static final String ACCOUNT_ID = "account_id";
+    public static final String USER_ID = "user_id";
+    public static final String ROLES = "roles";
     public static final String SUBJECT_TYPE = "subject_type";
     public static final String AUTH_METHOD = "auth_method";
 
@@ -27,8 +30,13 @@ public final class TakiboTokenClaims {
     // Valeurs de source de tenant
     public static final String SOURCE_OAUTH2_CLIENT = "oauth2_client";
     public static final String SOURCE_PLATFORM = "platform_client";
+    public static final String SOURCE_HUMAN_LOGIN = "human_login";
 
     // Valeurs sujet / auth (flux client_credentials)
     public static final String SUBJECT_CLIENT_APP = "CLIENT_APP";
     public static final String AUTH_CLIENT_CREDENTIALS = "OAUTH2_CLIENT_CREDENTIALS";
+
+    // Valeurs sujet / auth (login humain)
+    public static final String SUBJECT_HUMAN = "HUMAN";
+    public static final String AUTH_PASSWORD = "PASSWORD";
 }

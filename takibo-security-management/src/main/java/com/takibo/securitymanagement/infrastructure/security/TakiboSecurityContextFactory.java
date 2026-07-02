@@ -20,12 +20,18 @@ final class TakiboSecurityContextFactory {
         UUID accountId = ClaimReader.readUuid(claims, "accountId");
         UUID userId = ClaimReader.readUuid(claims, "userId");
         String sub = ClaimReader.readString(claims, "sub");
+        String subjectType = ClaimReader.readString(claims, "subjectType");
+        String authMethodClaim = ClaimReader.readString(claims, "authMethod");
 
         SubjectNature subjectNature;
         AuthenticationMethod authMethod;
         String actorId;
 
-        if (accountId == null) {
+        // On lit la nature du sujet EXPLICITEMENT (subject_type émis par TAS) ;
+        // l'inférence par présence d'accountId reste un fallback pour les anciens tokens.
+        boolean isHuman = subjectType != null ? "HUMAN".equals(subjectType) : accountId != null;
+
+        if (!isHuman) {
             if (sub == null || sub.isBlank()) {
                 throw new InvalidTakiboSecurityContextException("Service token must contain a non-blank subject");
             }
@@ -36,10 +42,15 @@ final class TakiboSecurityContextFactory {
             actorId = firstNonBlank(
                     userId != null ? userId.toString() : null,
                     sub,
-                    accountId.toString()
+                    accountId != null ? accountId.toString() : null
             );
+            if (actorId == null) {
+                throw new InvalidTakiboSecurityContextException("Human token must identify its subject");
+            }
             subjectNature = SubjectNature.HUMAN;
-            authMethod = AuthenticationMethod.OIDC;
+            authMethod = "PASSWORD".equals(authMethodClaim)
+                    ? AuthenticationMethod.PASSWORD
+                    : AuthenticationMethod.OIDC;
         }
 
         Set<String> roles = ClaimReader.readStringSet(claims, "roles");

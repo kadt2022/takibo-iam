@@ -82,4 +82,10 @@ public class UserRepositoryAdapter implements UserRepository {
     public boolean existsBySpaceAndAccount(SpaceId spaceId, AccountId accountId) {
         return jpa.existsBySpaceIdAndAccountId(spaceId.value(), accountId.getValue());
     }
+
+    @Override
+    public Optional<User> findBySpaceAndAccount(SpaceId spaceId, AccountId accountId) {
+        return jpa.findBySpaceIdAndAccountId(spaceId.value(), accountId.getValue())
+                .map(mapper::toDomain);
+    }
 }
