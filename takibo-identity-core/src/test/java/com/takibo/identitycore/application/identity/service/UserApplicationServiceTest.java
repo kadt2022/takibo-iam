@@ -5,6 +5,7 @@ import com.takibo.identitycore.application.identity.mapper.UserMapper;
 import com.takibo.identitycore.domain.exception.SpaceNotFoundException;
 import com.takibo.identitycore.domain.model.UserRegistrationResult;
 import com.takibo.identitycore.integration.security.port.CurrentOrganizationContextCase;
+import com.takibo.identitycore.integration.security.port.CurrentSpaceContextCase;
 import com.takibo.identitycore.integration.space.port.SpaceOwnershipGuardCase;
 import com.takibo.identitycore.interfaces.rest.response.UserResponse;
 import org.junit.jupiter.api.Test;
@@ -40,6 +41,9 @@ class UserApplicationServiceTest {
     @Mock
     private CurrentOrganizationContextCase currentOrganizationContext;
 
+    @Mock
+    private CurrentSpaceContextCase currentSpaceContext;
+
     @InjectMocks
     private UserApplicationService service;
 
@@ -47,6 +51,7 @@ class UserApplicationServiceTest {
     void createUser_sameOrg_allowed() {
         when(currentOrganizationContext.requireCurrentOrganizationId()).thenReturn(ORG_A);
         doNothing().when(spaceOwnershipGuard).assertSpaceBelongsToOrg(SPACE_A, ORG_A);
+        when(currentSpaceContext.requireCurrentSpaceId()).thenReturn(SPACE_A);
 
         UserRegistrationResult result = mock(UserRegistrationResult.class);
         when(orchestrator.registerUser(any())).thenReturn(result);
@@ -100,6 +105,40 @@ class UserApplicationServiceTest {
                 .hasMessage("ORG_CONTEXT_REQUIRED");
 
         verify(spaceOwnershipGuard, never()).assertSpaceBelongsToOrg(any(), any());
+        verify(orchestrator, never()).registerUser(any());
+    }
+
+    @Test
+    void createUser_spaceMismatch_denied_evenInsideSameOrg() {
+        // Token SPACE situé sur SPACE_A, action demandée sur SPACE_B de la MÊME org :
+        // la frontière SPACE reste stricte — aucun rôle ne l'élargit.
+        when(currentOrganizationContext.requireCurrentOrganizationId()).thenReturn(ORG_A);
+        doNothing().when(spaceOwnershipGuard).assertSpaceBelongsToOrg(SPACE_B, ORG_A);
+        when(currentSpaceContext.requireCurrentSpaceId()).thenReturn(SPACE_A);
+
+        CreateUserCommand command = command(SPACE_B);
+
+        assertThatThrownBy(() -> service.createUser(command))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessage("SPACE_CONTEXT_MISMATCH");
+
+        verify(orchestrator, never()).registerUser(any());
+    }
+
+    @Test
+    void createUser_noSpaceContext_denied() {
+        // Token PLATFORM (aucun space_id) : fail-closed sur la route tenant.
+        when(currentOrganizationContext.requireCurrentOrganizationId()).thenReturn(ORG_A);
+        doNothing().when(spaceOwnershipGuard).assertSpaceBelongsToOrg(SPACE_A, ORG_A);
+        when(currentSpaceContext.requireCurrentSpaceId())
+                .thenThrow(new AccessDeniedException("SPACE_CONTEXT_REQUIRED"));
+
+        CreateUserCommand command = command(SPACE_A);
+
+        assertThatThrownBy(() -> service.createUser(command))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessage("SPACE_CONTEXT_REQUIRED");
+
         verify(orchestrator, never()).registerUser(any());
     }
 

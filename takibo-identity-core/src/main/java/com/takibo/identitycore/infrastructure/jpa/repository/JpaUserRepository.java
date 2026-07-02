@@ -43,6 +43,8 @@ public interface JpaUserRepository extends JpaRepository<UserEntity, UUID>, JpaS
 
     boolean existsBySpaceIdAndAccountId(UUID spaceId, UUID accountId);
 
+    Optional<UserEntity> findBySpaceIdAndAccountId(UUID spaceId, UUID accountId);
+
     Page<UserEntity> findAllBySpaceId(UUID spaceId, Pageable pageable);
 
     @Modifying

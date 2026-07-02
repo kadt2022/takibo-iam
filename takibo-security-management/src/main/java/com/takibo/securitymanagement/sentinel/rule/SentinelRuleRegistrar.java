@@ -34,6 +34,12 @@ public final class SentinelRuleRegistrar {
         registry.register(SpaceGuardException.class, SentinelRuleHandlers::ruleSpaceGuard);
         registry.register(SpaceNotActiveException.class, SentinelRuleHandlers::ruleSpaceNotActive);
         registry.register(SpaceNotFoundException.class, SentinelRuleHandlers::ruleSpaceNotFound);
+        registry.register(OrganizationNotFoundException.class, SentinelRuleHandlers::ruleOrganizationNotFound);
+
+        // Login humain
+        registry.register(InvalidCredentialsException.class, SentinelRuleHandlers::ruleInvalidCredentials);
+        registry.register(AccountLockedException.class, SentinelRuleHandlers::ruleAccountLocked);
+        registry.register(UserNotMemberOfSpaceException.class, SentinelRuleHandlers::ruleUserNotMemberOfSpace);
 
         registry.register(InvalidTokenException.class, SentinelRuleHandlers::ruleInvalidToken);
 

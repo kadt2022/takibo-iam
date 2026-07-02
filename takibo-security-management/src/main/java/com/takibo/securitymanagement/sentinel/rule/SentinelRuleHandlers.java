@@ -142,6 +142,27 @@ public final class SentinelRuleHandlers {
         return response(HttpStatus.UNAUTHORIZED, SentinelErrorCode.INVALID_TOKEN, ex.getMessage(), path, traceId);
     }
 
+    /**
+     * Message volontairement générique et identique pour toutes les causes
+     * (email inconnu, mauvais password, credentials absents, account d'une autre org) :
+     * zéro oracle d'énumération. La cause réelle vit dans les logs/audit, pas dans la réponse.
+     */
+    static SentinelResponse ruleInvalidCredentials(InvalidCredentialsException ex, String path, String traceId) {
+        return response(HttpStatus.UNAUTHORIZED, SentinelErrorCode.BAD_CREDENTIALS, "Invalid credentials", path, traceId);
+    }
+
+    static SentinelResponse ruleAccountLocked(AccountLockedException ex, String path, String traceId) {
+        return response(HttpStatus.FORBIDDEN, SentinelErrorCode.ACCOUNT_LOCKED, "Account is temporarily locked", path, traceId);
+    }
+
+    static SentinelResponse ruleUserNotMemberOfSpace(UserNotMemberOfSpaceException ex, String path, String traceId) {
+        return response(HttpStatus.FORBIDDEN, SentinelErrorCode.USER_NOT_MEMBER_OF_SPACE, ex.getMessage(), path, traceId);
+    }
+
+    static SentinelResponse ruleOrganizationNotFound(OrganizationNotFoundException ex, String path, String traceId) {
+        return response(HttpStatus.NOT_FOUND, SentinelErrorCode.ORGANIZATION_NOT_FOUND, ex.getMessage(), path, traceId);
+    }
+
     static SentinelResponse ruleBadCredentials(Throwable ex, String path, String traceId) {
         return response(HttpStatus.UNAUTHORIZED, SentinelErrorCode.BAD_CREDENTIALS, MSG_BAD_CREDENTIALS, path, traceId);
     }

@@ -33,5 +33,7 @@ public interface UserRepository {
 
     boolean existsBySpaceAndAccount(SpaceId spaceId, AccountId accountId);
 
+    Optional<User> findBySpaceAndAccount(SpaceId spaceId, AccountId accountId);
+
 
 }

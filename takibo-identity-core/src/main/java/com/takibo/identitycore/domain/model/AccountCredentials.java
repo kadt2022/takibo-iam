@@ -61,6 +61,15 @@ public class AccountCredentials {
         return lockedUntil != null && lockedUntil.isAfter(Instant.now());
     }
 
+    /** Réinitialise le compteur d'échecs après une authentification réussie. */
+    public AccountCredentials registerSuccess() {
+        return this.toBuilder()
+                .failedAttempts(0)
+                .lockedUntil(null)
+                .updatedAt(Instant.now())
+                .build();
+    }
+
     public static AccountCredentials create(AccountId accountId, PasswordHash hash) {
         Instant now = Instant.now();
         return AccountCredentials.builder()

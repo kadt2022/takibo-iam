@@ -18,6 +18,8 @@ public interface JpaRoleAssignmentRepository extends JpaRepository<RoleAssignmen
 
     List<RoleAssignmentEntity> findByOrgIdAndRoleCode(UUID orgId, String roleCode);
 
+    List<RoleAssignmentEntity> findByOrgIdAndIdentityId(UUID orgId, UUID identityId);
+
     boolean existsByOrgIdAndSpaceIdAndIdentityTypeAndIdentityIdAndRoleSourceAndBusinessRoleId(
             UUID orgId,
             UUID spaceId,

@@ -69,13 +69,23 @@ public class PolicyEvaluator {
 
         String path = resource.path();
 
-        // Helper rôle
-        boolean isPlatformAdmin = subject.roles().contains("PLATFORM_ADMIN");
-        boolean isOrgAdmin      = subject.roles().contains("ORG_ADMIN");
-        boolean isSpaceAdmin    = subject.roles().contains("SPACE_ADMIN");
+        // Helper rôle — les codes réels du catalogue technique (R_*) sont la référence ;
+        // les anciens alias sans préfixe restent acceptés pour compatibilité.
+        boolean isPlatformAdmin = subject.roles().contains("R_PLATFORM_ADMIN")
+                || subject.roles().contains("PLATFORM_ADMIN");
 
-        // PLATFORM_ADMIN = super admin tenant
-        boolean isTenantAdmin = isPlatformAdmin || isOrgAdmin || isSpaceAdmin;
+        boolean isOrgOwner = subject.roles().contains("R_ORG_OWNER")
+                || subject.roles().contains("ORG_OWNER");
+
+        boolean isOrgAdmin = subject.roles().contains("R_ORG_ADMIN")
+                || subject.roles().contains("ORG_ADMIN");
+
+        boolean isSpaceAdmin = subject.roles().contains("R_SPACE_ADMIN")
+                || subject.roles().contains("SPACE_ADMIN");
+
+        // Admin tenant = pouvoir d'agir dans la frontière portée par le token.
+        // Ce statut n'élargit JAMAIS la frontière elle-même (token.space_id reste strict).
+        boolean isTenantAdmin = isPlatformAdmin || isOrgOwner || isOrgAdmin || isSpaceAdmin;
 
         // ───────────────────────────────
         // /api/spaces/signup (public)
@@ -95,6 +105,21 @@ public class PolicyEvaluator {
                             .reason("ORG_ADMIN or SPACE_ADMIN or PLATFORM_ADMIN required to create user")
                             .build();
                 }
+            }
+        }
+
+        // ───────────────────────────────
+        // /api/v1/orgs/{orgCode}/spaces/{spaceCode}/users (route lisible)
+        // Même exigence que la route UUID : la création d'utilisateur est un acte d'admin.
+        // ───────────────────────────────
+        if (path.startsWith("/api/v1/orgs/") && path.contains("/spaces/") && path.contains("/users")) {
+
+            if (action == Action.CREATE && !isTenantAdmin) {
+                return PolicyDecision.builder()
+                        .effect(Effect.DENY)
+                        .policyId("POL_USER_CREATE_ADMIN_REQUIRED")
+                        .reason("R_ORG_OWNER, R_ORG_ADMIN or R_SPACE_ADMIN required to create user")
+                        .build();
             }
         }
 

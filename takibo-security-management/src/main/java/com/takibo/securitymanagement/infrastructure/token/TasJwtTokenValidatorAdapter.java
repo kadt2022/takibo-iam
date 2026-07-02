@@ -53,6 +53,24 @@ public class TasJwtTokenValidatorAdapter implements TokenValidatorAdapter {
         String spaceId = jwt.getClaimAsString("space_id");
         if (spaceId != null) claims.put("spaceId", spaceId);
 
+        String accountId = jwt.getClaimAsString("account_id");
+        if (accountId != null) claims.put("accountId", accountId);
+
+        String userId = jwt.getClaimAsString("user_id");
+        if (userId != null) claims.put("userId", userId);
+
+        String subjectType = jwt.getClaimAsString("subject_type");
+        if (subjectType != null) claims.put("subjectType", subjectType);
+
+        String authMethod = jwt.getClaimAsString("auth_method");
+        if (authMethod != null) claims.put("authMethod", authMethod);
+
+        String scopeLevel = jwt.getClaimAsString("takibo_scope_level");
+        if (scopeLevel != null) claims.put("scopeLevel", scopeLevel);
+
+        List<String> roles = jwt.getClaimAsStringList("roles");
+        if (roles != null && !roles.isEmpty()) claims.put("roles", List.copyOf(roles));
+
         String clientId = jwt.getClaimAsString("client_id");
         if (clientId != null) claims.put("clientId", clientId);
 

@@ -16,6 +16,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -123,6 +124,23 @@ class GovernanceRoleAssignmentRepositoryAdapterTest {
                 .hasMessageNotContaining("and space");
     }
 
+    @Test
+    void findAssignedTechnicalRoleCodes_filtersTechnicalAccountRolesInRequestedBoundaryAndDeduplicates() {
+        when(jpa.findByOrgIdAndIdentityId(ORG_ID, ACCOUNT_ID)).thenReturn(List.of(
+                assignment("ACCOUNT", RoleSource.TECHNICAL, null, "R_ORG_OWNER"),
+                assignment("ACCOUNT", RoleSource.TECHNICAL, SPACE_ID, "R_SPACE_ADMIN"),
+                assignment("ACCOUNT", RoleSource.TECHNICAL, SPACE_ID, "R_SPACE_ADMIN"),
+                assignment("ACCOUNT", RoleSource.BUSINESS, SPACE_ID, "R_BUSINESS"),
+                assignment("USER", RoleSource.TECHNICAL, SPACE_ID, "R_USER"),
+                assignment("ACCOUNT", RoleSource.TECHNICAL, UUID.fromString("ffffffff-0000-0000-0000-000000000006"), "R_OTHER_SPACE"),
+                assignment("ACCOUNT", RoleSource.TECHNICAL, SPACE_ID, null)
+        ));
+
+        List<String> result = adapter.findAssignedTechnicalRoleCodes(ORG_ID, SPACE_ID, ACCOUNT_ID);
+
+        assertThat(result).containsExactly("R_ORG_OWNER", "R_SPACE_ADMIN");
+    }
+
     private RoleAssignment technicalAssignment(UUID id) {
         return new RoleAssignment(
                 id, ORG_ID, SPACE_ID,
@@ -161,6 +179,18 @@ class GovernanceRoleAssignmentRepositoryAdapterTest {
                 .identityType(IdentityType.ACCOUNT.name())
                 .identityId(ACCOUNT_ID)
                 .roleCode("R_SPACE_ADMIN")
+                .build();
+    }
+
+    private RoleAssignmentEntity assignment(String identityType, RoleSource roleSource, UUID spaceId, String roleCode) {
+        return RoleAssignmentEntity.builder()
+                .id(UUID.randomUUID())
+                .orgId(ORG_ID)
+                .spaceId(spaceId)
+                .identityType(identityType)
+                .identityId(ACCOUNT_ID)
+                .roleSource(roleSource)
+                .roleCode(roleCode)
                 .build();
     }
 }

@@ -2,6 +2,7 @@ package com.takibo.identitycore.infrastructure.adapter;
 
 import com.takibo.identitycore.domain.model.AccountCredentials;
 import com.takibo.identitycore.domain.vo.AccountId;
+import com.takibo.identitycore.domain.vo.OrganizationId;
 import com.takibo.identitycore.domain.vo.PasswordHash;
 import com.takibo.identitycore.infrastructure.entity.AccountCredentialsEntity;
 import com.takibo.identitycore.infrastructure.entity.AccountEntity;
@@ -14,6 +15,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -83,5 +85,67 @@ class AccountCredentialsRepositoryAdapterTest {
 
         verify(em).getReference(AccountEntity.class, ACCOUNT_UUID);
         verify(em, never()).find(eq(AccountEntity.class), any());
+    }
+
+    @Test
+    void save_existingRow_updatesLoadedEntity_neverReinserts() {
+        // Chemin login (échec de password / reset) : la ligne existe déjà.
+        // Un passage par toEntity() (isNew=true) provoquerait un INSERT en doublon de PK.
+        AccountId accountId = AccountId.of(ACCOUNT_UUID);
+        AccountCredentials domain = AccountCredentials.builder()
+                .accountId(accountId)
+                .passwordHash(PasswordHash.of("$2a$hash", "bcrypt", 1))
+                .failedAttempts(3)
+                .mustChangeNextLogin(false)
+                .build();
+
+        AccountCredentialsEntity.AccountCredentialsId id =
+                new AccountCredentialsEntity.AccountCredentialsId(ORG_ID, ACCOUNT_UUID);
+        AccountCredentialsEntity loaded = new AccountCredentialsEntity();
+        loaded.setOrgId(ORG_ID);
+        loaded.setAccountId(ACCOUNT_UUID);
+        loaded.setFailedAttempts(2);
+
+        AccountCredentials expectedResult = mock(AccountCredentials.class);
+        when(jpa.findById(id)).thenReturn(Optional.of(loaded));
+        when(jpa.saveAndFlush(loaded)).thenReturn(loaded);
+        when(mapper.toDomain(loaded)).thenReturn(expectedResult);
+
+        AccountCredentials result = adapter.save(domain, ORG_ID);
+
+        assertThat(result).isSameAs(expectedResult);
+        assertThat(loaded.getFailedAttempts()).isEqualTo(3);
+        assertThat(loaded.getPasswordHash()).isEqualTo("$2a$hash");
+
+        verify(mapper, never()).toEntity(any(), any());
+        verify(em, never()).getReference(any(), any());
+        verify(jpa).saveAndFlush(loaded);
+    }
+
+    @Test
+    void find_existingCredentials_returnsMappedDomain() {
+        AccountCredentialsEntity.AccountCredentialsId id =
+                new AccountCredentialsEntity.AccountCredentialsId(ORG_ID, ACCOUNT_UUID);
+        AccountCredentialsEntity entity = new AccountCredentialsEntity();
+        AccountCredentials domain = mock(AccountCredentials.class);
+        when(jpa.findById(id)).thenReturn(Optional.of(entity));
+        when(mapper.toDomain(entity)).thenReturn(domain);
+
+        Optional<AccountCredentials> result = adapter.find(OrganizationId.of(ORG_ID), AccountId.of(ACCOUNT_UUID));
+
+        assertThat(result).containsSame(domain);
+        verify(mapper).toDomain(entity);
+    }
+
+    @Test
+    void find_missingCredentials_returnsEmpty() {
+        AccountCredentialsEntity.AccountCredentialsId id =
+                new AccountCredentialsEntity.AccountCredentialsId(ORG_ID, ACCOUNT_UUID);
+        when(jpa.findById(id)).thenReturn(Optional.empty());
+
+        Optional<AccountCredentials> result = adapter.find(OrganizationId.of(ORG_ID), AccountId.of(ACCOUNT_UUID));
+
+        assertThat(result).isEmpty();
+        verify(mapper, never()).toDomain(any());
     }
 }

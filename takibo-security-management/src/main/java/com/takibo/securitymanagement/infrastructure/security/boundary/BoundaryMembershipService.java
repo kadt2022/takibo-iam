@@ -45,9 +45,14 @@ public class BoundaryMembershipService {
 
         UUID tokenOrg = extractOrgId(auth);
 
-        if (hasAuthority(auth, "ROLE_ORG_ADMIN") || hasAuthority(auth, "ORG_ADMIN")) {
+        // Bypass org-level : uniquement la vérification d'appartenance à l'ORG.
+        // Ne bypass jamais la règle stricte token.space_id d'un token SPACE.
+        if (hasAnyAuthority(auth,
+                "ROLE_ORG_ADMIN", "ORG_ADMIN",
+                "ROLE_R_ORG_ADMIN", "R_ORG_ADMIN",
+                "ROLE_R_ORG_OWNER", "R_ORG_OWNER")) {
             if (tokenOrg != null && tokenOrg.equals(targetOrg)) {
-                log.debug("ORG_ADMIN bypass: token org matches target org ({})", targetOrg);
+                log.debug("Org-level role bypass: token org matches target org ({})", targetOrg);
                 return;
             }
         }
@@ -234,6 +239,13 @@ public class BoundaryMembershipService {
         return false;
     }
 
+    private boolean hasAnyAuthority(Authentication auth, String... expected) {
+        for (String e : expected) {
+            if (hasAuthority(auth, e)) return true;
+        }
+        return false;
+    }
+
     private UUID parseUuid(Object... vals) {
         for (Object v : vals) {
             if (v instanceof UUID u) return u;
@@ -270,11 +282,9 @@ public class BoundaryMembershipService {
     }
 
     private boolean isPlatformAdmin(Authentication auth) {
-        for (GrantedAuthority ga : auth.getAuthorities()) {
-            String a = ga.getAuthority();
-            if ("PLATFORM_ADMIN".equals(a) || "ROLE_PLATFORM_ADMIN".equals(a)) return true;
-        }
-        return false;
+        return hasAnyAuthority(auth,
+                "PLATFORM_ADMIN", "ROLE_PLATFORM_ADMIN",
+                "R_PLATFORM_ADMIN", "ROLE_R_PLATFORM_ADMIN");
     }
 
     private record CacheEntry(UUID value, Instant at) {

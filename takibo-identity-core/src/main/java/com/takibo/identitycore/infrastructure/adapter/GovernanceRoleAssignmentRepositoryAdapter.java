@@ -1,6 +1,7 @@
 package com.takibo.identitycore.infrastructure.adapter;
 
 import com.takibo.identitycore.domain.exception.DuplicateAssignmentException;
+import com.takibo.identitycore.domain.model.IdentityType;
 import com.takibo.identitycore.domain.rbac.model.RoleAssignment;
 import com.takibo.identitycore.domain.rbac.model.RoleSource;
 import com.takibo.identitycore.domain.rbac.repository.GovernanceRoleAssignmentRepository;
@@ -12,6 +13,8 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 @Component
@@ -42,6 +45,19 @@ public class GovernanceRoleAssignmentRepositoryAdapter implements GovernanceRole
                     ex
             );
         }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<String> findAssignedTechnicalRoleCodes(UUID orgId, UUID spaceId, UUID accountId) {
+        return jpa.findByOrgIdAndIdentityId(orgId, accountId).stream()
+                .filter(e -> IdentityType.ACCOUNT.name().equals(e.getIdentityType()))
+                .filter(e -> e.getRoleSource() == RoleSource.TECHNICAL)
+                .filter(e -> e.getSpaceId() == null || e.getSpaceId().equals(spaceId))
+                .map(RoleAssignmentEntity::getRoleCode)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
     }
 
     private void assertGovernanceShape(RoleAssignment assignment) {
