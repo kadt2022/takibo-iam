@@ -24,33 +24,38 @@ public interface JpaUserRepository extends JpaRepository<UserEntity, UUID>, JpaS
             from UserEntity u join u.account a
             """;
 
-    @Query(value = READ_MODEL_SELECT + """
+    // Deux variantes plutôt qu'un ":q is null or ..." : lier un paramètre String null
+    // dans lower()/concat() fait inférer bytea à PostgreSQL (lower(bytea) n'existe pas).
+    // L'adapter choisit la variante ; :q arrive TOUJOURS non-null, déjà en %pattern% minuscule.
+    String READ_MODEL_FILTERS = """
             where u.spaceId = :spaceId
               and (:status is null or u.status = :status)
               and (:type is null or u.type = :type)
-              and (:q is null
-                   or lower(u.username) like lower(concat('%', :q, '%'))
-                   or lower(a.email) like lower(concat('%', :q, '%'))
-                   or lower(u.firstName) like lower(concat('%', :q, '%'))
-                   or lower(u.lastName) like lower(concat('%', :q, '%')))
-            """,
-            countQuery = """
-            select count(u)
-              from UserEntity u join u.account a
-             where u.spaceId = :spaceId
-               and (:status is null or u.status = :status)
-               and (:type is null or u.type = :type)
-               and (:q is null
-                    or lower(u.username) like lower(concat('%', :q, '%'))
-                    or lower(a.email) like lower(concat('%', :q, '%'))
-                    or lower(u.firstName) like lower(concat('%', :q, '%'))
-                    or lower(u.lastName) like lower(concat('%', :q, '%')))
-            """)
+            """;
+
+    String READ_MODEL_Q_FILTER = """
+              and (lower(u.username) like :q
+                   or lower(a.email) like :q
+                   or lower(u.firstName) like :q
+                   or lower(u.lastName) like :q)
+            """;
+
+    String READ_MODEL_COUNT = "select count(u) from UserEntity u join u.account a ";
+
+    @Query(value = READ_MODEL_SELECT + READ_MODEL_FILTERS,
+            countQuery = READ_MODEL_COUNT + READ_MODEL_FILTERS)
     Page<UserReadModel> findReadModelsBySpace(@Param("spaceId") UUID spaceId,
                                               @Param("status") UserStatus status,
                                               @Param("type") UserType type,
-                                              @Param("q") String q,
                                               Pageable pageable);
+
+    @Query(value = READ_MODEL_SELECT + READ_MODEL_FILTERS + READ_MODEL_Q_FILTER,
+            countQuery = READ_MODEL_COUNT + READ_MODEL_FILTERS + READ_MODEL_Q_FILTER)
+    Page<UserReadModel> searchReadModelsBySpace(@Param("spaceId") UUID spaceId,
+                                                @Param("status") UserStatus status,
+                                                @Param("type") UserType type,
+                                                @Param("q") String q,
+                                                Pageable pageable);
 
     @Query(READ_MODEL_SELECT + " where u.spaceId = :spaceId and u.id = :userId")
     Optional<UserReadModel> findReadModelBySpaceAndId(@Param("spaceId") UUID spaceId,

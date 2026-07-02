@@ -11,6 +11,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -23,8 +24,12 @@ public class UserQueryRepositoryAdapter implements UserQueryRepository {
 
     @Override
     public Page<UserReadModel> findBySpace(UUID spaceId, UserStatus status, UserType type, String q, Pageable pageable) {
-        String normalizedQ = (q == null || q.isBlank()) ? null : q.trim();
-        return jpa.findReadModelsBySpace(spaceId, status, type, normalizedQ, pageable);
+        // Jamais de paramètre q null côté JPQL (PostgreSQL infère bytea dans lower()).
+        if (q == null || q.isBlank()) {
+            return jpa.findReadModelsBySpace(spaceId, status, type, pageable);
+        }
+        String pattern = "%" + q.trim().toLowerCase(Locale.ROOT) + "%";
+        return jpa.searchReadModelsBySpace(spaceId, status, type, pattern, pageable);
     }
 
     @Override
