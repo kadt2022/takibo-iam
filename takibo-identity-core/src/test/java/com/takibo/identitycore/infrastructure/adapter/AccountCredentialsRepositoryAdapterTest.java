@@ -2,6 +2,7 @@ package com.takibo.identitycore.infrastructure.adapter;
 
 import com.takibo.identitycore.domain.model.AccountCredentials;
 import com.takibo.identitycore.domain.vo.AccountId;
+import com.takibo.identitycore.domain.vo.OrganizationId;
 import com.takibo.identitycore.domain.vo.PasswordHash;
 import com.takibo.identitycore.infrastructure.entity.AccountCredentialsEntity;
 import com.takibo.identitycore.infrastructure.entity.AccountEntity;
@@ -14,6 +15,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -83,5 +85,32 @@ class AccountCredentialsRepositoryAdapterTest {
 
         verify(em).getReference(AccountEntity.class, ACCOUNT_UUID);
         verify(em, never()).find(eq(AccountEntity.class), any());
+    }
+
+    @Test
+    void find_existingCredentials_returnsMappedDomain() {
+        AccountCredentialsEntity.AccountCredentialsId id =
+                new AccountCredentialsEntity.AccountCredentialsId(ORG_ID, ACCOUNT_UUID);
+        AccountCredentialsEntity entity = new AccountCredentialsEntity();
+        AccountCredentials domain = mock(AccountCredentials.class);
+        when(jpa.findById(id)).thenReturn(Optional.of(entity));
+        when(mapper.toDomain(entity)).thenReturn(domain);
+
+        Optional<AccountCredentials> result = adapter.find(OrganizationId.of(ORG_ID), AccountId.of(ACCOUNT_UUID));
+
+        assertThat(result).containsSame(domain);
+        verify(mapper).toDomain(entity);
+    }
+
+    @Test
+    void find_missingCredentials_returnsEmpty() {
+        AccountCredentialsEntity.AccountCredentialsId id =
+                new AccountCredentialsEntity.AccountCredentialsId(ORG_ID, ACCOUNT_UUID);
+        when(jpa.findById(id)).thenReturn(Optional.empty());
+
+        Optional<AccountCredentials> result = adapter.find(OrganizationId.of(ORG_ID), AccountId.of(ACCOUNT_UUID));
+
+        assertThat(result).isEmpty();
+        verify(mapper, never()).toDomain(any());
     }
 }

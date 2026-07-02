@@ -76,4 +76,44 @@ class TasJwtTokenValidatorAdapterTest {
         assertThat(claims.get("scopeLevel")).isEqualTo("PLATFORM");
         assertThat(claims.get("scope")).isEqualTo("api.read api.write");
     }
+
+    @Test
+    void humanTokenWithoutRoles_omitsRolesClaim() {
+        Jwt jwt = Jwt.withTokenValue("raw")
+                .header("alg", "RS256")
+                .subject(ACCOUNT)
+                .claim("org_id", ORG)
+                .claim("space_id", SPACE)
+                .claim("account_id", ACCOUNT)
+                .claim("user_id", USER)
+                .claim("subject_type", "HUMAN")
+                .claim("auth_method", "PASSWORD")
+                .claim("takibo_scope_level", "SPACE")
+                .build();
+
+        Map<String, Object> claims = validate(jwt);
+
+        assertThat(claims).containsEntry("accountId", ACCOUNT)
+                .containsEntry("userId", USER)
+                .containsEntry("subjectType", "HUMAN")
+                .containsEntry("authMethod", "PASSWORD")
+                .containsEntry("scopeLevel", "SPACE")
+                .doesNotContainKey("roles");
+    }
+
+    @Test
+    void humanTokenWithEmptyRoles_omitsRolesClaim() {
+        Jwt jwt = Jwt.withTokenValue("raw")
+                .header("alg", "RS256")
+                .subject(ACCOUNT)
+                .claim("roles", List.of())
+                .claim("subject_type", "HUMAN")
+                .claim("auth_method", "PASSWORD")
+                .claim("takibo_scope_level", "SPACE")
+                .build();
+
+        Map<String, Object> claims = validate(jwt);
+
+        assertThat(claims).doesNotContainKey("roles");
+    }
 }

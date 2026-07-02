@@ -36,6 +36,8 @@ class PolicyEvaluatorTest {
     void realTechnicalCodes_areRecognizedAsTenantAdmin() {
         assertThat(evaluateCreateUser(Set.of("R_SPACE_ADMIN")).isDeny()).isFalse();
         assertThat(evaluateCreateUser(Set.of("R_ORG_OWNER")).isDeny()).isFalse();
+        assertThat(evaluateCreateUser(Set.of("R_ORG_ADMIN")).isDeny()).isFalse();
+        assertThat(evaluateCreateUser(Set.of("R_PLATFORM_ADMIN")).isDeny()).isFalse();
         assertThat(evaluateCreateUser(Set.of("R_ORG_OWNER", "R_SPACE_ADMIN")).isDeny()).isFalse();
     }
 
