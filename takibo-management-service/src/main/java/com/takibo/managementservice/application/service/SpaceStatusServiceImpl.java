@@ -28,7 +28,7 @@ public class SpaceStatusServiceImpl implements SpaceStatusService {
         int updated = spaceRepository.updateStatus(
                 spaceId, newStatus, reason.orElse(null), Instant.now());
         if (updated == 0) {
-            throw new IllegalStateException("Concurrent update prevented updating status for port " + spaceId);
+            throw new IllegalStateException("Concurrent update prevented updating status for space " + spaceId);
         }
         return newStatus;
     }

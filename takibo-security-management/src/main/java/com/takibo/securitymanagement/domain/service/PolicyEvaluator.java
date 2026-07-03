@@ -109,18 +109,17 @@ public class PolicyEvaluator {
         }
 
         // ───────────────────────────────
-        // /api/v1/orgs/{orgCode}/spaces/{spaceCode}/users (route lisible)
-        // Même exigence que la route UUID : la création d'utilisateur est un acte d'admin.
+        // /api/v1/orgs/{orgCode}/spaces/{spaceCode}/users[...] (route lisible)
+        // Toute la surface user (list/get/create/patch/lifecycle) est un acte d'admin :
+        // lecture comprise — un membre sans rôle admin ne voit pas l'annuaire du space.
+        // Le rôle autorise l'action ; la frontière reste token.org_id/space_id.
         // ───────────────────────────────
-        if (path.startsWith("/api/v1/orgs/") && path.contains("/spaces/") && path.contains("/users")) {
-
-            if (action == Action.CREATE && !isTenantAdmin) {
-                return PolicyDecision.builder()
-                        .effect(Effect.DENY)
-                        .policyId("POL_USER_CREATE_ADMIN_REQUIRED")
-                        .reason("R_ORG_OWNER, R_ORG_ADMIN or R_SPACE_ADMIN required to create user")
-                        .build();
-            }
+        if (isReadableUsersRoute(path) && !isTenantAdmin) {
+            return PolicyDecision.builder()
+                    .effect(Effect.DENY)
+                    .policyId("POL_USER_ADMIN_REQUIRED")
+                    .reason("R_ORG_OWNER, R_ORG_ADMIN or R_SPACE_ADMIN required to administer users")
+                    .build();
         }
 
         // ───────────────────────────────
@@ -171,5 +170,11 @@ public class PolicyEvaluator {
                 .policyId("POL_RESOURCE_ALLOW")
                 .reason("No specific resource policy denied access")
                 .build();
+    }
+
+    private static boolean isReadableUsersRoute(String path) {
+        return path.startsWith("/api/v1/orgs/")
+                && path.contains("/spaces/")
+                && path.contains("/users");
     }
 }

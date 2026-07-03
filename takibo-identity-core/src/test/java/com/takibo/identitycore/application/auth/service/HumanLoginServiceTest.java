@@ -8,6 +8,7 @@ import com.takibo.identitycore.application.auth.port.HumanAccessTokenIssuer;
 import com.takibo.identitycore.domain.exception.AccountLockedException;
 import com.takibo.identitycore.domain.exception.InvalidCredentialsException;
 import com.takibo.identitycore.domain.exception.SpaceNotFoundException;
+import com.takibo.identitycore.domain.exception.UserNotActiveException;
 import com.takibo.identitycore.domain.exception.UserNotMemberOfSpaceException;
 import com.takibo.identitycore.domain.model.Account;
 import com.takibo.identitycore.domain.model.AccountCredentials;
@@ -18,6 +19,7 @@ import com.takibo.identitycore.domain.repository.AccountCredentialsRepository;
 import com.takibo.identitycore.domain.repository.AccountRepository;
 import com.takibo.identitycore.domain.repository.UserRepository;
 import com.takibo.identitycore.domain.security.port.PasswordHasherCase;
+import com.takibo.identitycore.domain.status.UserStatus;
 import com.takibo.identitycore.domain.vo.AccountId;
 import com.takibo.identitycore.domain.vo.PasswordHash;
 import com.takibo.identitycore.domain.vo.UserId;
@@ -98,8 +100,13 @@ class HumanLoginServiceTest {
     }
 
     private User localUser() {
+        return localUser(UserStatus.ACTIVE);
+    }
+
+    private User localUser(UserStatus status) {
         User user = mock(User.class);
         when(user.getId()).thenReturn(new UserId(USER_ID));
+        when(user.getStatus()).thenReturn(status);
         return user;
     }
 
@@ -242,5 +249,30 @@ class HumanLoginServiceTest {
                 .isInstanceOf(SpaceNotFoundException.class);
 
         verifyNoInteractions(accountRepository, accountCredentialsRepository, passwordHasher, tokenIssuer);
+    }
+
+    @Test
+    void nonActiveUser_cannotObtainToken_evenWithValidPassword() {
+        // Le statut du user est une frontière d'accès : suspendre, c'est retirer
+        // la capacité de recevoir une nouvelle preuve.
+        for (UserStatus status : new UserStatus[]{
+                UserStatus.SUSPENDED, UserStatus.LOCKED, UserStatus.DEACTIVATED,
+                UserStatus.PASSWORD_RESET, UserStatus.PENDING_ACTIVATION}) {
+
+            reset(spaceKeyResolution, accountRepository, accountCredentialsRepository,
+                    passwordHasher, userRepository, tokenIssuer);
+            givenResolvedSpace();
+            givenAccountWithCredentials();
+            when(passwordHasher.matches(PASSWORD, "$2a$hash")).thenReturn(true);
+            User user = localUser(status);
+            when(userRepository.findBySpaceAndAccount(any(), eq(account.getId())))
+                    .thenReturn(Optional.of(user));
+
+            assertThatThrownBy(() -> service.login(command()))
+                    .as("status " + status)
+                    .isInstanceOf(UserNotActiveException.class);
+
+            verify(tokenIssuer, never()).issue(any());
+        }
     }
 }
