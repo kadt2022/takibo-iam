@@ -1,7 +1,6 @@
 package com.takibo.identitycore.application.rbac.catalog.service;
 
-import com.takibo.identitycore.application.rbac.catalog.model.CatalogNature;
-import com.takibo.identitycore.application.rbac.catalog.model.CatalogOrigin;
+import com.takibo.identitycore.application.rbac.catalog.mapper.RbacCatalogMapper;
 import com.takibo.identitycore.application.rbac.catalog.port.in.RbacCatalogQueryCase;
 import com.takibo.identitycore.domain.catalogrbac.TechnicalGroup;
 import com.takibo.identitycore.domain.catalogrbac.TechnicalRole;
@@ -9,8 +8,6 @@ import com.takibo.identitycore.domain.catalogrbac.TechnicalScope;
 import com.takibo.identitycore.domain.exception.GroupNotFoundException;
 import com.takibo.identitycore.domain.exception.PermissionNotFoundException;
 import com.takibo.identitycore.domain.exception.RoleNotFoundException;
-import com.takibo.identitycore.domain.model.Group;
-import com.takibo.identitycore.domain.model.Role;
 import com.takibo.identitycore.domain.repository.GroupRepository;
 import com.takibo.identitycore.domain.repository.RoleRepository;
 import com.takibo.identitycore.domain.vo.SpaceId;
@@ -59,6 +56,7 @@ public class RbacCatalogQueryService implements RbacCatalogQueryCase {
     private final SpaceBoundaryGuard spaceBoundaryGuard;
     private final RoleRepository roleRepository;
     private final GroupRepository groupRepository;
+    private final RbacCatalogMapper mapper;
 
     @Override
     public RbacCatalogListResponse<RoleCatalogResponse> listRoles(ResolvedSpaceKey key) {
@@ -71,9 +69,9 @@ public class RbacCatalogQueryService implements RbacCatalogQueryCase {
         Map<String, RoleCatalogResponse> byCode = new TreeMap<>();
         roleRepository.findAllByOrgAndSpace(key.orgId(), key.spaceId()).stream()
                 .filter(role -> !isHiddenTechnicalRoleCode(role.getCode()))
-                .forEach(role -> byCode.put(role.getCode(), toResponse(role)));
+                .forEach(role -> byCode.put(role.getCode(), mapper.toResponse(role)));
         tenantVisibleTechnicalRoles()
-                .forEach(role -> byCode.put(role.code(), toResponse(role)));
+                .forEach(role -> byCode.put(role.code(), mapper.toResponse(role)));
 
         return new RbacCatalogListResponse<>(List.copyOf(byCode.values()), byCode.size());
     }
@@ -85,7 +83,7 @@ public class RbacCatalogQueryService implements RbacCatalogQueryCase {
         Optional<TechnicalRole> technical = TechnicalRole.fromCode(roleCode)
                 .filter(role -> TENANT_VISIBLE_SCOPES.contains(role.scope()));
         if (technical.isPresent()) {
-            return toResponse(technical.get());
+            return mapper.toResponse(technical.get());
         }
 
         // Un code technique caché n'existe pas pour les tenants, même si une ligne
@@ -95,7 +93,7 @@ public class RbacCatalogQueryService implements RbacCatalogQueryCase {
         }
 
         return roleRepository.findBySpaceIdAndCode(SpaceId.of(key.spaceId()), roleCode)
-                .map(this::toResponse)
+                .map(mapper::toResponse)
                 .orElseThrow(() -> new RoleNotFoundException("Role not found in this space: " + roleCode));
     }
 
@@ -106,9 +104,9 @@ public class RbacCatalogQueryService implements RbacCatalogQueryCase {
         Map<String, GroupCatalogResponse> byCode = new TreeMap<>();
         groupRepository.findAllByOrgAndSpace(key.orgId(), key.spaceId()).stream()
                 .filter(group -> !isHiddenTechnicalGroupCode(group.getCode()))
-                .forEach(group -> byCode.put(group.getCode(), toResponse(group)));
+                .forEach(group -> byCode.put(group.getCode(), mapper.toResponse(group)));
         tenantVisibleTechnicalGroups()
-                .forEach(group -> byCode.put(group.code(), toResponse(group)));
+                .forEach(group -> byCode.put(group.code(), mapper.toResponse(group)));
 
         return new RbacCatalogListResponse<>(List.copyOf(byCode.values()), byCode.size());
     }
@@ -120,7 +118,7 @@ public class RbacCatalogQueryService implements RbacCatalogQueryCase {
         Optional<TechnicalGroup> technical = TechnicalGroup.fromCode(groupCode)
                 .filter(group -> TENANT_VISIBLE_SCOPES.contains(group.scope()));
         if (technical.isPresent()) {
-            return toResponse(technical.get());
+            return mapper.toResponse(technical.get());
         }
 
         if (isHiddenTechnicalGroupCode(groupCode)) {
@@ -128,7 +126,7 @@ public class RbacCatalogQueryService implements RbacCatalogQueryCase {
         }
 
         return groupRepository.findBySpaceIdAndCode(SpaceId.of(key.spaceId()), groupCode)
-                .map(this::toResponse)
+                .map(mapper::toResponse)
                 .orElseThrow(() -> new GroupNotFoundException("Group not found in this space: " + groupCode));
     }
 
@@ -137,7 +135,7 @@ public class RbacCatalogQueryService implements RbacCatalogQueryCase {
         guard(key);
 
         List<PermissionCatalogResponse> items = tenantVisibleTechnicalPermissions()
-                .map(this::toResponse)
+                .map(mapper::toResponse)
                 .sorted(Comparator.comparing(PermissionCatalogResponse::code))
                 .toList();
 
@@ -150,7 +148,7 @@ public class RbacCatalogQueryService implements RbacCatalogQueryCase {
 
         return TechnicalGroup.TechnicalPermission.fromCode(permissionCode)
                 .filter(permission -> TENANT_VISIBLE_SCOPES.contains(permission.scope()))
-                .map(this::toResponse)
+                .map(mapper::toResponse)
                 .orElseThrow(() -> new PermissionNotFoundException(
                         "Permission not found in this space: " + permissionCode));
     }
@@ -186,70 +184,5 @@ public class RbacCatalogQueryService implements RbacCatalogQueryCase {
     private Stream<TechnicalGroup.TechnicalPermission> tenantVisibleTechnicalPermissions() {
         return Arrays.stream(TechnicalGroup.TechnicalPermission.values())
                 .filter(permission -> TENANT_VISIBLE_SCOPES.contains(permission.scope()));
-    }
-
-    private RoleCatalogResponse toResponse(TechnicalRole role) {
-        return new RoleCatalogResponse(
-                role.code(),
-                role.name(),
-                null,
-                CatalogOrigin.TECHNICAL,
-                CatalogNature.TECHNICAL,
-                role.scope(),
-                false,
-                true,
-                role.permissions().stream()
-                        .map(TechnicalGroup.TechnicalPermission::code)
-                        .sorted()
-                        .toList());
-    }
-
-    private RoleCatalogResponse toResponse(Role role) {
-        return new RoleCatalogResponse(
-                role.getCode(),
-                role.getName(),
-                role.getDescription(),
-                CatalogOrigin.DATABASE,
-                CatalogNature.valueOf(role.getNature().name()),
-                TechnicalScope.SPACE,
-                true,
-                // L'assignation par endpoint des rôles tenant arrive dans les PR suivantes.
-                false,
-                List.of());
-    }
-
-    private GroupCatalogResponse toResponse(TechnicalGroup group) {
-        return new GroupCatalogResponse(
-                group.code(),
-                group.name(),
-                null,
-                CatalogOrigin.TECHNICAL,
-                CatalogNature.TECHNICAL,
-                group.scope(),
-                false,
-                group.roles().stream().map(TechnicalRole::code).sorted().toList());
-    }
-
-    private GroupCatalogResponse toResponse(Group group) {
-        return new GroupCatalogResponse(
-                group.getCode(),
-                group.getName(),
-                group.getDescription(),
-                CatalogOrigin.DATABASE,
-                CatalogNature.valueOf(group.getNature().name()),
-                TechnicalScope.SPACE,
-                true,
-                // Les liens group->roles persistés seront exposés dans une PR ultérieure.
-                List.of());
-    }
-
-    private PermissionCatalogResponse toResponse(TechnicalGroup.TechnicalPermission permission) {
-        return new PermissionCatalogResponse(
-                permission.code(),
-                permission.description(),
-                CatalogOrigin.TECHNICAL,
-                CatalogNature.TECHNICAL,
-                permission.scope(),
-                false);
     }
 }

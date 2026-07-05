@@ -1,5 +1,6 @@
 package com.takibo.identitycore.application.rbac.catalog.service;
 
+import com.takibo.identitycore.application.rbac.catalog.mapper.RbacCatalogMapper;
 import com.takibo.identitycore.application.rbac.catalog.model.CatalogNature;
 import com.takibo.identitycore.application.rbac.catalog.model.CatalogOrigin;
 import com.takibo.identitycore.domain.catalogrbac.TechnicalScope;
@@ -26,6 +27,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
 
@@ -53,6 +55,9 @@ class RbacCatalogQueryServiceTest {
     @Mock private SpaceBoundaryGuard spaceBoundaryGuard;
     @Mock private RoleRepository roleRepository;
     @Mock private GroupRepository groupRepository;
+
+    // Vrai mapper : les assertions portent sur le mapping doctrinal réel, pas sur un stub.
+    @Spy private RbacCatalogMapper mapper = new RbacCatalogMapper();
 
     @InjectMocks
     private RbacCatalogQueryService service;
