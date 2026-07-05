@@ -22,5 +22,7 @@ public interface RoleRepository {
 
     List<Role> findGovernanceRolesByOrgAndSpaceAndCodes(UUID orgId, UUID spaceId, List<String> codes);
 
+    List<Role> findAllByOrgAndSpace(UUID orgId, UUID spaceId);
+
     Role save(Role role);
 }

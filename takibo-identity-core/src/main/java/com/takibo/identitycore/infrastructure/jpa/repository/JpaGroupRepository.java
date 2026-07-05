@@ -21,4 +21,6 @@ public interface JpaGroupRepository extends JpaRepository<GroupEntity, UUID> {
     List<GroupEntity> findBySpaceIdAndCodeIn(UUID spaceId, Collection<String> codes);
 
     Optional<GroupEntity> findBySpaceIdAndCode(UUID spaceId, String code);
+
+    List<GroupEntity> findByOrgIdAndSpaceIdOrderByCodeAsc(UUID orgId, UUID spaceId);
 }

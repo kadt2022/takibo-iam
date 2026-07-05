@@ -21,5 +21,7 @@ public interface GroupRepository {
 
     Optional<Group> findById(GroupId id);
 
+    List<Group> findAllByOrgAndSpace(UUID orgId, UUID spaceId);
+
     Group save(Group group);
 }

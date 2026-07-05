@@ -44,4 +44,6 @@ public interface JpaRoleRepository extends JpaRepository<RoleEntity, UUID> {
     );
 
     Optional<RoleEntity> findBySpaceIdAndCode(UUID spaceId, String code);
+
+    List<RoleEntity> findByOrgIdAndSpaceIdOrderByCodeAsc(UUID orgId, UUID spaceId);
 }

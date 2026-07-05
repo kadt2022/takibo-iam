@@ -93,6 +93,33 @@ class PolicyEvaluatorTest {
     }
 
     @Test
+    void readableRbacCatalogRoutes_deniedWithoutAdminRole() {
+        // Le catalogue RBAC décrit la structure du pouvoir : lecture réservée aux admins (PR #25).
+        String base = "/api/v1/orgs/takibo-iam/spaces/finance";
+
+        for (String path : new String[]{
+                base + "/roles",
+                base + "/roles/R_SPACE_ADMIN",
+                base + "/groups",
+                base + "/groups/G_SPACE_ADMINS",
+                base + "/permissions",
+                base + "/permissions/P_MANAGE_USERS"}) {
+            PolicyDecision decision = evaluateUsersRoute(Set.of(), path, Action.READ);
+            assertThat(decision.isDeny()).as(path).isTrue();
+            assertThat(decision.getPolicyId()).as(path).isEqualTo("POL_RBAC_READ_ADMIN_REQUIRED");
+        }
+    }
+
+    @Test
+    void readableRbacCatalogRoutes_allowedWithAdminRole() {
+        String base = "/api/v1/orgs/takibo-iam/spaces/finance";
+
+        assertThat(evaluateUsersRoute(Set.of("R_SPACE_ADMIN"), base + "/roles", Action.READ).isDeny()).isFalse();
+        assertThat(evaluateUsersRoute(Set.of("R_ORG_OWNER"), base + "/groups", Action.READ).isDeny()).isFalse();
+        assertThat(evaluateUsersRoute(Set.of("R_ORG_ADMIN"), base + "/permissions", Action.READ).isDeny()).isFalse();
+    }
+
+    @Test
     void signupRoute_isNotCaughtByUsersRule() {
         PolicyDecision decision = evaluateUsersRoute(Set.of(), "/api/v1/orgs/signup", Action.CREATE);
 

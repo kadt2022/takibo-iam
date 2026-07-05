@@ -1,8 +1,11 @@
 package com.takibo.securitymanagement.sentinel.rule;
 
 import com.takibo.identitycore.domain.exception.AccountLockedException;
+import com.takibo.identitycore.domain.exception.GroupNotFoundException;
 import com.takibo.identitycore.domain.exception.InvalidCredentialsException;
 import com.takibo.identitycore.domain.exception.OrganizationNotFoundException;
+import com.takibo.identitycore.domain.exception.PermissionNotFoundException;
+import com.takibo.identitycore.domain.exception.RoleNotFoundException;
 import com.takibo.identitycore.domain.exception.UserNotActiveException;
 import com.takibo.identitycore.domain.exception.UserNotMemberOfSpaceException;
 import com.takibo.identitycore.domain.status.UserStatus;
@@ -31,6 +34,16 @@ class SentinelRuleRegistrarTest {
         assertResolved(new UserNotMemberOfSpaceException(SPACE_ID), 403, SentinelErrorCode.USER_NOT_MEMBER_OF_SPACE);
         assertResolved(new UserNotActiveException(USER_ID, UserStatus.SUSPENDED), 403, SentinelErrorCode.USER_NOT_ACTIVE);
         assertResolved(new OrganizationNotFoundException("Organization not found: takibo-iam"), 404, SentinelErrorCode.ORGANIZATION_NOT_FOUND);
+    }
+
+    @Test
+    void registerDefaults_resolvesRbacCatalogRules() {
+        assertResolved(new RoleNotFoundException("Role not found in this space: NOPE"),
+                404, SentinelErrorCode.ROLE_NOT_FOUND);
+        assertResolved(new GroupNotFoundException("Group not found in this space: NOPE"),
+                404, SentinelErrorCode.GROUP_NOT_FOUND);
+        assertResolved(new PermissionNotFoundException("Permission not found in this space: NOPE"),
+                404, SentinelErrorCode.PERMISSION_NOT_FOUND);
     }
 
     @Test

@@ -56,6 +56,12 @@ public class RoleRepositoryAdapter implements RoleRepository {
     }
 
     @Override
+    public List<Role> findAllByOrgAndSpace(UUID orgId, UUID spaceId) {
+        return jpa.findByOrgIdAndSpaceIdOrderByCodeAsc(orgId, spaceId)
+                .stream().map(roleJpaMapper::toDomain).toList();
+    }
+
+    @Override
     public Role save(Role role) {
         RoleEntity entity = roleJpaMapper.toEntity(role);
         jpa.save(entity);

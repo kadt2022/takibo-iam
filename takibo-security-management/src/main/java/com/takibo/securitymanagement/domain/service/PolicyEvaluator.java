@@ -123,6 +123,19 @@ public class PolicyEvaluator {
         }
 
         // ───────────────────────────────
+        // /api/v1/orgs/{orgCode}/spaces/{spaceCode}/{roles|groups|permissions}[...] (route lisible)
+        // Le catalogue RBAC décrit la structure du pouvoir : sa lecture est un acte
+        // d'admin tenant, pas une liste publique pour tout membre du space.
+        // ───────────────────────────────
+        if (isReadableRbacCatalogRoute(path) && !isTenantAdmin) {
+            return PolicyDecision.builder()
+                    .effect(Effect.DENY)
+                    .policyId("POL_RBAC_READ_ADMIN_REQUIRED")
+                    .reason("R_ORG_OWNER, R_ORG_ADMIN or R_SPACE_ADMIN required to read the RBAC catalog")
+                    .build();
+        }
+
+        // ───────────────────────────────
         // /api/spaces/{spaceId}/clients (création de clients OAuth2)
         // ───────────────────────────────
         if (path.startsWith("/api/spaces/") && path.contains("/clients")) {
@@ -176,5 +189,11 @@ public class PolicyEvaluator {
         return path.startsWith("/api/v1/orgs/")
                 && path.contains("/spaces/")
                 && path.contains("/users");
+    }
+
+    private static boolean isReadableRbacCatalogRoute(String path) {
+        return path.startsWith("/api/v1/orgs/")
+                && path.contains("/spaces/")
+                && (path.contains("/roles") || path.contains("/groups") || path.contains("/permissions"));
     }
 }
