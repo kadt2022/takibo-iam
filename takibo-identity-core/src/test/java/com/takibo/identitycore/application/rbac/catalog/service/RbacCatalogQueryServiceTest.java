@@ -152,21 +152,38 @@ class RbacCatalogQueryServiceTest {
     }
 
     @Test
-    void getRole_platformRole_doesNotExistForTenants_antiEnumeration() {
-        when(roleRepository.findBySpaceIdAndCode(SpaceId.of(SPACE_ID), "R_TAKIBO_PLATFORM_ADMIN"))
-                .thenReturn(Optional.empty());
-
+    void getRole_platformRole_doesNotExistForTenants_evenWithSeededDbRow() {
+        // Jamais de fallback DB pour un code technique caché : même si une ligne
+        // seedée R_TAKIBO_PLATFORM_ADMIN traîne en base, elle n'est pas consultée.
         assertThatThrownBy(() -> service.getRole(KEY, "R_TAKIBO_PLATFORM_ADMIN"))
                 .isInstanceOf(RoleNotFoundException.class);
+
+        verifyNoInteractions(roleRepository);
     }
 
     @Test
     void getRole_selfRole_isNotExposedInPr25() {
-        when(roleRepository.findBySpaceIdAndCode(SpaceId.of(SPACE_ID), "R_SELF"))
-                .thenReturn(Optional.empty());
-
         assertThatThrownBy(() -> service.getRole(KEY, "R_SELF"))
                 .isInstanceOf(RoleNotFoundException.class);
+
+        verifyNoInteractions(roleRepository);
+    }
+
+    @Test
+    void listRoles_filtersSeededHiddenTechnicalRowsFromDatabase() {
+        // Les migrations seedent des lignes roles avec des codes techniques cachés
+        // (R_TAKIBO_PLATFORM_*, R_SELF) : elles ne doivent jamais fuir dans le catalogue.
+        when(roleRepository.findAllByOrgAndSpace(ORG_ID, SPACE_ID)).thenReturn(List.of(
+                dbRole("R_TAKIBO_PLATFORM_ADMIN", RoleNature.GOVERNANCE),
+                dbRole("R_SELF", RoleNature.GOVERNANCE),
+                dbRole("B_APPROVER", RoleNature.BUSINESS)));
+
+        RbacCatalogListResponse<RoleCatalogResponse> result = service.listRoles(KEY);
+
+        List<String> codes = result.items().stream().map(RoleCatalogResponse::code).toList();
+        assertThat(codes)
+                .contains("B_APPROVER")
+                .doesNotContain("R_TAKIBO_PLATFORM_ADMIN", "R_TAKIBO_PLATFORM_AUDITOR", "R_SELF");
     }
 
     @Test

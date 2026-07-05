@@ -65,9 +65,12 @@ public class RbacCatalogQueryService implements RbacCatalogQueryCase {
         guard(key);
 
         // TreeMap : tri par code, et le catalogue technique fait autorité en cas de
-        // collision de code avec une ligne tenant.
+        // collision de code avec une ligne tenant. Les lignes DB portant un code
+        // technique caché (migrations seedées : R_TAKIBO_PLATFORM_*, R_SELF) sont
+        // filtrées — la frontière du catalogue ne dépend pas du contenu de la base.
         Map<String, RoleCatalogResponse> byCode = new TreeMap<>();
-        roleRepository.findAllByOrgAndSpace(key.orgId(), key.spaceId())
+        roleRepository.findAllByOrgAndSpace(key.orgId(), key.spaceId()).stream()
+                .filter(role -> !isHiddenTechnicalRoleCode(role.getCode()))
                 .forEach(role -> byCode.put(role.getCode(), toResponse(role)));
         tenantVisibleTechnicalRoles()
                 .forEach(role -> byCode.put(role.code(), toResponse(role)));
@@ -85,6 +88,12 @@ public class RbacCatalogQueryService implements RbacCatalogQueryCase {
             return toResponse(technical.get());
         }
 
+        // Un code technique caché n'existe pas pour les tenants, même si une ligne
+        // seedée traîne en base : jamais de fallback DB pour ces codes.
+        if (isHiddenTechnicalRoleCode(roleCode)) {
+            throw new RoleNotFoundException("Role not found in this space: " + roleCode);
+        }
+
         return roleRepository.findBySpaceIdAndCode(SpaceId.of(key.spaceId()), roleCode)
                 .map(this::toResponse)
                 .orElseThrow(() -> new RoleNotFoundException("Role not found in this space: " + roleCode));
@@ -95,7 +104,8 @@ public class RbacCatalogQueryService implements RbacCatalogQueryCase {
         guard(key);
 
         Map<String, GroupCatalogResponse> byCode = new TreeMap<>();
-        groupRepository.findAllByOrgAndSpace(key.orgId(), key.spaceId())
+        groupRepository.findAllByOrgAndSpace(key.orgId(), key.spaceId()).stream()
+                .filter(group -> !isHiddenTechnicalGroupCode(group.getCode()))
                 .forEach(group -> byCode.put(group.getCode(), toResponse(group)));
         tenantVisibleTechnicalGroups()
                 .forEach(group -> byCode.put(group.code(), toResponse(group)));
@@ -111,6 +121,10 @@ public class RbacCatalogQueryService implements RbacCatalogQueryCase {
                 .filter(group -> TENANT_VISIBLE_SCOPES.contains(group.scope()));
         if (technical.isPresent()) {
             return toResponse(technical.get());
+        }
+
+        if (isHiddenTechnicalGroupCode(groupCode)) {
+            throw new GroupNotFoundException("Group not found in this space: " + groupCode);
         }
 
         return groupRepository.findBySpaceIdAndCode(SpaceId.of(key.spaceId()), groupCode)
@@ -144,6 +158,19 @@ public class RbacCatalogQueryService implements RbacCatalogQueryCase {
     private void guard(ResolvedSpaceKey key) {
         spaceContextVerifier.validateSpaceContext(key.spaceId());
         spaceBoundaryGuard.assertTokenMatches(key);
+    }
+
+    /** Code du catalogue technique dont le scope n'est pas raconté aux tenants. */
+    private static boolean isHiddenTechnicalRoleCode(String code) {
+        return TechnicalRole.fromCode(code)
+                .map(role -> !TENANT_VISIBLE_SCOPES.contains(role.scope()))
+                .orElse(false);
+    }
+
+    private static boolean isHiddenTechnicalGroupCode(String code) {
+        return TechnicalGroup.fromCode(code)
+                .map(group -> !TENANT_VISIBLE_SCOPES.contains(group.scope()))
+                .orElse(false);
     }
 
     private Stream<TechnicalRole> tenantVisibleTechnicalRoles() {
