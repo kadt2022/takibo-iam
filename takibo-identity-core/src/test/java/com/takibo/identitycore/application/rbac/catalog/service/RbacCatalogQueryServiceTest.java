@@ -103,7 +103,10 @@ class RbacCatalogQueryServiceTest {
         RbacCatalogListResponse<RoleCatalogResponse> result = service.listRoles(KEY);
 
         List<String> codes = result.items().stream().map(RoleCatalogResponse::code).toList();
-        assertThat(codes).doesNotContain("R_TAKIBO_PLATFORM_ADMIN", "R_TAKIBO_PLATFORM_AUDITOR", "R_SELF");
+        // isNotEmpty d'abord : doesNotContain passerait trivialement sur un catalogue vide.
+        assertThat(codes)
+                .isNotEmpty()
+                .doesNotContain("R_TAKIBO_PLATFORM_ADMIN", "R_TAKIBO_PLATFORM_AUDITOR", "R_SELF");
     }
 
     @Test
@@ -232,9 +235,10 @@ class RbacCatalogQueryServiceTest {
         List<String> codes = result.items().stream().map(PermissionCatalogResponse::code).toList();
         // 13 permissions techniques - 2 SYSTEM (P_CREATE_ORG, P_DELETE_ORG).
         assertThat(result.total()).isEqualTo(11);
-        assertThat(codes).contains("P_MANAGE_USERS", "P_ASSIGN_ROLES", "P_READ_ORG");
-        assertThat(codes).doesNotContain("P_CREATE_ORG", "P_DELETE_ORG");
-        assertThat(codes).isSorted();
+        assertThat(codes)
+                .contains("P_MANAGE_USERS", "P_ASSIGN_ROLES", "P_READ_ORG")
+                .doesNotContain("P_CREATE_ORG", "P_DELETE_ORG")
+                .isSorted();
     }
 
     @Test
