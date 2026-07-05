@@ -13,7 +13,6 @@ import com.takibo.identitycore.domain.model.Role;
 import com.takibo.identitycore.domain.model.RoleNature;
 import com.takibo.identitycore.domain.repository.GroupRepository;
 import com.takibo.identitycore.domain.repository.RoleRepository;
-import com.takibo.identitycore.domain.vo.GroupId;
 import com.takibo.identitycore.domain.vo.RoleId;
 import com.takibo.identitycore.domain.vo.SpaceId;
 import com.takibo.identitycore.integration.security.SpaceBoundaryGuard;
@@ -89,8 +88,9 @@ class RbacCatalogQueryServiceTest {
         List<String> codes = result.items().stream().map(RoleCatalogResponse::code).toList();
         // 10 rôles techniques visibles tenant (6 ORGANIZATION + 4 SPACE) + 1 rôle DB.
         assertThat(result.total()).isEqualTo(11);
-        assertThat(codes).contains("R_ORG_OWNER", "R_SPACE_ADMIN", "B_APPROVER");
-        assertThat(codes).isSorted();
+        assertThat(codes)
+                .contains("R_ORG_OWNER", "R_SPACE_ADMIN", "B_APPROVER")
+                .isSorted();
 
         verify(spaceContextVerifier).validateSpaceContext(SPACE_ID);
         verify(spaceBoundaryGuard).assertTokenMatches(KEY);
@@ -207,8 +207,9 @@ class RbacCatalogQueryServiceTest {
         List<String> codes = result.items().stream().map(GroupCatalogResponse::code).toList();
         // 6 groupes techniques (tous ORGANIZATION/SPACE) + 1 groupe DB.
         assertThat(result.total()).isEqualTo(7);
-        assertThat(codes).contains("G_ORG_ADMINS", "G_SPACE_ADMINS", "GRP_FINANCE");
-        assertThat(codes).isSorted();
+        assertThat(codes)
+                .contains("G_ORG_ADMINS", "G_SPACE_ADMINS", "GRP_FINANCE")
+                .isSorted();
     }
 
     @Test
