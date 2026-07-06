@@ -4,6 +4,8 @@ import com.takibo.securitymanagement.domain.model.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.Optional;
+
 @Slf4j
 @Service
 public class PolicyEvaluator {
@@ -62,119 +64,126 @@ public class PolicyEvaluator {
 
     // ─────────────────────────────────────────────────────────────
     // 2. Règles spécifiques aux resources (RBAC + ABAC simple)
+    // Chaque surface a sa règle dédiée ; la première qui DENY gagne.
+    // NB : /api/spaces/signup est public (permitAll dans SecurityConfig).
     // ─────────────────────────────────────────────────────────────
     private PolicyDecision evaluateResourcePolicies(Subject subject,
                                                    Resource resource,
                                                    Action action) {
 
         String path = resource.path();
+        boolean tenantAdmin = isTenantAdmin(subject);
 
-        // Helper rôle — les codes réels du catalogue technique (R_*) sont la référence ;
-        // les anciens alias sans préfixe restent acceptés pour compatibilité.
-        boolean isPlatformAdmin = subject.roles().contains("R_PLATFORM_ADMIN")
-                || subject.roles().contains("PLATFORM_ADMIN");
+        return denyLegacyUserCreation(path, action, tenantAdmin)
+                .or(() -> denyReadableUsersSurface(path, tenantAdmin))
+                .or(() -> denyReadableRbacCatalogSurface(path, tenantAdmin))
+                .or(() -> denyLegacyClientCreation(path, action, tenantAdmin))
+                .or(() -> denyGenericUsersSurface(subject, path, action, tenantAdmin))
+                .orElseGet(() -> PolicyDecision.builder()
+                        .effect(Effect.PERMIT)
+                        .policyId("POL_RESOURCE_ALLOW")
+                        .reason("No specific resource policy denied access")
+                        .build());
+    }
 
-        boolean isOrgOwner = subject.roles().contains("R_ORG_OWNER")
-                || subject.roles().contains("ORG_OWNER");
+    /**
+     * Admin tenant = pouvoir d'agir dans la frontière portée par le token.
+     * Ce statut n'élargit JAMAIS la frontière elle-même (token.space_id reste strict).
+     * Les codes réels du catalogue technique (R_*) sont la référence ; les anciens
+     * alias sans préfixe restent acceptés pour compatibilité.
+     */
+    private static boolean isTenantAdmin(Subject subject) {
+        return hasAnyRole(subject, "R_PLATFORM_ADMIN", "PLATFORM_ADMIN")
+                || hasAnyRole(subject, "R_ORG_OWNER", "ORG_OWNER")
+                || hasAnyRole(subject, "R_ORG_ADMIN", "ORG_ADMIN")
+                || hasAnyRole(subject, "R_SPACE_ADMIN", "SPACE_ADMIN");
+    }
 
-        boolean isOrgAdmin = subject.roles().contains("R_ORG_ADMIN")
-                || subject.roles().contains("ORG_ADMIN");
-
-        boolean isSpaceAdmin = subject.roles().contains("R_SPACE_ADMIN")
-                || subject.roles().contains("SPACE_ADMIN");
-
-        // Admin tenant = pouvoir d'agir dans la frontière portée par le token.
-        // Ce statut n'élargit JAMAIS la frontière elle-même (token.space_id reste strict).
-        boolean isTenantAdmin = isPlatformAdmin || isOrgOwner || isOrgAdmin || isSpaceAdmin;
-
-        // ───────────────────────────────
-        // /api/spaces/signup (public)
-        // => déjà permis dans SecurityConfig (permitAll)
-        // ───────────────────────────────
-
-        // ───────────────────────────────
-        // /api/spaces/{spaceId}/users (création d'utilisateur)
-        // ───────────────────────────────
-        if (path.startsWith("/api/spaces/") && path.contains("/users")) {
-
-            if (action == Action.CREATE) {
-                if (!isTenantAdmin) {
-                    return PolicyDecision.builder()
-                            .effect(Effect.DENY)
-                            .policyId("POL_USER_CREATE_ADMIN_REQUIRED")
-                            .reason("ORG_ADMIN or SPACE_ADMIN or PLATFORM_ADMIN required to create user")
-                            .build();
-                }
+    private static boolean hasAnyRole(Subject subject, String... codes) {
+        for (String code : codes) {
+            if (subject.roles().contains(code)) {
+                return true;
             }
         }
+        return false;
+    }
 
-        // ───────────────────────────────
-        // /api/v1/orgs/{orgCode}/spaces/{spaceCode}/users[...] (route lisible)
-        // Toute la surface user (list/get/create/patch/lifecycle) est un acte d'admin :
-        // lecture comprise — un membre sans rôle admin ne voit pas l'annuaire du space.
-        // Le rôle autorise l'action ; la frontière reste token.org_id/space_id.
-        // ───────────────────────────────
-        if (isReadableUsersRoute(path) && !isTenantAdmin) {
-            return PolicyDecision.builder()
-                    .effect(Effect.DENY)
-                    .policyId("POL_USER_ADMIN_REQUIRED")
-                    .reason("R_ORG_OWNER, R_ORG_ADMIN or R_SPACE_ADMIN required to administer users")
-                    .build();
+    // /api/spaces/{spaceId}/users (création d'utilisateur, route UUID historique)
+    private static Optional<PolicyDecision> denyLegacyUserCreation(String path, Action action, boolean tenantAdmin) {
+        if (path.startsWith("/api/spaces/") && path.contains("/users")
+                && action == Action.CREATE && !tenantAdmin) {
+            return deny("POL_USER_CREATE_ADMIN_REQUIRED",
+                    "ORG_ADMIN or SPACE_ADMIN or PLATFORM_ADMIN required to create user");
         }
+        return Optional.empty();
+    }
 
-        // ───────────────────────────────
-        // /api/spaces/{spaceId}/clients (création de clients OAuth2)
-        // ───────────────────────────────
-        if (path.startsWith("/api/spaces/") && path.contains("/clients")) {
-
-            if (action == Action.CREATE) {
-                if (!isTenantAdmin) {
-                    return PolicyDecision.builder()
-                            .effect(Effect.DENY)
-                            .policyId("POL_CLIENT_CREATE_ADMIN_REQUIRED")
-                            .reason("ORG_ADMIN or SPACE_ADMIN or PLATFORM_ADMIN required to create client")
-                            .build();
-                }
-            }
+    // /api/v1/orgs/{orgCode}/spaces/{spaceCode}/users[...] (route lisible)
+    // Toute la surface user (list/get/create/patch/lifecycle) est un acte d'admin :
+    // lecture comprise — un membre sans rôle admin ne voit pas l'annuaire du space.
+    // Le rôle autorise l'action ; la frontière reste token.org_id/space_id.
+    private static Optional<PolicyDecision> denyReadableUsersSurface(String path, boolean tenantAdmin) {
+        if (isReadableUsersRoute(path) && !tenantAdmin) {
+            return deny("POL_USER_ADMIN_REQUIRED",
+                    "R_ORG_OWNER, R_ORG_ADMIN or R_SPACE_ADMIN required to administer users");
         }
+        return Optional.empty();
+    }
 
-        // ───────────────────────────────
-        // /api/users/** – générique (si tu en as)
-        // ───────────────────────────────
-        if (path.startsWith("/api/users")) {
-
-            // DELETE nécessite permission USER_DELETE
-            if (action == Action.DELETE) {
-                if (!subject.permissions().contains("USER_DELETE")) {
-                    return PolicyDecision.builder()
-                            .effect(Effect.DENY)
-                            .policyId("POL_USER_DELETE_PERMISSION")
-                            .reason("USER_DELETE permission required")
-                            .build();
-                }
-            }
-
-            // CREATE nécessite un admin tenant
-            if (action == Action.CREATE && !isTenantAdmin) {
-                return PolicyDecision.builder()
-                        .effect(Effect.DENY)
-                        .policyId("POL_USER_CREATE_ADMIN_REQUIRED")
-                        .reason("ORG_ADMIN or SPACE_ADMIN or PLATFORM_ADMIN required")
-                        .build();
-            }
+    // /api/v1/orgs/{orgCode}/spaces/{spaceCode}/{roles|groups|permissions}[...] (route lisible)
+    // Le catalogue RBAC décrit la structure du pouvoir : sa lecture est un acte
+    // d'admin tenant, pas une liste publique pour tout membre du space.
+    private static Optional<PolicyDecision> denyReadableRbacCatalogSurface(String path, boolean tenantAdmin) {
+        if (isReadableRbacCatalogRoute(path) && !tenantAdmin) {
+            return deny("POL_RBAC_READ_ADMIN_REQUIRED",
+                    "R_ORG_OWNER, R_ORG_ADMIN or R_SPACE_ADMIN required to read the RBAC catalog");
         }
+        return Optional.empty();
+    }
 
-        // Aucune règle n'a bloqué → on autorise
-        return PolicyDecision.builder()
-                .effect(Effect.PERMIT)
-                .policyId("POL_RESOURCE_ALLOW")
-                .reason("No specific resource policy denied access")
-                .build();
+    // /api/spaces/{spaceId}/clients (création de clients OAuth2, route UUID historique)
+    private static Optional<PolicyDecision> denyLegacyClientCreation(String path, Action action, boolean tenantAdmin) {
+        if (path.startsWith("/api/spaces/") && path.contains("/clients")
+                && action == Action.CREATE && !tenantAdmin) {
+            return deny("POL_CLIENT_CREATE_ADMIN_REQUIRED",
+                    "ORG_ADMIN or SPACE_ADMIN or PLATFORM_ADMIN required to create client");
+        }
+        return Optional.empty();
+    }
+
+    // /api/users/** – générique
+    private static Optional<PolicyDecision> denyGenericUsersSurface(Subject subject, String path,
+                                                                    Action action, boolean tenantAdmin) {
+        if (!path.startsWith("/api/users")) {
+            return Optional.empty();
+        }
+        if (action == Action.DELETE && !subject.permissions().contains("USER_DELETE")) {
+            return deny("POL_USER_DELETE_PERMISSION", "USER_DELETE permission required");
+        }
+        if (action == Action.CREATE && !tenantAdmin) {
+            return deny("POL_USER_CREATE_ADMIN_REQUIRED",
+                    "ORG_ADMIN or SPACE_ADMIN or PLATFORM_ADMIN required");
+        }
+        return Optional.empty();
+    }
+
+    private static Optional<PolicyDecision> deny(String policyId, String reason) {
+        return Optional.of(PolicyDecision.builder()
+                .effect(Effect.DENY)
+                .policyId(policyId)
+                .reason(reason)
+                .build());
     }
 
     private static boolean isReadableUsersRoute(String path) {
         return path.startsWith("/api/v1/orgs/")
                 && path.contains("/spaces/")
                 && path.contains("/users");
+    }
+
+    private static boolean isReadableRbacCatalogRoute(String path) {
+        return path.startsWith("/api/v1/orgs/")
+                && path.contains("/spaces/")
+                && (path.contains("/roles") || path.contains("/groups") || path.contains("/permissions"));
     }
 }

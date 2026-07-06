@@ -52,6 +52,12 @@ public class GroupRepositoryAdapter implements GroupRepository {
     }
 
     @Override
+    public List<Group> findAllByOrgAndSpace(UUID orgId, UUID spaceId) {
+        return jpa.findByOrgIdAndSpaceIdOrderByCodeAsc(orgId, spaceId)
+                .stream().map(mapper::toDomain).toList();
+    }
+
+    @Override
     @Transactional
     public Group save(Group group) {
         GroupEntity entity = mapper.toEntity(group);

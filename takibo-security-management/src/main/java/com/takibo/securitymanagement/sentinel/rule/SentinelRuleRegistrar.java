@@ -31,6 +31,11 @@ public final class SentinelRuleRegistrar {
         registry.register(UserCreationException.class, SentinelRuleHandlers::ruleUserCreation);
         registry.register(InvalidStatusTransitionException.class, SentinelRuleHandlers::ruleInvalidStatusTransition);
 
+        // Catalogue RBAC (read-side)
+        registry.register(RoleNotFoundException.class, SentinelRuleHandlers::ruleRoleNotFound);
+        registry.register(GroupNotFoundException.class, SentinelRuleHandlers::ruleGroupNotFound);
+        registry.register(PermissionNotFoundException.class, SentinelRuleHandlers::rulePermissionNotFound);
+
         registry.register(SpaceGuardException.class, SentinelRuleHandlers::ruleSpaceGuard);
         registry.register(SpaceNotActiveException.class, SentinelRuleHandlers::ruleSpaceNotActive);
         registry.register(SpaceNotFoundException.class, SentinelRuleHandlers::ruleSpaceNotFound);

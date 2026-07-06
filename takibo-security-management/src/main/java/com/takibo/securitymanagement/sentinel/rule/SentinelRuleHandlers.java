@@ -171,6 +171,19 @@ public final class SentinelRuleHandlers {
         return response(HttpStatus.NOT_FOUND, SentinelErrorCode.ORGANIZATION_NOT_FOUND, ex.getMessage(), path, traceId);
     }
 
+    // Catalogue RBAC : un code hors frontière (rôle plateforme compris) N'EXISTE PAS -> 404.
+    static SentinelResponse ruleRoleNotFound(RoleNotFoundException ex, String path, String traceId) {
+        return response(HttpStatus.NOT_FOUND, SentinelErrorCode.ROLE_NOT_FOUND, ex.getMessage(), path, traceId);
+    }
+
+    static SentinelResponse ruleGroupNotFound(GroupNotFoundException ex, String path, String traceId) {
+        return response(HttpStatus.NOT_FOUND, SentinelErrorCode.GROUP_NOT_FOUND, ex.getMessage(), path, traceId);
+    }
+
+    static SentinelResponse rulePermissionNotFound(PermissionNotFoundException ex, String path, String traceId) {
+        return response(HttpStatus.NOT_FOUND, SentinelErrorCode.PERMISSION_NOT_FOUND, ex.getMessage(), path, traceId);
+    }
+
     static SentinelResponse ruleBadCredentials(Throwable ex, String path, String traceId) {
         return response(HttpStatus.UNAUTHORIZED, SentinelErrorCode.BAD_CREDENTIALS, MSG_BAD_CREDENTIALS, path, traceId);
     }
