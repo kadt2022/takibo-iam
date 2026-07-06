@@ -7,6 +7,7 @@ import com.takibo.identitycore.domain.catalogrbac.TechnicalRole;
 import com.takibo.identitycore.domain.catalogrbac.TechnicalScope;
 import com.takibo.identitycore.domain.model.Group;
 import com.takibo.identitycore.domain.model.Role;
+import com.takibo.identitycore.domain.model.RoleNature;
 import com.takibo.identitycore.interfaces.rest.response.GroupCatalogResponse;
 import com.takibo.identitycore.interfaces.rest.response.PermissionCatalogResponse;
 import com.takibo.identitycore.interfaces.rest.response.RoleCatalogResponse;
@@ -20,8 +21,8 @@ import java.util.List;
  * {@code editable}/{@code assignable} sont des décisions doctrinales (PR #25),
  * pas des copies de champs source.
  * <ul>
- *   <li>TECHNICAL : jamais éditable par tenant, assignable (provisioning plateforme).</li>
- *   <li>DATABASE : éditable, pas encore assignable par endpoint (PR #26+).</li>
+ *   <li>TECHNICAL : jamais éditable par tenant, assignable (provisioning + PR #26).</li>
+ *   <li>DATABASE : éditable ; GOVERNANCE assignable (PR #26), BUSINESS pas encore.</li>
  * </ul>
  */
 @Component
@@ -52,8 +53,8 @@ public class RbacCatalogMapper {
                 CatalogNature.valueOf(role.getNature().name()),
                 TechnicalScope.SPACE,
                 true,
-                // L'assignation par endpoint des rôles tenant arrive dans les PR suivantes.
-                false,
+                // GOVERNANCE est assignable depuis PR #26 ; BUSINESS attend sa propre PR.
+                role.getNature() == RoleNature.GOVERNANCE,
                 List.of());
     }
 

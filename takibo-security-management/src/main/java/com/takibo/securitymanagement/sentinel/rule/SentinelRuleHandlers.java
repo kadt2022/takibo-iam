@@ -184,6 +184,30 @@ public final class SentinelRuleHandlers {
         return response(HttpStatus.NOT_FOUND, SentinelErrorCode.PERMISSION_NOT_FOUND, ex.getMessage(), path, traceId);
     }
 
+    // Gouvernance des assignations : la nature interdite est une politique (403),
+    // le dernier chemin admin et la self-demotion sont des conflits d'état (409).
+    static SentinelResponse ruleRoleTypeNotAllowed(RoleTypeNotAllowedException ex, String path, String traceId) {
+        return response(HttpStatus.FORBIDDEN, SentinelErrorCode.ROLE_TYPE_NOT_ALLOWED, ex.getMessage(), path, traceId);
+    }
+
+    static SentinelResponse ruleGroupTypeNotAllowed(GroupTypeNotAllowedException ex, String path, String traceId) {
+        return response(HttpStatus.FORBIDDEN, SentinelErrorCode.GROUP_TYPE_NOT_ALLOWED, ex.getMessage(), path, traceId);
+    }
+
+    static SentinelResponse ruleRoleScopeEscalation(RoleScopeEscalationException ex, String path, String traceId) {
+        return response(HttpStatus.FORBIDDEN, SentinelErrorCode.ROLE_SCOPE_ESCALATION_DENIED,
+                ex.getMessage(), path, traceId);
+    }
+
+    static SentinelResponse ruleLastAdminRemoval(LastAdminRemovalException ex, String path, String traceId) {
+        return response(HttpStatus.CONFLICT, SentinelErrorCode.LAST_SPACE_ADMIN_REMOVAL_DENIED,
+                ex.getMessage(), path, traceId);
+    }
+
+    static SentinelResponse ruleSelfDemotion(SelfDemotionException ex, String path, String traceId) {
+        return response(HttpStatus.CONFLICT, SentinelErrorCode.SELF_DEMOTION_DENIED, ex.getMessage(), path, traceId);
+    }
+
     static SentinelResponse ruleBadCredentials(Throwable ex, String path, String traceId) {
         return response(HttpStatus.UNAUTHORIZED, SentinelErrorCode.BAD_CREDENTIALS, MSG_BAD_CREDENTIALS, path, traceId);
     }

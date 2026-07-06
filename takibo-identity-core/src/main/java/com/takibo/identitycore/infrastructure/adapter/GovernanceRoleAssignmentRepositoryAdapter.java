@@ -60,12 +60,40 @@ public class GovernanceRoleAssignmentRepositoryAdapter implements GovernanceRole
                 .toList();
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<RoleAssignment> findDirectAssignments(UUID orgId, UUID spaceId, UUID accountId) {
+        return jpa.findDirectByOrgAndSpaceAndAccount(orgId, spaceId, accountId).stream()
+                .filter(e -> e.getRoleSource() != RoleSource.BUSINESS)
+                .map(mapper::toDomain)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean existsAssignment(UUID orgId, UUID spaceId, UUID accountId, String roleCode) {
+        return jpa.existsDirectAssignment(orgId, spaceId, accountId, roleCode);
+    }
+
+    @Override
+    @Transactional
+    public int deleteAssignment(UUID orgId, UUID spaceId, UUID accountId, String roleCode) {
+        return jpa.deleteDirectAssignment(orgId, spaceId, accountId, roleCode);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countIdentitiesHoldingRole(UUID orgId, UUID spaceId, String roleCode) {
+        return jpa.countDistinctIdentitiesHoldingRole(orgId, spaceId, roleCode);
+    }
+
     private void assertGovernanceShape(RoleAssignment assignment) {
-        if (assignment.roleSource() != RoleSource.TECHNICAL
-                || assignment.roleCode() == null
-                || assignment.businessRoleId() != null) {
+        boolean codeBased = assignment.roleSource() == RoleSource.TECHNICAL
+                || assignment.roleSource() == RoleSource.GOVERNANCE;
+        if (!codeBased || assignment.roleCode() == null || assignment.businessRoleId() != null) {
             throw new IllegalArgumentException(
-                    "Governance role assignment must use a roleCode with TECHNICAL source and no businessRoleId");
+                    "Governance role assignment must use a roleCode with TECHNICAL or GOVERNANCE source"
+                            + " and no businessRoleId");
         }
     }
 }

@@ -93,6 +93,33 @@ class PolicyEvaluatorTest {
     }
 
     @Test
+    void userRbacGovernanceRoutes_deniedWithDedicatedPolicy() {
+        // Déléguer/retirer le pouvoir d'un user a sa policy dédiée (PR #26),
+        // plus spécifique que la règle générale users.
+        String base = READABLE_USERS_PATH + "/dddddddd-0000-0000-0000-000000000004";
+
+        for (String path : new String[]{
+                base + "/roles",
+                base + "/roles/R_SPACE_ADMIN",
+                base + "/groups",
+                base + "/groups/G_SPACE_ADMINS"}) {
+            PolicyDecision decision = evaluateUsersRoute(Set.of(), path, Action.CREATE);
+            assertThat(decision.isDeny()).as(path).isTrue();
+            assertThat(decision.getPolicyId()).as(path).isEqualTo("POL_USER_RBAC_ADMIN_REQUIRED");
+        }
+    }
+
+    @Test
+    void userRbacGovernanceRoutes_allowedWithAdminRole() {
+        String base = READABLE_USERS_PATH + "/dddddddd-0000-0000-0000-000000000004";
+
+        assertThat(evaluateUsersRoute(Set.of("R_SPACE_ADMIN"), base + "/roles", Action.CREATE).isDeny()).isFalse();
+        assertThat(evaluateUsersRoute(Set.of("R_ORG_OWNER"), base + "/roles/R_SPACE_ADMIN", Action.DELETE)
+                .isDeny()).isFalse();
+        assertThat(evaluateUsersRoute(Set.of("R_ORG_ADMIN"), base + "/groups", Action.READ).isDeny()).isFalse();
+    }
+
+    @Test
     void readableRbacCatalogRoutes_deniedWithoutAdminRole() {
         // Le catalogue RBAC décrit la structure du pouvoir : lecture réservée aux admins (PR #25).
         String base = "/api/v1/orgs/takibo-iam/spaces/finance";
