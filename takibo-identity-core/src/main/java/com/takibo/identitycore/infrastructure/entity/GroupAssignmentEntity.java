@@ -45,9 +45,11 @@ public class GroupAssignmentEntity {
     @Column(name = "business_group_id")
     private UUID businessGroupId;
 
+    // 'SYSTEM' est un legacy normalisé en 'TECHNICAL' (migration V202607061200) :
+    // la valeur doit toujours appartenir à GroupSource.
     @Builder.Default
     @Column(name = "group_source", nullable = false, length = 30)
-    private String groupSource = "SYSTEM";
+    private String groupSource = "TECHNICAL";
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
