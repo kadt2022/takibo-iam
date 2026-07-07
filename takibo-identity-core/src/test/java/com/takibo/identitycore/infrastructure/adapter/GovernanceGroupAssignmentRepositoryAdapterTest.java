@@ -76,7 +76,7 @@ class GovernanceGroupAssignmentRepositoryAdapterTest {
 
         assertThatThrownBy(() -> adapter.saveGovernanceAssignment(business))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("TECHNICAL source");
+                .hasMessageContaining("TECHNICAL or GOVERNANCE source");
 
         verify(jpa, never()).saveAndFlush(any());
     }

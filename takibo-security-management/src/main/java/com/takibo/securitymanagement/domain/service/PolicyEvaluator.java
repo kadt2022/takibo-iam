@@ -75,6 +75,7 @@ public class PolicyEvaluator {
         boolean tenantAdmin = isTenantAdmin(subject);
 
         return denyLegacyUserCreation(path, action, tenantAdmin)
+                .or(() -> denyUserRbacGovernanceSurface(path, tenantAdmin))
                 .or(() -> denyReadableUsersSurface(path, tenantAdmin))
                 .or(() -> denyReadableRbacCatalogSurface(path, tenantAdmin))
                 .or(() -> denyLegacyClientCreation(path, action, tenantAdmin))
@@ -114,6 +115,17 @@ public class PolicyEvaluator {
                 && action == Action.CREATE && !tenantAdmin) {
             return deny("POL_USER_CREATE_ADMIN_REQUIRED",
                     "ORG_ADMIN or SPACE_ADMIN or PLATFORM_ADMIN required to create user");
+        }
+        return Optional.empty();
+    }
+
+    // /api/v1/orgs/{orgCode}/spaces/{spaceCode}/users/{userId}/{roles|groups}[...] (route lisible)
+    // Déléguer/retirer le pouvoir d'un user est l'acte d'admin le plus sensible de la
+    // surface : règle dédiée, évaluée AVANT la règle générale users.
+    private static Optional<PolicyDecision> denyUserRbacGovernanceSurface(String path, boolean tenantAdmin) {
+        if (isUserRbacGovernanceRoute(path) && !tenantAdmin) {
+            return deny("POL_USER_RBAC_ADMIN_REQUIRED",
+                    "R_ORG_OWNER, R_ORG_ADMIN or R_SPACE_ADMIN required to govern user roles and groups");
         }
         return Optional.empty();
     }
@@ -185,5 +197,10 @@ public class PolicyEvaluator {
         return path.startsWith("/api/v1/orgs/")
                 && path.contains("/spaces/")
                 && (path.contains("/roles") || path.contains("/groups") || path.contains("/permissions"));
+    }
+
+    private static boolean isUserRbacGovernanceRoute(String path) {
+        return isReadableUsersRoute(path)
+                && (path.contains("/roles") || path.contains("/groups"));
     }
 }

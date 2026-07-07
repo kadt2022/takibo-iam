@@ -157,6 +157,18 @@ class RbacCatalogQueryServiceTest {
     }
 
     @Test
+    void getRole_databaseGovernance_isAssignableSincePr26() {
+        when(roleRepository.findBySpaceIdAndCode(SpaceId.of(SPACE_ID), "GOV_LOCAL"))
+                .thenReturn(Optional.of(dbRole("GOV_LOCAL", RoleNature.GOVERNANCE)));
+
+        RoleCatalogResponse role = service.getRole(KEY, "GOV_LOCAL");
+
+        assertThat(role.nature()).isEqualTo(CatalogNature.GOVERNANCE);
+        assertThat(role.editable()).isTrue();
+        assertThat(role.assignable()).isTrue();
+    }
+
+    @Test
     void getRole_platformRole_doesNotExistForTenants_evenWithSeededDbRow() {
         // Jamais de fallback DB pour un code technique caché : même si une ligne
         // seedée R_TAKIBO_PLATFORM_ADMIN traîne en base, elle n'est pas consultée.

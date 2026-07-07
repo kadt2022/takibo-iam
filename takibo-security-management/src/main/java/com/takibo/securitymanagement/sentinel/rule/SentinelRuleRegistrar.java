@@ -36,6 +36,13 @@ public final class SentinelRuleRegistrar {
         registry.register(GroupNotFoundException.class, SentinelRuleHandlers::ruleGroupNotFound);
         registry.register(PermissionNotFoundException.class, SentinelRuleHandlers::rulePermissionNotFound);
 
+        // Gouvernance RBAC (assignations)
+        registry.register(RoleTypeNotAllowedException.class, SentinelRuleHandlers::ruleRoleTypeNotAllowed);
+        registry.register(GroupTypeNotAllowedException.class, SentinelRuleHandlers::ruleGroupTypeNotAllowed);
+        registry.register(RoleScopeEscalationException.class, SentinelRuleHandlers::ruleRoleScopeEscalation);
+        registry.register(LastAdminRemovalException.class, SentinelRuleHandlers::ruleLastAdminRemoval);
+        registry.register(SelfDemotionException.class, SentinelRuleHandlers::ruleSelfDemotion);
+
         registry.register(SpaceGuardException.class, SentinelRuleHandlers::ruleSpaceGuard);
         registry.register(SpaceNotActiveException.class, SentinelRuleHandlers::ruleSpaceNotActive);
         registry.register(SpaceNotFoundException.class, SentinelRuleHandlers::ruleSpaceNotFound);

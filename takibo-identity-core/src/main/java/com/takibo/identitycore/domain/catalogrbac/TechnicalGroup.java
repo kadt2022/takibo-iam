@@ -105,27 +105,27 @@ public enum TechnicalGroup {
         CREATE_SPACE(
                 "P_CREATE_SPACE",
                 ORGANIZATION,
-                "Create a new port within an organization"
+                "Create a new space within an organization"
         ),
         DELETE_SPACE(
                 "P_DELETE_SPACE",
                 ORGANIZATION,
-                "Delete a port within an organization"
+                "Delete a space within an organization"
         ),
         MANAGE_USERS(
                 "P_MANAGE_USERS",
                 ORGANIZATION,
-                "Manage users at organization or port level"
+                "Manage users at organization or space level"
         ),
         MANAGE_CLIENTS(
                 "P_MANAGE_CLIENTS",
                 ORGANIZATION,
-                "Manage OAuth2/OIDC clients at organization or port level"
+                "Manage OAuth2/OIDC clients at organization or space level"
         ),
         ASSIGN_ROLES(
                 "P_ASSIGN_ROLES",
                 ORGANIZATION,
-                "Assign or revoke roles at organization or port level"
+                "Assign or revoke roles at organization or space level"
         ),
         READ_AUDIT_LOGS(
                 "P_READ_AUDIT_LOGS",

@@ -16,4 +16,23 @@ public interface GovernanceRoleAssignmentRepository {
      * (les assignments org-level sans space sont inclus).
      */
     List<String> findAssignedTechnicalRoleCodes(UUID orgId, UUID spaceId, UUID accountId);
+
+    /**
+     * Assignations directes (TECHNICAL + GOVERNANCE) d'un account visibles dans ce
+     * space — les assignments org-level sans space sont inclus, les BUSINESS exclus.
+     */
+    List<RoleAssignment> findDirectAssignments(UUID orgId, UUID spaceId, UUID accountId);
+
+    /** Le code est-il déjà assigné à cet account, visible dans ce space ? */
+    boolean existsAssignment(UUID orgId, UUID spaceId, UUID accountId, String roleCode);
+
+    /**
+     * Supprime les assignations directes strictement situées sur ce space
+     * (les assignments org-level sans space ne sont pas touchés par une route space).
+     * @return nombre de lignes supprimées (0 = idempotent)
+     */
+    int deleteAssignment(UUID orgId, UUID spaceId, UUID accountId, String roleCode);
+
+    /** Nombre d'identités distinctes tenant ce code dans le space (org-level inclus). */
+    long countIdentitiesHoldingRole(UUID orgId, UUID spaceId, String roleCode);
 }
