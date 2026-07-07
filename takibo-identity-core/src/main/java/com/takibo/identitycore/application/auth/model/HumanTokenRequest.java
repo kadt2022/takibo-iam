@@ -10,13 +10,18 @@ import java.util.UUID;
  * Tous les identifiants sont réels et situés : TIS-CORE ne transmet cette demande au port
  * {@code HumanAccessTokenIssuer} qu'après avoir vérifié account, credentials et user local.
  * Le sujet est HUMAN, la méthode PASSWORD, la frontière SPACE — par construction.
+ * <p>
+ * {@code roles}/{@code groups}/{@code permissions} forment le snapshot borné du pouvoir
+ * effectif (calculé par TIS-CORE) — TAS les signe sans jamais requêter le RBAC.
  */
 public record HumanTokenRequest(
         UUID orgId,
         UUID spaceId,
         UUID accountId,
         UUID userId,
-        List<String> roles
+        List<String> roles,
+        List<String> groups,
+        List<String> permissions
 ) {
     public HumanTokenRequest {
         Objects.requireNonNull(orgId, "orgId is required");
@@ -24,5 +29,7 @@ public record HumanTokenRequest(
         Objects.requireNonNull(accountId, "accountId is required");
         Objects.requireNonNull(userId, "userId is required");
         roles = roles == null ? List.of() : List.copyOf(roles);
+        groups = groups == null ? List.of() : List.copyOf(groups);
+        permissions = permissions == null ? List.of() : List.copyOf(permissions);
     }
 }

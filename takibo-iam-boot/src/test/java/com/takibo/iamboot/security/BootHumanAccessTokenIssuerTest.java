@@ -40,7 +40,9 @@ class BootHumanAccessTokenIssuerTest {
                 SPACE_ID,
                 ACCOUNT_ID,
                 USER_ID,
-                List.of("R_ORG_OWNER", "R_SPACE_ADMIN")
+                List.of("R_ORG_OWNER", "R_SPACE_ADMIN"),
+                List.of("G_SPACE_ADMINS"),
+                List.of("P_MANAGE_USERS")
         );
         when(humanTokenSigner.sign(org.mockito.ArgumentMatchers.any(HumanTokenCommand.class)))
                 .thenReturn(new SignedHumanToken("signed.jwt", 300));
@@ -55,6 +57,8 @@ class BootHumanAccessTokenIssuerTest {
         assertThat(command.accountId()).isEqualTo(ACCOUNT_ID);
         assertThat(command.userId()).isEqualTo(USER_ID);
         assertThat(command.roles()).containsExactly("R_ORG_OWNER", "R_SPACE_ADMIN");
+        assertThat(command.groups()).containsExactly("G_SPACE_ADMINS");
+        assertThat(command.permissions()).containsExactly("P_MANAGE_USERS");
 
         assertThat(result.accessToken()).isEqualTo("signed.jwt");
         assertThat(result.tokenType()).isEqualTo("Bearer");

@@ -5,6 +5,8 @@ import com.takibo.identitycore.application.auth.mapper.AuthMapper;
 import com.takibo.identitycore.application.auth.model.HumanTokenRequest;
 import com.takibo.identitycore.application.auth.model.LoginToken;
 import com.takibo.identitycore.application.auth.port.HumanAccessTokenIssuer;
+import com.takibo.identitycore.application.rbac.effective.model.EffectiveRbac;
+import com.takibo.identitycore.application.rbac.effective.port.in.EffectiveRbacQueryCase;
 import com.takibo.identitycore.domain.exception.AccountLockedException;
 import com.takibo.identitycore.domain.exception.InvalidCredentialsException;
 import com.takibo.identitycore.domain.exception.SpaceNotFoundException;
@@ -14,7 +16,6 @@ import com.takibo.identitycore.domain.model.Account;
 import com.takibo.identitycore.domain.model.AccountCredentials;
 import com.takibo.identitycore.domain.model.EmailAddress;
 import com.takibo.identitycore.domain.model.User;
-import com.takibo.identitycore.domain.rbac.repository.GovernanceRoleAssignmentRepository;
 import com.takibo.identitycore.domain.repository.AccountCredentialsRepository;
 import com.takibo.identitycore.domain.repository.AccountRepository;
 import com.takibo.identitycore.domain.repository.UserRepository;
@@ -65,7 +66,7 @@ class HumanLoginServiceTest {
     @Mock private AccountCredentialsRepository accountCredentialsRepository;
     @Mock private PasswordHasherCase passwordHasher;
     @Mock private UserRepository userRepository;
-    @Mock private GovernanceRoleAssignmentRepository roleAssignments;
+    @Mock private EffectiveRbacQueryCase effectiveRbacQuery;
     @Mock private HumanAccessTokenIssuer tokenIssuer;
     @Mock private AuthMapper authMapper;
 
@@ -118,8 +119,11 @@ class HumanLoginServiceTest {
         User user = localUser();
         when(userRepository.findBySpaceAndAccount(any(), eq(account.getId())))
                 .thenReturn(Optional.of(user));
-        when(roleAssignments.findAssignedTechnicalRoleCodes(ORG_ID, SPACE_ID, account.getId().getValue()))
-                .thenReturn(List.of("R_ORG_OWNER", "R_SPACE_ADMIN"));
+        when(effectiveRbacQuery.effectiveFor(ORG_ID, SPACE_ID, account.getId().getValue()))
+                .thenReturn(new EffectiveRbac(
+                        List.of("R_ORG_OWNER", "R_SPACE_ADMIN"),
+                        List.of("G_ORG_ADMINS", "G_SPACE_ADMINS"),
+                        List.of("P_ASSIGN_ROLES", "P_MANAGE_USERS")));
 
         LoginToken token = new LoginToken("jwt-value", "Bearer", 300);
         when(tokenIssuer.issue(any())).thenReturn(token);
@@ -138,6 +142,8 @@ class HumanLoginServiceTest {
         assertThat(request.accountId()).isEqualTo(account.getId().getValue());
         assertThat(request.userId()).isEqualTo(USER_ID);
         assertThat(request.roles()).containsExactly("R_ORG_OWNER", "R_SPACE_ADMIN");
+        assertThat(request.groups()).containsExactly("G_ORG_ADMINS", "G_SPACE_ADMINS");
+        assertThat(request.permissions()).containsExactly("P_ASSIGN_ROLES", "P_MANAGE_USERS");
 
         // Aucun échec préalable : pas de reset superflu des credentials.
         verify(accountCredentialsRepository, never()).save(any(), any());
@@ -213,8 +219,8 @@ class HumanLoginServiceTest {
         User user = localUser();
         when(userRepository.findBySpaceAndAccount(any(), eq(account.getId())))
                 .thenReturn(Optional.of(user));
-        when(roleAssignments.findAssignedTechnicalRoleCodes(any(), any(), any()))
-                .thenReturn(List.of("R_SPACE_ADMIN"));
+        when(effectiveRbacQuery.effectiveFor(any(), any(), any()))
+                .thenReturn(new EffectiveRbac(List.of("R_SPACE_ADMIN"), List.of(), List.of()));
         when(tokenIssuer.issue(any())).thenReturn(new LoginToken("jwt", "Bearer", 300));
         when(authMapper.toLoginResponse(any(), any())).thenReturn(mock(LoginResponse.class));
 

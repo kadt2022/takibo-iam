@@ -1,6 +1,7 @@
 package com.takibo.identitycore.infrastructure.adapter;
 
 import com.takibo.identitycore.domain.model.GroupRole;
+import com.takibo.identitycore.domain.model.RoleNature;
 import com.takibo.identitycore.domain.repository.GroupRoleRepository;
 import com.takibo.identitycore.infrastructure.entity.GroupRoleEntity;
 import com.takibo.identitycore.infrastructure.jpa.mapper.GroupRoleJpaMapper;
@@ -11,6 +12,8 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.UUID;
 import java.util.function.Supplier;
 
@@ -33,6 +36,14 @@ public class GroupRoleRepositoryAdapter implements GroupRoleRepository {
     @Override
     public boolean existsBySpaceIdAndGroupIdAndRoleId(UUID spaceId, UUID groupId, UUID roleId) {
         return jpa.existsBySpaceIdAndGroupIdAndRoleId(spaceId, groupId, roleId);
+    }
+
+    @Override
+    public List<String> findGovernanceRoleCodesByGroups(UUID spaceId, Collection<String> groupCodes) {
+        if (groupCodes.isEmpty()) {
+            return List.of();
+        }
+        return jpa.findRoleCodesBySpaceAndGroupCodesAndNature(spaceId, groupCodes, RoleNature.GOVERNANCE);
     }
 
     @Override
