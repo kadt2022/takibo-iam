@@ -132,7 +132,21 @@ jobs:
       - uses: ./.github/actions/takibo-test-group
         with:
           group: core-identity
-          tasks: ':takibo-identity-core:test :takibo-management-service:test'
+          tasks: ':takibo-identity-core:test'
+
+  test-management-service:
+    name: Takibo Tests - management-service
+    needs: assemble
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/takibo-test-group
+        with:
+          group: management-service
+          tasks: ':takibo-management-service:test'
 
   test-outbox:
     name: Takibo Tests - outbox
@@ -209,6 +223,7 @@ jobs:
     needs:
       - assemble
       - test-core-identity
+      - test-management-service
       - test-outbox
       - test-security-context
       - test-adp
@@ -657,6 +672,7 @@ jobs:
       - assemble
       - database-check
       - test-core-identity
+      - test-management-service
       - test-outbox
       - test-security-context
       - test-adp
@@ -702,6 +718,7 @@ jobs:
           check_result assemble              "${{ needs.assemble.result }}"
           check_result database-check        "${{ needs.database-check.result }}"
           check_result test-core-identity    "${{ needs.test-core-identity.result }}"
+          check_result test-management-service "${{ needs.test-management-service.result }}"
           check_result test-outbox           "${{ needs.test-outbox.result }}"
           check_result test-security-context "${{ needs.test-security-context.result }}"
           check_result test-adp              "${{ needs.test-adp.result }}"
