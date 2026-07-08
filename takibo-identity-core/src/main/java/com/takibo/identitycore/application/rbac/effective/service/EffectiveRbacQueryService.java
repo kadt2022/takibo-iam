@@ -96,7 +96,7 @@ public class EffectiveRbacQueryService implements EffectiveRbacQueryCase {
                 .filter(Objects::nonNull)
                 .toList();
         if (!governanceGroupCodes.isEmpty()) {
-            roles.addAll(groupRoles.findGovernanceRoleCodesByGroups(spaceId, governanceGroupCodes));
+            roles.addAll(groupRoles.findGovernanceRoleCodesByGroups(orgId, spaceId, governanceGroupCodes));
         }
 
         // 5) Permissions des rôles techniques effectifs (directs + hérités).

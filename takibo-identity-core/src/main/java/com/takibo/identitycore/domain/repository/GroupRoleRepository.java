@@ -13,8 +13,9 @@ public interface GroupRoleRepository {
      * Codes des rôles GOVERNANCE transmis par les groupes du space identifiés
      * par leurs codes. Les rôles BUSINESS liés à un groupe sont ignorés :
      * l'héritage effectif ne transmet que du pouvoir d'administration.
+     * Frontière explicite : same org, same space — liens, groupes et rôles.
      */
-    List<String> findGovernanceRoleCodesByGroups(UUID spaceId, Collection<String> groupCodes);
+    List<String> findGovernanceRoleCodesByGroups(UUID orgId, UUID spaceId, Collection<String> groupCodes);
 
     GroupRole save(GroupRole link);
 }

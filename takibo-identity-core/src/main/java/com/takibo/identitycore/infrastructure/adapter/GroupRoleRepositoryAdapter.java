@@ -39,11 +39,12 @@ public class GroupRoleRepositoryAdapter implements GroupRoleRepository {
     }
 
     @Override
-    public List<String> findGovernanceRoleCodesByGroups(UUID spaceId, Collection<String> groupCodes) {
+    public List<String> findGovernanceRoleCodesByGroups(UUID orgId, UUID spaceId, Collection<String> groupCodes) {
         if (groupCodes.isEmpty()) {
             return List.of();
         }
-        return jpa.findRoleCodesBySpaceAndGroupCodesAndNature(spaceId, groupCodes, RoleNature.GOVERNANCE);
+        return jpa.findRoleCodesByOrgAndSpaceAndGroupCodesAndNature(
+                orgId, spaceId, groupCodes, RoleNature.GOVERNANCE);
     }
 
     @Override

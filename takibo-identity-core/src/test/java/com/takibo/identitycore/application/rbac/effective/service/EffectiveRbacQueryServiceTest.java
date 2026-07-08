@@ -93,7 +93,7 @@ class EffectiveRbacQueryServiceTest {
     void governanceDbGroup_transmitsLinkedGovernanceRoles() {
         givenDirectRoles();
         givenMemberships(membership("GRP_LOCAL_ADMINS", GroupSource.GOVERNANCE));
-        when(groupRoles.findGovernanceRoleCodesByGroups(SPACE_ID, List.of("GRP_LOCAL_ADMINS")))
+        when(groupRoles.findGovernanceRoleCodesByGroups(ORG_ID, SPACE_ID, List.of("GRP_LOCAL_ADMINS")))
                 .thenReturn(List.of("GOV_LOCAL"));
 
         EffectiveRbac rbac = effective();
@@ -128,7 +128,7 @@ class EffectiveRbacQueryServiceTest {
         assertThat(rbac.roles()).isEmpty();
         assertThat(rbac.groups()).isEmpty();
         assertThat(rbac.permissions()).isEmpty();
-        verify(groupRoles, never()).findGovernanceRoleCodesByGroups(any(), anyCollection());
+        verify(groupRoles, never()).findGovernanceRoleCodesByGroups(any(), any(), anyCollection());
     }
 
     @Test
