@@ -293,6 +293,7 @@ jobs:
           echo $! > app.pid
 
       - name: Wait for application health
+        id: health
         run: |
           for i in {1..45}; do
             if curl -fsS "http://127.0.0.1:${TAKIBO_APP_PORT}/actuator/health" > /dev/null; then
@@ -308,16 +309,60 @@ jobs:
       - name: Install Newman
         run: npm install -g newman@6.2.1 --ignore-scripts
 
-      - name: Run Postman BVT saga
+      # Un seul boot, une step par saga : chaque verite metier a sa ligne verte/rouge.
+      # Chaque folder est autonome (bootstrap propre) et peut aussi se lancer seul en local.
+      - name: BVT - Boot Smoke
         run: |
-          if [ -f postman/Takibo-Readable-User.postman_collection.json ]; then
-            newman run postman/Takibo-Readable-User.postman_collection.json \
-              --env-var baseUrl=http://127.0.0.1:${TAKIBO_APP_PORT} \
-              --env-var postmanSecret="${TAKIBO_DEV_POSTMAN_SECRET}" \
-              --timeout-request 15000
-          else
-            echo "No Postman collection found. Skipping BVT."
-          fi
+          newman run postman/bvt.postman_collection.json \
+            --folder "Boot Smoke" \
+            --env-var baseUrl=http://127.0.0.1:${TAKIBO_APP_PORT} \
+            --env-var postmanSecret="${TAKIBO_DEV_POSTMAN_SECRET}" \
+            --timeout-request 15000
+
+      - name: BVT - Signup Login
+        if: ${{ !cancelled() && steps.health.outcome == 'success' }}
+        run: |
+          newman run postman/bvt.postman_collection.json \
+            --folder "Signup Login" \
+            --env-var baseUrl=http://127.0.0.1:${TAKIBO_APP_PORT} \
+            --env-var postmanSecret="${TAKIBO_DEV_POSTMAN_SECRET}" \
+            --timeout-request 15000
+
+      - name: BVT - RBAC Effective Token
+        if: ${{ !cancelled() && steps.health.outcome == 'success' }}
+        run: |
+          newman run postman/bvt.postman_collection.json \
+            --folder "RBAC Effective Token" \
+            --env-var baseUrl=http://127.0.0.1:${TAKIBO_APP_PORT} \
+            --env-var postmanSecret="${TAKIBO_DEV_POSTMAN_SECRET}" \
+            --timeout-request 15000
+
+      - name: BVT - User Lifecycle
+        if: ${{ !cancelled() && steps.health.outcome == 'success' }}
+        run: |
+          newman run postman/bvt.postman_collection.json \
+            --folder "User Lifecycle" \
+            --env-var baseUrl=http://127.0.0.1:${TAKIBO_APP_PORT} \
+            --env-var postmanSecret="${TAKIBO_DEV_POSTMAN_SECRET}" \
+            --timeout-request 15000
+
+      - name: BVT - OAuth Clients
+        if: ${{ !cancelled() && steps.health.outcome == 'success' }}
+        run: |
+          newman run postman/bvt.postman_collection.json \
+            --folder "OAuth Clients" \
+            --env-var baseUrl=http://127.0.0.1:${TAKIBO_APP_PORT} \
+            --env-var postmanSecret="${TAKIBO_DEV_POSTMAN_SECRET}" \
+            --timeout-request 15000
+
+      - name: BVT - Security Negative
+        if: ${{ !cancelled() && steps.health.outcome == 'success' }}
+        run: |
+          newman run postman/bvt.postman_collection.json \
+            --folder "Security Negative" \
+            --env-var baseUrl=http://127.0.0.1:${TAKIBO_APP_PORT} \
+            --env-var postmanSecret="${TAKIBO_DEV_POSTMAN_SECRET}" \
+            --timeout-request 15000
 
       - name: Show application logs on failure
         if: failure()
