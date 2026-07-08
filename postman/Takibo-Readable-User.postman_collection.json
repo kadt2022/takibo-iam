@@ -1,0 +1,1999 @@
+{
+  "info": {
+    "name": "Takibo - Readable saga (signup, login, RBAC catalog, assignments, effective token, lifecycle)",
+    "description": "Doctrine : la plateforme peut initier la naissance ; le fondateur humain recoit la souverainete.\nLe catalogue nomme le pouvoir. L assignation delegue le pouvoir. Le groupe transmet le pouvoir par appartenance.\nLe token porte le pouvoir effectif. La decision appartient toujours a la securite.\n\nSaga validee (PR #23 -> #27) :\n  0-2.   Bootstrap PLATFORM, signup org+space+founder, login humain situe (claims roles/groups/permissions)\n  3-8.   Creation employee, read-side users, negatifs anti-admin\n  8a-8f. Catalogue RBAC composite (roles/groups/permissions), anti-enumeration plateforme\n  8g-8p. Assignation directe : delegation reelle, escalade 403, self-demotion 409, retrait effectif\n  8q-8r3. Heritage par groupe : G_SPACE_ADMINS transmet R_SPACE_ADMIN au re-login, retrait -> 403\n  9-17.  Lifecycle user (suspend/activate/lock/deactivate), negatifs token PLATFORM\n\nVariables d env requises : baseUrl, postmanSecret (secret du client postman-client).\nLes codes org/space sont generes uniques a chaque run (pre-request).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "orgCode",
+      "value": ""
+    },
+    {
+      "key": "spaceCode",
+      "value": "finance"
+    },
+    {
+      "key": "platform_access_token",
+      "value": ""
+    },
+    {
+      "key": "founder_access_token",
+      "value": ""
+    },
+    {
+      "key": "employee_access_token",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "0. Token PLATFORM (postman-client, bootstrap d'instance)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded"
+          }
+        ],
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "postman-client"
+            },
+            {
+              "key": "password",
+              "value": "{{postmanSecret}}"
+            }
+          ]
+        },
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {
+              "key": "grant_type",
+              "value": "client_credentials"
+            },
+            {
+              "key": "scope",
+              "value": "api.read api.write"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/oauth2/token",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "oauth2",
+            "token"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200', () => pm.response.code === 200);",
+              "const json = pm.response.json();",
+              "pm.environment.set('platform_access_token', json.access_token);",
+              "const payload = JSON.parse(atob(json.access_token.split('.')[1]));",
+              "pm.test('token PLATFORM sans org_id/space_id', () => {",
+              "    pm.expect(payload.org_id).to.be.undefined;",
+              "    pm.expect(payload.space_id).to.be.undefined;",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "1. Signup (org + space + founder humain, AUCUN secret machine)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const now = Date.now();",
+              "pm.environment.set('orgCode', 'takibo-' + now);",
+              "pm.environment.set('spaceCode', 'finance');"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('201 Created', () => pm.response.code === 201);",
+              "const json = pm.response.json();",
+              "pm.environment.set('organizationId', json.organizationId);",
+              "pm.environment.set('spaceId', json.spaceId);",
+              "pm.environment.set('accountId', json.accountId);",
+              "pm.environment.set('userId', json.userId);",
+              "pm.test('signup ne remet PAS de cle machine', () => pm.expect(json.initialClient).to.be.undefined);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{platform_access_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"organization\": { \"code\": \"{{orgCode}}\", \"name\": \"Org {{orgCode}}\" },\n  \"space\":        { \"code\": \"{{spaceCode}}\", \"name\": \"Finance\", \"description\": \"Espace finance\" },\n  \"account\":      { \"email\": \"founder@takibo.io\", \"password\": \"Str0ng!Passw0rd\" },\n  \"profile\":      { \"username\": \"founder\", \"firstName\": \"Tresor\", \"lastName\": \"Kadima\" }\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orgs/signup",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "orgs",
+            "signup"
+          ]
+        }
+      }
+    },
+    {
+      "name": "2. Login humain founder -> token HUMAN/PASSWORD/SPACE situe",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"founder@takibo.io\",\n  \"password\": \"Str0ng!Passw0rd\",\n  \"orgCode\": \"{{orgCode}}\",\n  \"spaceCode\": \"{{spaceCode}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "auth",
+            "login"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200', () => pm.response.code === 200);",
+              "const json = pm.response.json();",
+              "pm.environment.set('founder_access_token', json.accessToken);",
+              "const payload = JSON.parse(atob(json.accessToken.split('.')[1]));",
+              "pm.test('claims HUMAN/PASSWORD/SPACE/human_login', () => {",
+              "    pm.expect(payload.subject_type).to.eql('HUMAN');",
+              "    pm.expect(payload.auth_method).to.eql('PASSWORD');",
+              "    pm.expect(payload.takibo_scope_level).to.eql('SPACE');",
+              "    pm.expect(payload.takibo_tenant_source).to.eql('human_login');",
+              "});",
+              "pm.test('roles minimaux reels du founder', () => {",
+              "    pm.expect(payload.roles).to.include('R_ORG_OWNER');",
+              "    pm.expect(payload.roles).to.include('R_SPACE_ADMIN');",
+              "});",
+              "pm.test('PR #27: claims groups du provisioning fondateur', () => {",
+              "    pm.expect(payload.groups || []).to.include('G_ORG_ADMINS');",
+              "    pm.expect(payload.groups || []).to.include('G_SPACE_ADMINS');",
+              "});",
+              "pm.test('PR #27: R_ORG_ADMIN herite de G_ORG_ADMINS', () => {",
+              "    pm.expect(payload.roles || []).to.include('R_ORG_ADMIN');",
+              "});",
+              "pm.test('PR #27: permissions effectives presentes, jamais de permission SYSTEM', () => {",
+              "    pm.expect(payload.permissions || []).to.include('P_CREATE_SPACE');",
+              "    pm.expect(payload.permissions || []).to.include('P_MANAGE_USERS');",
+              "    pm.expect(payload.permissions || []).to.not.include('P_CREATE_ORG');",
+              "    pm.expect(payload.permissions || []).to.not.include('P_DELETE_ORG');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Create user employee (token FOUNDER) -> 201",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{founder_access_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"employee1@takibo.io\",\n  \"rawPassword\": \"An0ther!Passw0rd\",\n  \"username\": \"employee1\",\n  \"firstName\": \"Emma\",\n  \"lastName\": \"Employee\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "orgs",
+            "{{orgCode}}",
+            "spaces",
+            "{{spaceCode}}",
+            "users"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('201 Created', () => pm.response.code === 201);",
+              "const json = pm.response.json();",
+              "pm.environment.set('employeeUserId', json.id);",
+              "pm.test('user situe dans le space du token', () => pm.expect(json.spaceId).to.eql(pm.environment.get('spaceId')));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. List users du space (token FOUNDER) -> 200",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{founder_access_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users?page=0&size=20",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "orgs",
+            "{{orgCode}}",
+            "spaces",
+            "{{spaceCode}}",
+            "users"
+          ],
+          "query": [
+            {
+              "key": "page",
+              "value": "0"
+            },
+            {
+              "key": "size",
+              "value": "20"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200', () => pm.response.code === 200);",
+              "const json = pm.response.json();",
+              "pm.test('founder + employee visibles', () => pm.expect(json.totalElements).to.be.at.least(2));",
+              "pm.test('les users portent leur email', () => {",
+              "    const emails = json.content.map(u => u.email);",
+              "    pm.expect(emails).to.include('employee1@takibo.io');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Get employee (token FOUNDER) -> 200",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{founder_access_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{employeeUserId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "orgs",
+            "{{orgCode}}",
+            "spaces",
+            "{{spaceCode}}",
+            "users",
+            "{{employeeUserId}}"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200', () => pm.response.code === 200);",
+              "const json = pm.response.json();",
+              "pm.test('bon user, ACTIVE', () => {",
+              "    pm.expect(json.id).to.eql(pm.environment.get('employeeUserId'));",
+              "    pm.expect(json.status).to.eql('ACTIVE');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. PATCH profil local employee (token FOUNDER) -> 200",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{founder_access_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"firstName\": \"Emma-Louise\",\n  \"metadata\": { \"department\": \"finance\" }\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{employeeUserId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "orgs",
+            "{{orgCode}}",
+            "spaces",
+            "{{spaceCode}}",
+            "users",
+            "{{employeeUserId}}"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200', () => pm.response.code === 200);",
+              "const json = pm.response.json();",
+              "pm.test('profil modifie, username inchange (PATCH partiel)', () => {",
+              "    pm.expect(json.firstName).to.eql('Emma-Louise');",
+              "    pm.expect(json.username).to.eql('employee1');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. Login employee (humain SANS role admin) -> 200",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"employee1@takibo.io\",\n  \"password\": \"An0ther!Passw0rd\",\n  \"orgCode\": \"{{orgCode}}\",\n  \"spaceCode\": \"{{spaceCode}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "auth",
+            "login"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 - un user ACTIVE sans role peut se connecter', () => pm.response.code === 200);",
+              "const json = pm.response.json();",
+              "pm.environment.set('employee_access_token', json.accessToken);",
+              "const payload = JSON.parse(atob(json.accessToken.split('.')[1]));",
+              "pm.test('aucun role admin dans le token', () => {",
+              "    const roles = payload.roles || [];",
+              "    pm.expect(roles).to.not.include('R_ORG_OWNER');",
+              "    pm.expect(roles).to.not.include('R_SPACE_ADMIN');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "8. NEGATIF: list users avec token employee (sans role admin) -> 403",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{employee_access_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "orgs",
+            "{{orgCode}}",
+            "spaces",
+            "{{spaceCode}}",
+            "users"
+          ]
+        },
+        "description": "Le role autorise l'action : sans role admin tenant, l'annuaire du space est ferme."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('403 - lecture reservee aux admins tenant', () => pm.expect(pm.response.code).to.eql(403));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "8a. List roles catalogue (token FOUNDER) -> 200 composite",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{founder_access_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/roles",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "orgs",
+            "{{orgCode}}",
+            "spaces",
+            "{{spaceCode}}",
+            "roles"
+          ]
+        },
+        "description": "Catalogue composite : catalogue technique TAKIBO (scopes ORGANIZATION/SPACE) + roles tenant DB. Les roles SYSTEM/USER n'existent pas pour les tenants."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 - catalogue roles', () => pm.expect(pm.response.code).to.eql(200));",
+              "const json = pm.response.json();",
+              "const codes = json.items.map(r => r.code);",
+              "pm.test('contient les roles techniques tenant', () => {",
+              "    pm.expect(codes).to.include('R_ORG_OWNER');",
+              "    pm.expect(codes).to.include('R_SPACE_ADMIN');",
+              "});",
+              "pm.test('jamais de role plateforme ni R_SELF', () => {",
+              "    pm.expect(codes).to.not.include('R_TAKIBO_PLATFORM_ADMIN');",
+              "    pm.expect(codes).to.not.include('R_TAKIBO_PLATFORM_AUDITOR');",
+              "    pm.expect(codes).to.not.include('R_SELF');",
+              "});",
+              "pm.test('les roles techniques sont TECHNICAL et non editables', () => {",
+              "    const spaceAdmin = json.items.find(r => r.code === 'R_SPACE_ADMIN');",
+              "    pm.expect(spaceAdmin.origin).to.eql('TECHNICAL');",
+              "    pm.expect(spaceAdmin.nature).to.eql('TECHNICAL');",
+              "    pm.expect(spaceAdmin.editable).to.eql(false);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "8b. Get role R_SPACE_ADMIN (token FOUNDER) -> 200 avec permissions",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{founder_access_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/roles/R_SPACE_ADMIN",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "orgs",
+            "{{orgCode}}",
+            "spaces",
+            "{{spaceCode}}",
+            "roles",
+            "R_SPACE_ADMIN"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200', () => pm.expect(pm.response.code).to.eql(200));",
+              "const json = pm.response.json();",
+              "pm.test('detail technique avec permissions', () => {",
+              "    pm.expect(json.code).to.eql('R_SPACE_ADMIN');",
+              "    pm.expect(json.nature).to.eql('TECHNICAL');",
+              "    pm.expect(json.assignable).to.eql(true);",
+              "    pm.expect(json.permissions).to.include('P_MANAGE_USERS');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "8c. List groups catalogue (token FOUNDER) -> 200",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{founder_access_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/groups",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "orgs",
+            "{{orgCode}}",
+            "spaces",
+            "{{spaceCode}}",
+            "groups"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 - catalogue groups', () => pm.expect(pm.response.code).to.eql(200));",
+              "const json = pm.response.json();",
+              "const codes = json.items.map(g => g.code);",
+              "pm.test('contient les groupes techniques', () => {",
+              "    pm.expect(codes).to.include('G_ORG_ADMINS');",
+              "    pm.expect(codes).to.include('G_SPACE_ADMINS');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "8d. List permissions catalogue (token FOUNDER) -> 200 sans SYSTEM",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{founder_access_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/permissions",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "orgs",
+            "{{orgCode}}",
+            "spaces",
+            "{{spaceCode}}",
+            "permissions"
+          ]
+        },
+        "description": "Seules les permissions techniques de scope ORGANIZATION sont racontees ; P_CREATE_ORG / P_DELETE_ORG (SYSTEM) restent invisibles aux tenants."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 - catalogue permissions', () => pm.expect(pm.response.code).to.eql(200));",
+              "const json = pm.response.json();",
+              "const codes = json.items.map(p => p.code);",
+              "pm.test('permissions tenant presentes, SYSTEM absentes', () => {",
+              "    pm.expect(codes).to.include('P_MANAGE_USERS');",
+              "    pm.expect(codes).to.not.include('P_CREATE_ORG');",
+              "    pm.expect(codes).to.not.include('P_DELETE_ORG');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "8e. NEGATIF: list roles avec token employee (sans role admin) -> 403",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{employee_access_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/roles",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "orgs",
+            "{{orgCode}}",
+            "spaces",
+            "{{spaceCode}}",
+            "roles"
+          ]
+        },
+        "description": "Le catalogue RBAC decrit la structure du pouvoir : lecture reservee aux admins tenant (POL_RBAC_READ_ADMIN_REQUIRED)."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('403 - catalogue reserve aux admins tenant', () => pm.expect(pm.response.code).to.eql(403));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "8f. NEGATIF: get role plateforme -> 404 (anti-enumeration)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{founder_access_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/roles/R_TAKIBO_PLATFORM_ADMIN",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "orgs",
+            "{{orgCode}}",
+            "spaces",
+            "{{spaceCode}}",
+            "roles",
+            "R_TAKIBO_PLATFORM_ADMIN"
+          ]
+        },
+        "description": "Un role SYSTEM n'existe pas dans la frontiere d'un tenant : 404, jamais un 403 qui confirmerait son existence."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('404 - la plateforme ne se raconte pas aux tenants', () => pm.expect(pm.response.code).to.eql(404));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "8g. Assign R_SPACE_ADMIN a employee (token FOUNDER) -> 200 etat courant",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{founder_access_token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{employeeUserId}}/roles",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "orgs",
+            "{{orgCode}}",
+            "spaces",
+            "{{spaceCode}}",
+            "users",
+            "{{employeeUserId}}",
+            "roles"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"roleCode\": \"R_SPACE_ADMIN\",\n  \"reason\": \"Delegation de l administration du space\"\n}"
+        },
+        "description": "Deleguer, c est nommer, situer, tracer et pouvoir retirer. La reponse est l etat courant des assignations directes (idempotence)."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 - role assigne', () => pm.expect(pm.response.code).to.eql(200));",
+              "const json = pm.response.json();",
+              "pm.test('etat courant contient R_SPACE_ADMIN en DIRECT', () => {",
+              "    const admin = json.roles.find(r => r.code === 'R_SPACE_ADMIN');",
+              "    pm.expect(admin).to.not.eql(undefined);",
+              "    pm.expect(admin.source).to.eql('DIRECT');",
+              "    pm.expect(admin.nature).to.eql('TECHNICAL');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "8g2. GET roles directs de employee (token FOUNDER) -> 200",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{founder_access_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{employeeUserId}}/roles",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "orgs",
+            "{{orgCode}}",
+            "spaces",
+            "{{spaceCode}}",
+            "users",
+            "{{employeeUserId}}",
+            "roles"
+          ]
+        },
+        "description": "Lecture directe du read-side, distincte de l etat retourne par les mutations."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 - read-side des roles directs', () => pm.expect(pm.response.code).to.eql(200));",
+              "const json = pm.response.json();",
+              "pm.test('R_SPACE_ADMIN visible en DIRECT', () => {",
+              "    const admin = json.roles.find(r => r.code === 'R_SPACE_ADMIN');",
+              "    pm.expect(admin).to.not.eql(undefined);",
+              "    pm.expect(admin.source).to.eql('DIRECT');",
+              "    pm.expect(admin.origin).to.eql('TECHNICAL');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "8h. Re-login employee -> token porte maintenant R_SPACE_ADMIN",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"employee1@takibo.io\",\n  \"password\": \"An0ther!Passw0rd\",\n  \"orgCode\": \"{{orgCode}}\",\n  \"spaceCode\": \"{{spaceCode}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "auth",
+            "login"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 - login employee', () => pm.expect(pm.response.code).to.eql(200));",
+              "const json = pm.response.json();",
+              "pm.environment.set('employee_access_token', json.accessToken);",
+              "const payload = JSON.parse(atob(json.accessToken.split('.')[1]));",
+              "pm.test('token porte R_SPACE_ADMIN', () => {",
+              "    pm.expect(payload.roles || []).to.include('R_SPACE_ADMIN');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "8i. Employee (promu admin) peut lister les users -> 200",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{employee_access_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "orgs",
+            "{{orgCode}}",
+            "spaces",
+            "{{spaceCode}}",
+            "users"
+          ]
+        },
+        "description": "La delegation est reelle : le nouveau token donne la capacite d admin dans le space."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 - capacite admin effective', () => pm.expect(pm.response.code).to.eql(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "8j. NEGATIF: employee (space admin) s auto-assigne R_ORG_ADMIN -> 403 escalade",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{employee_access_token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{employeeUserId}}/roles",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "orgs",
+            "{{orgCode}}",
+            "spaces",
+            "{{spaceCode}}",
+            "users",
+            "{{employeeUserId}}",
+            "roles"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"roleCode\": \"R_ORG_ADMIN\",\n  \"reason\": \"tentative escalade\"\n}"
+        },
+        "description": "On ne delegue jamais au-dessus de son propre scope : un pouvoir ORGANIZATION exige une autorite ORGANIZATION."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('403 - escalade verticale refusee', () => pm.expect(pm.response.code).to.eql(403));",
+              "pm.test('code ROLE_SCOPE_ESCALATION_DENIED', () => {",
+              "    pm.expect(pm.response.json().code).to.eql('ROLE_SCOPE_ESCALATION_DENIED');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "8k. NEGATIF: employee retire son propre R_SPACE_ADMIN -> 409 self-demotion",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{employee_access_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{employeeUserId}}/roles/R_SPACE_ADMIN",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "orgs",
+            "{{orgCode}}",
+            "spaces",
+            "{{spaceCode}}",
+            "users",
+            "{{employeeUserId}}",
+            "roles",
+            "R_SPACE_ADMIN"
+          ]
+        },
+        "description": "La retrogradation de soi-meme exige un autre admin."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('409 - self-demotion refusee', () => pm.expect(pm.response.code).to.eql(409));",
+              "pm.test('code SELF_DEMOTION_DENIED', () => {",
+              "    pm.expect(pm.response.json().code).to.eql('SELF_DEMOTION_DENIED');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "8l. NEGATIF: assigner un role plateforme -> 404 (anti-enumeration)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{founder_access_token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{employeeUserId}}/roles",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "orgs",
+            "{{orgCode}}",
+            "spaces",
+            "{{spaceCode}}",
+            "users",
+            "{{employeeUserId}}",
+            "roles"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"roleCode\": \"R_TAKIBO_PLATFORM_ADMIN\",\n  \"reason\": \"tentative\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('404 - la plateforme ne se delegue pas aux tenants', () => pm.expect(pm.response.code).to.eql(404));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "8m. NEGATIF: assigner un role inconnu -> 404",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{founder_access_token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{employeeUserId}}/roles",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "orgs",
+            "{{orgCode}}",
+            "spaces",
+            "{{spaceCode}}",
+            "users",
+            "{{employeeUserId}}",
+            "roles"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"roleCode\": \"R_DOES_NOT_EXIST\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('404 - role inconnu', () => pm.expect(pm.response.code).to.eql(404));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "8n. Remove R_SPACE_ADMIN de employee (token FOUNDER) -> 200",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{founder_access_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{employeeUserId}}/roles/R_SPACE_ADMIN",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "orgs",
+            "{{orgCode}}",
+            "spaces",
+            "{{spaceCode}}",
+            "users",
+            "{{employeeUserId}}",
+            "roles",
+            "R_SPACE_ADMIN"
+          ]
+        },
+        "description": "Le retrait par un autre admin est permis : le fondateur reste detenteur de R_SPACE_ADMIN (pas de dernier-admin)."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 - role retire', () => pm.expect(pm.response.code).to.eql(200));",
+              "const json = pm.response.json();",
+              "pm.test('R_SPACE_ADMIN absent de l etat courant', () => {",
+              "    pm.expect(json.roles.map(r => r.code)).to.not.include('R_SPACE_ADMIN');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "8o. Re-login employee -> le token ne porte plus R_SPACE_ADMIN",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"employee1@takibo.io\",\n  \"password\": \"An0ther!Passw0rd\",\n  \"orgCode\": \"{{orgCode}}\",\n  \"spaceCode\": \"{{spaceCode}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "auth",
+            "login"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 - login employee', () => pm.expect(pm.response.code).to.eql(200));",
+              "const json = pm.response.json();",
+              "pm.environment.set('employee_access_token', json.accessToken);",
+              "const payload = JSON.parse(atob(json.accessToken.split('.')[1]));",
+              "pm.test('token sans R_SPACE_ADMIN', () => {",
+              "    pm.expect(payload.roles || []).to.not.include('R_SPACE_ADMIN');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "8p. NEGATIF: employee retrograde ne peut plus lister les users -> 403",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{employee_access_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "orgs",
+            "{{orgCode}}",
+            "spaces",
+            "{{spaceCode}}",
+            "users"
+          ]
+        },
+        "description": "Retirer, c est reel : la capacite disparait au prochain token (TTL 300s)."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('403 - capacite retiree', () => pm.expect(pm.response.code).to.eql(403));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "8q. Add employee au groupe G_SPACE_ADMINS (token FOUNDER) -> 200",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{founder_access_token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{employeeUserId}}/groups",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "orgs",
+            "{{orgCode}}",
+            "spaces",
+            "{{spaceCode}}",
+            "users",
+            "{{employeeUserId}}",
+            "groups"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"groupCode\": \"G_SPACE_ADMINS\",\n  \"reason\": \"Le groupe transmet le pouvoir par appartenance\"\n}"
+        },
+        "description": "PR #27 : l appartenance transmet reellement un pouvoir."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 - membership ajoute', () => pm.expect(pm.response.code).to.eql(200));",
+              "pm.test('etat courant contient G_SPACE_ADMINS', () => {",
+              "    pm.expect(pm.response.json().groups.map(g => g.code)).to.include('G_SPACE_ADMINS');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "8q2. Re-login employee -> token porte groupe + roles herites + permissions",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"employee1@takibo.io\",\n  \"password\": \"An0ther!Passw0rd\",\n  \"orgCode\": \"{{orgCode}}\",\n  \"spaceCode\": \"{{spaceCode}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "auth",
+            "login"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 - login employee', () => pm.expect(pm.response.code).to.eql(200));",
+              "const json = pm.response.json();",
+              "pm.environment.set('employee_access_token', json.accessToken);",
+              "const payload = JSON.parse(atob(json.accessToken.split('.')[1]));",
+              "pm.test('claim groups porte G_SPACE_ADMINS', () => {",
+              "    pm.expect(payload.groups || []).to.include('G_SPACE_ADMINS');",
+              "});",
+              "pm.test('claim roles porte R_SPACE_ADMIN herite du groupe', () => {",
+              "    pm.expect(payload.roles || []).to.include('R_SPACE_ADMIN');",
+              "});",
+              "pm.test('claim permissions derive des roles techniques effectifs', () => {",
+              "    pm.expect(payload.permissions || []).to.include('P_MANAGE_USERS');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "8q3. Employee (pouvoir herite du groupe) peut lister les users -> 200",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{employee_access_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "orgs",
+            "{{orgCode}}",
+            "spaces",
+            "{{spaceCode}}",
+            "users"
+          ]
+        },
+        "description": "Le scenario refuse en PR #26 devient vert : le groupe donne une capacite reelle."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 - le groupe transmet un pouvoir reel', () => pm.expect(pm.response.code).to.eql(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "8r. Remove employee de G_SPACE_ADMINS (token FOUNDER) -> 200",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{founder_access_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{employeeUserId}}/groups/G_SPACE_ADMINS",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "orgs",
+            "{{orgCode}}",
+            "spaces",
+            "{{spaceCode}}",
+            "users",
+            "{{employeeUserId}}",
+            "groups",
+            "G_SPACE_ADMINS"
+          ]
+        },
+        "description": "Le fondateur est aussi membre : pas de blocage dernier-admin, et actor != target."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 - membership retire', () => pm.expect(pm.response.code).to.eql(200));",
+              "pm.test('G_SPACE_ADMINS absent de l etat courant', () => {",
+              "    pm.expect(pm.response.json().groups.map(g => g.code)).to.not.include('G_SPACE_ADMINS');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "8r2. Re-login employee -> le pouvoir herite a disparu",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"employee1@takibo.io\",\n  \"password\": \"An0ther!Passw0rd\",\n  \"orgCode\": \"{{orgCode}}\",\n  \"spaceCode\": \"{{spaceCode}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "auth",
+            "login"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 - login employee', () => pm.expect(pm.response.code).to.eql(200));",
+              "const json = pm.response.json();",
+              "pm.environment.set('employee_access_token', json.accessToken);",
+              "const payload = JSON.parse(atob(json.accessToken.split('.')[1]));",
+              "pm.test('claim groups vide de G_SPACE_ADMINS', () => {",
+              "    pm.expect(payload.groups || []).to.not.include('G_SPACE_ADMINS');",
+              "});",
+              "pm.test('claim roles sans R_SPACE_ADMIN', () => {",
+              "    pm.expect(payload.roles || []).to.not.include('R_SPACE_ADMIN');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "8r3. NEGATIF: employee sans groupe ne peut plus lister les users -> 403",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{employee_access_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "orgs",
+            "{{orgCode}}",
+            "spaces",
+            "{{spaceCode}}",
+            "users"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('403 - le pouvoir retire est reellement retire', () => pm.expect(pm.response.code).to.eql(403));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "9. Suspend employee (token FOUNDER) -> 200 SUSPENDED",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{founder_access_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{ \"reason\": \"Policy violation\" }"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{employeeUserId}}/suspend",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "orgs",
+            "{{orgCode}}",
+            "spaces",
+            "{{spaceCode}}",
+            "users",
+            "{{employeeUserId}}",
+            "suspend"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200', () => pm.response.code === 200);",
+              "pm.test('SUSPENDED', () => pm.expect(pm.response.json().status).to.eql('SUSPENDED'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "10. NEGATIF: login employee suspendu -> 403 USER_NOT_ACTIVE",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"employee1@takibo.io\",\n  \"password\": \"An0ther!Passw0rd\",\n  \"orgCode\": \"{{orgCode}}\",\n  \"spaceCode\": \"{{spaceCode}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "auth",
+            "login"
+          ]
+        },
+        "description": "Suspendre, c'est retirer la capacite de recevoir une nouvelle preuve."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('403 - aucune nouvelle preuve pour un user suspendu', () => pm.expect(pm.response.code).to.eql(403));",
+              "pm.test('code USER_NOT_ACTIVE', () => pm.expect(pm.response.json().code).to.eql('USER_NOT_ACTIVE'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "11. Activate employee (token FOUNDER) -> 200 ACTIVE",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{founder_access_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{employeeUserId}}/activate",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "orgs",
+            "{{orgCode}}",
+            "spaces",
+            "{{spaceCode}}",
+            "users",
+            "{{employeeUserId}}",
+            "activate"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200', () => pm.response.code === 200);",
+              "pm.test('ACTIVE', () => pm.expect(pm.response.json().status).to.eql('ACTIVE'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "12. Lock employee (token FOUNDER) -> 200 LOCKED",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{founder_access_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{ \"reason\": \"Suspicious activity\" }"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{employeeUserId}}/lock",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "orgs",
+            "{{orgCode}}",
+            "spaces",
+            "{{spaceCode}}",
+            "users",
+            "{{employeeUserId}}",
+            "lock"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200', () => pm.response.code === 200);",
+              "pm.test('LOCKED', () => pm.expect(pm.response.json().status).to.eql('LOCKED'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "13. Re-activate employee (token FOUNDER) -> 200 ACTIVE",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{founder_access_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{employeeUserId}}/activate",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "orgs",
+            "{{orgCode}}",
+            "spaces",
+            "{{spaceCode}}",
+            "users",
+            "{{employeeUserId}}",
+            "activate"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200', () => pm.response.code === 200);",
+              "pm.test('ACTIVE', () => pm.expect(pm.response.json().status).to.eql('ACTIVE'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "14. Deactivate employee (token FOUNDER) -> 200 DEACTIVATED",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{founder_access_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{ \"reason\": \"User left organization\" }"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{employeeUserId}}/deactivate",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "orgs",
+            "{{orgCode}}",
+            "spaces",
+            "{{spaceCode}}",
+            "users",
+            "{{employeeUserId}}",
+            "deactivate"
+          ]
+        },
+        "description": "Pas de suppression physique : desactiver ferme la porte locale sans effacer la trace."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200', () => pm.response.code === 200);",
+              "pm.test('DEACTIVATED', () => pm.expect(pm.response.json().status).to.eql('DEACTIVATED'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "15. NEGATIF: activate apres deactivate -> 409 (etat terminal)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{founder_access_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{employeeUserId}}/activate",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "orgs",
+            "{{orgCode}}",
+            "spaces",
+            "{{spaceCode}}",
+            "users",
+            "{{employeeUserId}}",
+            "activate"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('409 - transition en conflit avec l etat courant', () => pm.expect(pm.response.code).to.eql(409));",
+              "pm.test('code INVALID_STATUS_TRANSITION', () => pm.expect(pm.response.json().code).to.eql('INVALID_STATUS_TRANSITION'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "16. NEGATIF: token PLATFORM sur lifecycle user -> 403",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{platform_access_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{ \"reason\": \"should be denied\" }"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{employeeUserId}}/suspend",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "orgs",
+            "{{orgCode}}",
+            "spaces",
+            "{{spaceCode}}",
+            "users",
+            "{{employeeUserId}}",
+            "suspend"
+          ]
+        },
+        "description": "Un token PLATFORM ne porte ni tenant ni role admin tenant : fail-closed."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('403', () => pm.expect(pm.response.code).to.eql(403));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "17. NEGATIF: token PLATFORM ne peut pas creer de client tenant -> 403",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{platform_access_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"clientId\": \"should-be-denied\",\n  \"clientName\": \"Denied\",\n  \"clientType\": \"CONFIDENTIAL\",\n  \"requireClientSecret\": true,\n  \"tokenEndpointAuthMethod\": \"client_secret_basic\",\n  \"grantTypes\": [\"client_credentials\"],\n  \"scopes\": [\"api.read\"]\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/orgs/{{organizationId}}/spaces/{{spaceId}}/clients",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "orgs",
+            "{{organizationId}}",
+            "spaces",
+            "{{spaceId}}",
+            "clients"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('client creation denied for platform token', () => pm.expect(pm.response.code).to.be.oneOf([401, 403]));"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Codes uniques par run : indispensable pour newman (signup 409 sinon).",
+          "if (!pm.environment.get('orgCode') || pm.environment.get('freshCodesPerRun') === 'true') {",
+          "    if (!pm.variables.get('__runCodesSet')) {",
+          "        const suffix = Date.now().toString(36) + Math.floor(Math.random() * 1000);",
+          "        pm.environment.set('orgCode', 'nm-org-' + suffix);",
+          "        pm.environment.set('spaceCode', 'nm-space-' + suffix);",
+          "        pm.collectionVariables.set('__runCodesSet', 'true');",
+          "    }",
+          "}"
+        ]
+      }
+    }
+  ]
+}

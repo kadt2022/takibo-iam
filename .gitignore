@@ -11,7 +11,10 @@ build/
 **/build/
 out/
 **/out/
-postman/
+# Postman : seule la collection BVT est versionnee (la CI la joue via newman) ;
+# les environnements locaux (secrets) et scripts restent hors repo.
+postman/*
+!postman/Takibo-Readable-User.postman_collection.json
 .gradle-user/
 
 # Keep Gradle wrapper ONLY at root
