@@ -8,7 +8,8 @@ description = 'Boot module for Takibu IAM monolithic app'
 
 bootRun {
     jvmArgs = ['-Xdebug', '-Xrunjdwp:server=y,transport=dt_socket,address=5005,suspend=n']
-    args = ['--spring.profiles.active=mysql']
+    // Pas de profil forcé : bootRun démarre sur la datasource par défaut (application.yml).
+    // Pour MySQL : ./gradlew :takibo-iam-boot:bootRun --args='--spring.profiles.active=mysql'
 }
 
 dependencies {

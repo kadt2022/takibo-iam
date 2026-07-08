@@ -10,11 +10,12 @@ import com.takibo.identitycore.domain.exception.AccountLockedException;
 import com.takibo.identitycore.domain.exception.InvalidCredentialsException;
 import com.takibo.identitycore.domain.exception.UserNotActiveException;
 import com.takibo.identitycore.domain.exception.UserNotMemberOfSpaceException;
+import com.takibo.identitycore.application.rbac.effective.model.EffectiveRbac;
+import com.takibo.identitycore.application.rbac.effective.port.in.EffectiveRbacQueryCase;
 import com.takibo.identitycore.domain.model.Account;
 import com.takibo.identitycore.domain.model.AccountCredentials;
 import com.takibo.identitycore.domain.model.EmailAddress;
 import com.takibo.identitycore.domain.model.User;
-import com.takibo.identitycore.domain.rbac.repository.GovernanceRoleAssignmentRepository;
 import com.takibo.identitycore.domain.repository.AccountCredentialsRepository;
 import com.takibo.identitycore.domain.repository.AccountRepository;
 import com.takibo.identitycore.domain.repository.UserRepository;
@@ -57,7 +58,7 @@ public class HumanLoginService implements HumanLoginCase {
     private final AccountCredentialsRepository accountCredentialsRepository;
     private final PasswordHasherCase passwordHasher;
     private final UserRepository userRepository;
-    private final GovernanceRoleAssignmentRepository roleAssignments;
+    private final EffectiveRbacQueryCase effectiveRbacQuery;
     private final HumanAccessTokenIssuer tokenIssuer;
     private final AuthMapper authMapper;
 
@@ -113,8 +114,10 @@ public class HumanLoginService implements HumanLoginCase {
             throw new UserNotActiveException(user.getId().value(), user.getStatus());
         }
 
-        // 4) Snapshot minimal des rôles techniques (pas le RBAC complet dans le JWT).
-        List<String> roles = roleAssignments.findAssignedTechnicalRoleCodes(
+        // 4) Snapshot borné du pouvoir effectif au moment de l'authentification :
+        //    rôles directs + hérités par groupes + permissions dérivées. Les groupes
+        //    cessent d'être des étiquettes — ils transmettent réellement le pouvoir.
+        EffectiveRbac effective = effectiveRbacQuery.effectiveFor(
                 key.orgId(), key.spaceId(), account.getId().getValue());
 
         HumanTokenRequest tokenRequest = new HumanTokenRequest(
@@ -122,7 +125,9 @@ public class HumanLoginService implements HumanLoginCase {
                 key.spaceId(),
                 account.getId().getValue(),
                 user.getId().value(),
-                roles
+                effective.roles(),
+                effective.groups(),
+                effective.permissions()
         );
 
         LoginToken token = tokenIssuer.issue(tokenRequest);

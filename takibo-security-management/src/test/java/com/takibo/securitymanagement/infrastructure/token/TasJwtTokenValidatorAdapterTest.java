@@ -41,6 +41,8 @@ class TasJwtTokenValidatorAdapterTest {
                 .claim("auth_method", "PASSWORD")
                 .claim("takibo_scope_level", "SPACE")
                 .claim("roles", List.of("R_ORG_OWNER", "R_SPACE_ADMIN"))
+                .claim("groups", List.of("G_SPACE_ADMINS"))
+                .claim("permissions", List.of("P_ASSIGN_ROLES", "P_MANAGE_USERS"))
                 .build();
 
         Map<String, Object> claims = validate(jwt);
@@ -53,6 +55,10 @@ class TasJwtTokenValidatorAdapterTest {
         assertThat(claims.get("authMethod")).isEqualTo("PASSWORD");
         assertThat(claims.get("scopeLevel")).isEqualTo("SPACE");
         assertThat(claims.get("roles")).isEqualTo(List.of("R_ORG_OWNER", "R_SPACE_ADMIN"));
+        // La preuve transportée survit à la validation : sans ces clés,
+        // AuthorityFactory et le PolicyEvaluator ne verraient jamais le pouvoir effectif.
+        assertThat(claims.get("groups")).isEqualTo(List.of("G_SPACE_ADMINS"));
+        assertThat(claims.get("permissions")).isEqualTo(List.of("P_ASSIGN_ROLES", "P_MANAGE_USERS"));
     }
 
     @Test

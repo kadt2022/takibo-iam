@@ -30,7 +30,9 @@ public class BootHumanAccessTokenIssuer implements HumanAccessTokenIssuer {
                 request.spaceId(),
                 request.accountId(),
                 request.userId(),
-                request.roles()
+                request.roles(),
+                request.groups(),
+                request.permissions()
         ));
         return new LoginToken(signed.tokenValue(), TOKEN_TYPE_BEARER, signed.expiresInSeconds());
     }

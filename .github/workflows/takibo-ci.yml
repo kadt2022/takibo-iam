@@ -293,14 +293,15 @@ jobs:
       - name: Install Newman
         run: npm install -g newman@6.2.1 --ignore-scripts
 
-      - name: Run Postman smoke tests
+      - name: Run Postman BVT saga
         run: |
-          if [ -f postman/smoke.postman_collection.json ]; then
-            newman run postman/smoke.postman_collection.json \
+          if [ -f postman/Takibo-Readable-User.postman_collection.json ]; then
+            newman run postman/Takibo-Readable-User.postman_collection.json \
               --env-var baseUrl=http://127.0.0.1:${TAKIBO_APP_PORT} \
-              --env-var postmanClientSecret="${TAKIBO_DEV_POSTMAN_SECRET}"
+              --env-var postmanSecret="${TAKIBO_DEV_POSTMAN_SECRET}" \
+              --timeout-request 15000
           else
-            echo "No Postman smoke collection found. Skipping BVT."
+            echo "No Postman collection found. Skipping BVT."
           fi
 
       - name: Show application logs on failure

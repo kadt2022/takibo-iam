@@ -20,6 +20,8 @@ public final class TakiboTokenClaims {
     public static final String ACCOUNT_ID = "account_id";
     public static final String USER_ID = "user_id";
     public static final String ROLES = "roles";
+    public static final String GROUPS = "groups";
+    public static final String PERMISSIONS = "permissions";
     public static final String SUBJECT_TYPE = "subject_type";
     public static final String AUTH_METHOD = "auth_method";
 

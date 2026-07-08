@@ -53,7 +53,9 @@ class HumanTokenSignerTest {
 
     private HumanTokenCommand command() {
         return new HumanTokenCommand(ORG_ID, SPACE_ID, ACCOUNT_ID, USER_ID,
-                List.of("R_ORG_OWNER", "R_SPACE_ADMIN"));
+                List.of("R_ORG_OWNER", "R_SPACE_ADMIN"),
+                List.of("G_SPACE_ADMINS"),
+                List.of("P_ASSIGN_ROLES", "P_MANAGE_USERS"));
     }
 
     @Test
@@ -76,6 +78,10 @@ class HumanTokenSignerTest {
         assertThat(claims.getStringClaim(TakiboTokenClaims.USER_ID)).isEqualTo(USER_ID.toString());
         assertThat(claims.getStringListClaim(TakiboTokenClaims.ROLES))
                 .containsExactly("R_ORG_OWNER", "R_SPACE_ADMIN");
+        assertThat(claims.getStringListClaim(TakiboTokenClaims.GROUPS))
+                .containsExactly("G_SPACE_ADMINS");
+        assertThat(claims.getStringListClaim(TakiboTokenClaims.PERMISSIONS))
+                .containsExactly("P_ASSIGN_ROLES", "P_MANAGE_USERS");
 
         assertThat(claims.getExpirationTime()).isNotNull();
         assertThat(claims.getIssueTime()).isNotNull();
@@ -105,16 +111,16 @@ class HumanTokenSignerTest {
     @Test
     void sign_failsClosed_whenTenantIdentityIncomplete() {
         assertThatThrownBy(() -> signer.sign(
-                new HumanTokenCommand(ORG_ID, SPACE_ID, ACCOUNT_ID, null, List.of())))
+                new HumanTokenCommand(ORG_ID, SPACE_ID, ACCOUNT_ID, null, List.of(), List.of(), List.of())))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("HUMAN_TOKEN_REQUIRES_FULL_TENANT_IDENTITY");
 
         assertThatThrownBy(() -> signer.sign(
-                new HumanTokenCommand(null, SPACE_ID, ACCOUNT_ID, USER_ID, List.of())))
+                new HumanTokenCommand(null, SPACE_ID, ACCOUNT_ID, USER_ID, List.of(), List.of(), List.of())))
                 .isInstanceOf(IllegalStateException.class);
 
         assertThatThrownBy(() -> signer.sign(
-                new HumanTokenCommand(ORG_ID, null, ACCOUNT_ID, USER_ID, List.of())))
+                new HumanTokenCommand(ORG_ID, null, ACCOUNT_ID, USER_ID, List.of(), List.of(), List.of())))
                 .isInstanceOf(IllegalStateException.class);
     }
 }

@@ -71,6 +71,15 @@ public class TasJwtTokenValidatorAdapter implements TokenValidatorAdapter {
         List<String> roles = jwt.getClaimAsStringList("roles");
         if (roles != null && !roles.isEmpty()) claims.put("roles", List.copyOf(roles));
 
+        // PR #27 : le token porte le pouvoir effectif — la validation doit préserver
+        // la preuve transportée, sinon permissions/groups signés n'atteignent jamais
+        // AuthorityFactory ni le PolicyEvaluator.
+        List<String> groups = jwt.getClaimAsStringList("groups");
+        if (groups != null && !groups.isEmpty()) claims.put("groups", List.copyOf(groups));
+
+        List<String> permissions = jwt.getClaimAsStringList("permissions");
+        if (permissions != null && !permissions.isEmpty()) claims.put("permissions", List.copyOf(permissions));
+
         String clientId = jwt.getClaimAsString("client_id");
         if (clientId != null) claims.put("clientId", clientId);
 

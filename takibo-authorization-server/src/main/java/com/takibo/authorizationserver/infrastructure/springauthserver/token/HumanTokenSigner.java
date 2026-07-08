@@ -60,6 +60,8 @@ public class HumanTokenSigner {
                 .claim(TakiboTokenClaims.ACCOUNT_ID, command.accountId().toString())
                 .claim(TakiboTokenClaims.USER_ID, command.userId().toString())
                 .claim(TakiboTokenClaims.ROLES, command.roles())
+                .claim(TakiboTokenClaims.GROUPS, command.groups())
+                .claim(TakiboTokenClaims.PERMISSIONS, command.permissions())
                 .build();
 
         String tokenValue = jwtEncoder.encode(JwtEncoderParameters.from(claims)).getTokenValue();
