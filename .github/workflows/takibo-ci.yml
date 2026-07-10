@@ -307,66 +307,34 @@ jobs:
           exit 1
 
       - name: Install Newman
-        run: npm install -g newman@6.2.1 --ignore-scripts
+        run: npm install -g newman@6.2.1 newman-reporter-htmlextra@1.23.1 --ignore-scripts
 
-      # Un seul boot, une step par saga : chaque verite metier a sa ligne verte/rouge.
-      # Chaque folder est autonome (bootstrap propre) et peut aussi se lancer seul en local.
-      - name: BVT - Boot Smoke
+      - name: BVT - Readable User Saga
         run: |
-          newman run postman/bvt.postman_collection.json \
-            --folder "Boot Smoke" \
+          mkdir -p build/newman
+
+          newman run postman/Takibo-Readable-User.postman_collection.json \
             --env-var baseUrl=http://127.0.0.1:${TAKIBO_APP_PORT} \
             --env-var postmanSecret="${TAKIBO_DEV_POSTMAN_SECRET}" \
-            --timeout-request 15000
-
-      - name: BVT - Signup Login
-        if: ${{ !cancelled() && steps.health.outcome == 'success' }}
-        run: |
-          newman run postman/bvt.postman_collection.json \
-            --folder "Signup Login" \
-            --env-var baseUrl=http://127.0.0.1:${TAKIBO_APP_PORT} \
-            --env-var postmanSecret="${TAKIBO_DEV_POSTMAN_SECRET}" \
-            --timeout-request 15000
-
-      - name: BVT - RBAC Effective Token
-        if: ${{ !cancelled() && steps.health.outcome == 'success' }}
-        run: |
-          newman run postman/bvt.postman_collection.json \
-            --folder "RBAC Effective Token" \
-            --env-var baseUrl=http://127.0.0.1:${TAKIBO_APP_PORT} \
-            --env-var postmanSecret="${TAKIBO_DEV_POSTMAN_SECRET}" \
-            --timeout-request 15000
-
-      - name: BVT - User Lifecycle
-        if: ${{ !cancelled() && steps.health.outcome == 'success' }}
-        run: |
-          newman run postman/bvt.postman_collection.json \
-            --folder "User Lifecycle" \
-            --env-var baseUrl=http://127.0.0.1:${TAKIBO_APP_PORT} \
-            --env-var postmanSecret="${TAKIBO_DEV_POSTMAN_SECRET}" \
-            --timeout-request 15000
-
-      - name: BVT - OAuth Clients
-        if: ${{ !cancelled() && steps.health.outcome == 'success' }}
-        run: |
-          newman run postman/bvt.postman_collection.json \
-            --folder "OAuth Clients" \
-            --env-var baseUrl=http://127.0.0.1:${TAKIBO_APP_PORT} \
-            --env-var postmanSecret="${TAKIBO_DEV_POSTMAN_SECRET}" \
-            --timeout-request 15000
-
-      - name: BVT - Security Negative
-        if: ${{ !cancelled() && steps.health.outcome == 'success' }}
-        run: |
-          newman run postman/bvt.postman_collection.json \
-            --folder "Security Negative" \
-            --env-var baseUrl=http://127.0.0.1:${TAKIBO_APP_PORT} \
-            --env-var postmanSecret="${TAKIBO_DEV_POSTMAN_SECRET}" \
-            --timeout-request 15000
+            --timeout-request 15000 \
+            --reporters cli,junit,json,htmlextra \
+            --reporter-junit-export build/newman/takibo-readable-user.junit.xml \
+            --reporter-json-export build/newman/takibo-readable-user.json \
+            --reporter-htmlextra-export build/newman/takibo-readable-user.html
 
       - name: Show application logs on failure
         if: failure()
         run: cat app.log
+
+      - name: Upload Newman readable saga report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: takibo-readable-user-newman-report
+          path: |
+            build/newman/**
+            app.log
+          if-no-files-found: warn
 
       - name: Stop application
         if: always()
