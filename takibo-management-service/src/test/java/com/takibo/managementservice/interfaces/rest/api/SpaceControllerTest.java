@@ -2,16 +2,19 @@ package com.takibo.managementservice.interfaces.rest.api;
 
 import com.takibo.managementservice.application.command.CreateSpaceCommand;
 import com.takibo.managementservice.application.port.CurrentActorProvider;
+import com.takibo.managementservice.application.query.port.SpaceQueryCase;
+import com.takibo.managementservice.application.query.result.SpaceDetailsResult;
+import com.takibo.managementservice.application.query.result.SpacePageResult;
+import com.takibo.managementservice.application.query.result.SpaceSummaryResult;
 import com.takibo.managementservice.application.security.ActorSource;
 import com.takibo.managementservice.application.service.SpaceApplicationService;
-import com.takibo.managementservice.application.service.SpaceQueryService;
 import com.takibo.managementservice.domain.model.SpaceStatus;
-import com.takibo.managementservice.interfaces.rest.response.SpacePageResponse;
+import com.takibo.managementservice.interfaces.rest.mapper.SpaceRestMapper;
 import com.takibo.managementservice.interfaces.rest.response.SpaceResponse;
-import com.takibo.managementservice.interfaces.rest.response.SpaceSummaryResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mapstruct.factory.Mappers;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
@@ -31,6 +34,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+/**
+ * Test du contrôleur seul (standalone MockMvc) : délégation vers SpaceQueryCase et
+ * mapping applicatif -> REST. Les gardes de sécurité sont prouvées séparément par
+ * le test d'intégration qui traverse la vraie chaîne Spring Security.
+ */
 @ExtendWith(MockitoExtension.class)
 class SpaceControllerTest {
 
@@ -38,12 +46,13 @@ class SpaceControllerTest {
     private static final UUID SPACE_ID = UUID.fromString("22222222-2222-2222-2222-222222222222");
     private static final UUID OWNER_ID = UUID.fromString("33333333-3333-3333-3333-333333333333");
     private static final String BASE = "/api/v1/orgs/" + ORG_ID + "/spaces";
+    private static final Instant CREATED_AT = Instant.parse("2026-07-10T12:00:00Z");
 
     @Mock
     private SpaceApplicationService service;
 
     @Mock
-    private SpaceQueryService queryService;
+    private SpaceQueryCase spaceQueryCase;
 
     @Mock
     private CurrentActorProvider actorProvider;
@@ -52,23 +61,18 @@ class SpaceControllerTest {
 
     @BeforeEach
     void setUp() {
-        SpaceController controller = new SpaceController(service, queryService, actorProvider);
+        SpaceController controller = new SpaceController(
+                service, spaceQueryCase, Mappers.getMapper(SpaceRestMapper.class), actorProvider);
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
-    }
-
-    private SpaceResponse spaceResponse() {
-        return new SpaceResponse(
-                SPACE_ID, ORG_ID, "busa", "Busa", "Espace principal de Busa",
-                SpaceStatus.ACTIVE, null, Instant.parse("2026-07-10T12:00:00Z"),
-                OWNER_ID,
-                Instant.parse("2026-07-10T12:00:00Z"), Instant.parse("2026-07-10T12:00:00Z"), 0L);
     }
 
     @Test
     void createSpace_returns201WithLocationHeader() throws Exception {
         when(actorProvider.currentUserId()).thenReturn(OWNER_ID);
         when(actorProvider.source()).thenReturn(ActorSource.HUMAN);
-        when(service.createSpace(any(CreateSpaceCommand.class))).thenReturn(spaceResponse());
+        when(service.createSpace(any(CreateSpaceCommand.class))).thenReturn(new SpaceResponse(
+                SPACE_ID, ORG_ID, "busa", "Busa", null,
+                SpaceStatus.ACTIVE, null, CREATED_AT, OWNER_ID, CREATED_AT, CREATED_AT, 0L));
 
         mockMvc.perform(post(BASE)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -80,12 +84,11 @@ class SpaceControllerTest {
     }
 
     @Test
-    void listSpaces_delegatesFiltersAndPaginationToQueryService() throws Exception {
-        SpaceSummaryResponse summary = new SpaceSummaryResponse(
-                SPACE_ID, ORG_ID, "busa", "Busa", SpaceStatus.ACTIVE, OWNER_ID,
-                Instant.parse("2026-07-10T12:00:00Z"), Instant.parse("2026-07-10T12:00:00Z"));
-        when(queryService.listSpaces(ORG_ID, SpaceStatus.ACTIVE, "bu", 1, 5, "name,asc"))
-                .thenReturn(new SpacePageResponse(List.of(summary), 1, 5, 6, 2));
+    void listSpaces_delegatesFiltersAndMapsResultToResponse() throws Exception {
+        SpaceSummaryResult summary = new SpaceSummaryResult(
+                SPACE_ID, ORG_ID, "busa", "Busa", SpaceStatus.ACTIVE, OWNER_ID, CREATED_AT, CREATED_AT);
+        when(spaceQueryCase.listSpaces(ORG_ID, SpaceStatus.ACTIVE, "bu", 1, 5, "name,asc"))
+                .thenReturn(new SpacePageResult(List.of(summary), 1, 5, 6, 2));
 
         mockMvc.perform(get(BASE)
                         .param("status", "ACTIVE")
@@ -101,29 +104,34 @@ class SpaceControllerTest {
                 .andExpect(jsonPath("$.totalElements").value(6))
                 .andExpect(jsonPath("$.totalPages").value(2));
 
-        verify(queryService).listSpaces(ORG_ID, SpaceStatus.ACTIVE, "bu", 1, 5, "name,asc");
+        verify(spaceQueryCase).listSpaces(ORG_ID, SpaceStatus.ACTIVE, "bu", 1, 5, "name,asc");
     }
 
     @Test
     void listSpaces_defaultsWithoutParams() throws Exception {
-        when(queryService.listSpaces(ORG_ID, null, null, 0, 20, null))
-                .thenReturn(new SpacePageResponse(List.of(), 0, 20, 0, 0));
+        when(spaceQueryCase.listSpaces(ORG_ID, null, null, 0, 20, null))
+                .thenReturn(new SpacePageResult(List.of(), 0, 20, 0, 0));
 
         mockMvc.perform(get(BASE))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content").isEmpty());
 
-        verify(queryService).listSpaces(ORG_ID, null, null, 0, 20, null);
+        verify(spaceQueryCase).listSpaces(ORG_ID, null, null, 0, 20, null);
     }
 
     @Test
-    void getSpace_returnsDetail() throws Exception {
-        when(queryService.getSpace(ORG_ID, SPACE_ID)).thenReturn(spaceResponse());
+    void getSpace_delegatesAndMapsDetail() throws Exception {
+        when(spaceQueryCase.getSpace(ORG_ID, SPACE_ID)).thenReturn(new SpaceDetailsResult(
+                SPACE_ID, ORG_ID, "busa", "Busa", "Espace principal de Busa",
+                SpaceStatus.SUSPENDED, "Investigation de sécurité en cours",
+                Instant.parse("2026-07-10T14:30:00Z"), OWNER_ID,
+                CREATED_AT, Instant.parse("2026-07-10T14:30:00Z"), 3L));
 
         mockMvc.perform(get(BASE + "/" + SPACE_ID))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(SPACE_ID.toString()))
                 .andExpect(jsonPath("$.orgId").value(ORG_ID.toString()))
-                .andExpect(jsonPath("$.version").value(0));
+                .andExpect(jsonPath("$.statusReason").value("Investigation de sécurité en cours"))
+                .andExpect(jsonPath("$.version").value(3));
     }
 }

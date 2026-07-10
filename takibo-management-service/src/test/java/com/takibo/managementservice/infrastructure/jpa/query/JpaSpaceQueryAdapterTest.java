@@ -1,13 +1,11 @@
-package com.takibo.managementservice.application.service;
+package com.takibo.managementservice.infrastructure.jpa.query;
 
-import com.takibo.identitycore.domain.exception.SpaceNotFoundException;
-import com.takibo.managementservice.domain.mapper.SpaceMapper;
+import com.takibo.managementservice.application.query.result.SpaceDetailsResult;
+import com.takibo.managementservice.application.query.result.SpacePageResult;
+import com.takibo.managementservice.domain.exception.SpaceNotFoundException;
 import com.takibo.managementservice.domain.model.SpaceStatus;
 import com.takibo.managementservice.infrastructure.entity.SpaceEntity;
-import com.takibo.managementservice.infrastructure.jpa.mapper.SpaceJpaMapper;
 import com.takibo.managementservice.infrastructure.jpa.repository.JpaSpaceRepository;
-import com.takibo.managementservice.interfaces.rest.response.SpacePageResponse;
-import com.takibo.managementservice.interfaces.rest.response.SpaceResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,7 +30,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-class SpaceQueryServiceTest {
+class JpaSpaceQueryAdapterTest {
 
     private static final UUID ORG_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final UUID SPACE_ID = UUID.fromString("22222222-2222-2222-2222-222222222222");
@@ -40,13 +38,11 @@ class SpaceQueryServiceTest {
     @Mock
     private JpaSpaceRepository repository;
 
-    private SpaceQueryService service;
+    private JpaSpaceQueryAdapter adapter;
 
     @BeforeEach
     void setUp() {
-        service = new SpaceQueryService(repository,
-                Mappers.getMapper(SpaceJpaMapper.class),
-                Mappers.getMapper(SpaceMapper.class));
+        adapter = new JpaSpaceQueryAdapter(repository, Mappers.getMapper(JpaSpaceQueryMapper.class));
     }
 
     private SpaceEntity entity() {
@@ -66,13 +62,15 @@ class SpaceQueryServiceTest {
                 .build();
     }
 
+    // ===== Liste =====
+
     @Test
     void listSpaces_withoutSearch_clampsPagingAndSortsByCreatedAtDesc() {
         ArgumentCaptor<PageRequest> pageCaptor = ArgumentCaptor.forClass(PageRequest.class);
         when(repository.findPageByOrg(eq(ORG_ID), eq(null), any(PageRequest.class)))
                 .thenAnswer(inv -> new PageImpl<>(List.of(entity()), inv.getArgument(2), 1));
 
-        SpacePageResponse page = service.listSpaces(ORG_ID, null, null, -5, 500, null);
+        SpacePageResult page = adapter.listSpaces(ORG_ID, null, null, -5, 500, null);
 
         verify(repository).findPageByOrg(eq(ORG_ID), eq(null), pageCaptor.capture());
         assertThat(pageCaptor.getValue().getPageNumber()).isZero();
@@ -89,42 +87,96 @@ class SpaceQueryServiceTest {
     }
 
     @Test
+    void listSpaces_zeroSize_clampedToOne() {
+        when(repository.findPageByOrg(eq(ORG_ID), eq(null), any(PageRequest.class)))
+                .thenAnswer(inv -> new PageImpl<>(List.of(), inv.getArgument(2), 0));
+
+        adapter.listSpaces(ORG_ID, null, null, 0, 0, null);
+
+        verify(repository).findPageByOrg(eq(ORG_ID), eq(null),
+                eq(PageRequest.of(0, 1, Sort.by(Sort.Direction.DESC, "createdAt"))));
+    }
+
+    @Test
     void listSpaces_withSearch_usesLowercasePatternAndStatusFilter() {
         when(repository.searchPageByOrg(eq(ORG_ID), eq(SpaceStatus.ACTIVE), eq("%busa%"), any(PageRequest.class)))
                 .thenAnswer(inv -> new PageImpl<>(List.of(), inv.getArgument(3), 0));
 
-        SpacePageResponse page = service.listSpaces(ORG_ID, SpaceStatus.ACTIVE, "  BuSa ", 0, 20, "name,desc");
+        SpacePageResult page = adapter.listSpaces(ORG_ID, SpaceStatus.ACTIVE, "  BuSa ", 0, 20, "name,asc");
 
         verify(repository).searchPageByOrg(eq(ORG_ID), eq(SpaceStatus.ACTIVE), eq("%busa%"),
-                eq(PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "name"))));
+                eq(PageRequest.of(0, 20, Sort.by(Sort.Direction.ASC, "name"))));
         assertThat(page.content()).isEmpty();
+    }
+
+    // ===== Tri strict =====
+
+    @Test
+    void listSpaces_acceptsExplicitDescDirection() {
+        when(repository.findPageByOrg(eq(ORG_ID), eq(null), any(PageRequest.class)))
+                .thenAnswer(inv -> new PageImpl<>(List.of(), inv.getArgument(2), 0));
+
+        adapter.listSpaces(ORG_ID, null, null, 0, 20, "updatedAt,desc");
+
+        verify(repository).findPageByOrg(eq(ORG_ID), eq(null),
+                eq(PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "updatedAt"))));
     }
 
     @Test
     void listSpaces_rejectsNonWhitelistedSortField() {
-        assertThatThrownBy(() -> service.listSpaces(ORG_ID, null, null, 0, 20, "ownerAccountId,asc"))
+        assertThatThrownBy(() -> adapter.listSpaces(ORG_ID, null, null, 0, 20, "ownerAccountId,asc"))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("sort");
+                .hasMessageContaining("sort field");
     }
 
     @Test
-    void getSpace_returnsDetailWithStatusReasonAndVersion() {
+    void listSpaces_rejectsUnknownSortDirection() {
+        // Aucune direction inconnue ne doit retomber silencieusement sur ASC.
+        for (String sort : new String[]{"name,banana", "name,descending", "name,"}) {
+            assertThatThrownBy(() -> adapter.listSpaces(ORG_ID, null, null, 0, 20, sort))
+                    .as(sort)
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("direction");
+        }
+    }
+
+    @Test
+    void listSpaces_rejectsMoreThanTwoSortSegments() {
+        assertThatThrownBy(() -> adapter.listSpaces(ORG_ID, null, null, 0, 20, "name,asc,garbage"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("expression");
+    }
+
+    @Test
+    void listSpaces_rejectsEmptySortField() {
+        assertThatThrownBy(() -> adapter.listSpaces(ORG_ID, null, null, 0, 20, ",asc"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("sort field");
+    }
+
+    // ===== Détail =====
+
+    @Test
+    void getSpace_mapsStatusReasonStatusUpdatedAtAndVersion() {
         when(repository.findByIdAndOrgId(SPACE_ID, ORG_ID)).thenReturn(Optional.of(entity()));
 
-        SpaceResponse response = service.getSpace(ORG_ID, SPACE_ID);
+        SpaceDetailsResult result = adapter.getSpace(ORG_ID, SPACE_ID);
 
-        assertThat(response.id()).isEqualTo(SPACE_ID);
-        assertThat(response.description()).isEqualTo("Espace principal de Busa");
-        assertThat(response.statusReason()).isEqualTo("Investigation de sécurité en cours");
-        assertThat(response.version()).isEqualTo(3L);
+        assertThat(result.id()).isEqualTo(SPACE_ID);
+        assertThat(result.description()).isEqualTo("Espace principal de Busa");
+        assertThat(result.statusReason()).isEqualTo("Investigation de sécurité en cours");
+        assertThat(result.statusUpdatedAt()).isEqualTo(Instant.parse("2026-07-10T14:30:00Z"));
+        assertThat(result.version()).isEqualTo(3L);
     }
 
     @Test
-    void getSpace_unknownOrForeignSpace_isNotFound() {
-        // Même 404 pour « inexistant » et « existe dans une autre org » : anti-énumération.
+    void getSpace_unknownOrForeignSpace_throwsTmsNotFound() {
+        // Même 404 pour « inexistant » et « existe dans une autre org » : anti-énumération,
+        // et le message ne révèle rien.
         when(repository.findByIdAndOrgId(SPACE_ID, ORG_ID)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.getSpace(ORG_ID, SPACE_ID))
-                .isInstanceOf(SpaceNotFoundException.class);
+        assertThatThrownBy(() -> adapter.getSpace(ORG_ID, SPACE_ID))
+                .isInstanceOf(SpaceNotFoundException.class)
+                .hasMessage("Space not found in organization");
     }
 }

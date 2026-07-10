@@ -223,13 +223,56 @@ class PolicyEvaluatorTest {
     }
 
     @Test
-    void tmsSpaceDetail_localSpaceAdminException_isReadOnly() {
-        // Défensif : l'exception locale ne vaut que pour la lecture.
-        PolicyDecision decision = evaluateTmsRoute(subject(Set.of("R_SPACE_ADMIN")),
-                TMS_SPACES_PATH + "/" + SPACE, Action.UPDATE);
+    void tmsSpaceDetail_ordinaryMember_denied() {
+        PolicyDecision decision = evaluateTmsRoute(subject(Set.of()),
+                TMS_SPACES_PATH + "/" + SPACE, Action.READ);
 
         assertThat(decision.isDeny()).isTrue();
         assertThat(decision.getPolicyId()).isEqualTo("POL_SPACE_READ_ORG_OR_LOCAL_ADMIN_REQUIRED");
+    }
+
+    @Test
+    void tmsSpaceCollection_ungovernedActions_failClosed() {
+        // UPDATE/DELETE sur la collection ne sont gouvernés pour personne,
+        // pas même une autorité ORG.
+        for (Action action : new Action[]{Action.UPDATE, Action.DELETE}) {
+            PolicyDecision decision = evaluateTmsRoute(subject(Set.of("R_ORG_OWNER")),
+                    TMS_SPACES_PATH, action);
+            assertThat(decision.isDeny()).as(action.name()).isTrue();
+            assertThat(decision.getPolicyId()).isEqualTo("POL_SPACE_ACTION_NOT_SUPPORTED");
+        }
+    }
+
+    @Test
+    void tmsSpaceDetail_ungovernedActions_failClosed_evenForOrgAuthority() {
+        String detail = TMS_SPACES_PATH + "/" + SPACE;
+
+        // Tant que le lifecycle n'est pas gouverné, seule la lecture existe sur le
+        // détail — un futur UPDATE/DELETE ne doit jamais passer par accident.
+        assertThat(evaluateTmsRoute(subject(Set.of("R_ORG_OWNER")), detail, Action.UPDATE).getPolicyId())
+                .isEqualTo("POL_SPACE_ACTION_NOT_SUPPORTED");
+        assertThat(evaluateTmsRoute(subject(Set.of("R_ORG_ADMIN")), detail, Action.DELETE).getPolicyId())
+                .isEqualTo("POL_SPACE_ACTION_NOT_SUPPORTED");
+        assertThat(evaluateTmsRoute(subject(Set.of("R_SPACE_ADMIN")), detail, Action.UPDATE).getPolicyId())
+                .isEqualTo("POL_SPACE_ACTION_NOT_SUPPORTED");
+        assertThat(evaluateTmsRoute(subject(Set.of("R_SPACE_ADMIN")), detail, Action.DELETE).getPolicyId())
+                .isEqualTo("POL_SPACE_ACTION_NOT_SUPPORTED");
+    }
+
+    @Test
+    void tmsSpaceSubRoutes_notGoverned_failClosed() {
+        String detail = TMS_SPACES_PATH + "/" + SPACE;
+
+        record Case(String path, Action action) {}
+        for (Case c : new Case[]{
+                new Case(detail + "/suspend", Action.CREATE),
+                new Case(detail + "/disable", Action.CREATE),
+                new Case(detail + "/unknown-command", Action.CREATE),
+                new Case(detail + "/purge", Action.DELETE)}) {
+            PolicyDecision decision = evaluateTmsRoute(subject(Set.of("R_ORG_OWNER")), c.path(), c.action());
+            assertThat(decision.isDeny()).as(c.path()).isTrue();
+            assertThat(decision.getPolicyId()).as(c.path()).isEqualTo("POL_SPACE_ROUTE_NOT_GOVERNED");
+        }
     }
 
     @Test

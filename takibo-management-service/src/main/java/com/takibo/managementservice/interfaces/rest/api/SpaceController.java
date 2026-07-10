@@ -3,10 +3,11 @@ package com.takibo.managementservice.interfaces.rest.api;
 
 import com.takibo.managementservice.application.command.CreateSpaceCommand;
 import com.takibo.managementservice.application.port.CurrentActorProvider;
+import com.takibo.managementservice.application.query.port.SpaceQueryCase;
 import com.takibo.managementservice.application.security.ActorSource;
 import com.takibo.managementservice.application.service.SpaceApplicationService;
-import com.takibo.managementservice.application.service.SpaceQueryService;
 import com.takibo.managementservice.domain.model.SpaceStatus;
+import com.takibo.managementservice.interfaces.rest.mapper.SpaceRestMapper;
 import com.takibo.managementservice.interfaces.rest.request.CreateSpaceRequest;
 import com.takibo.managementservice.interfaces.rest.response.SpacePageResponse;
 import com.takibo.managementservice.interfaces.rest.response.SpaceResponse;
@@ -36,7 +37,8 @@ import java.util.UUID;
 public class SpaceController {
 
     private final SpaceApplicationService service;
-    private final SpaceQueryService queryService;
+    private final SpaceQueryCase spaceQueryCase;
+    private final SpaceRestMapper restMapper;
     private final CurrentActorProvider actorProvider;
 
     @PostMapping
@@ -73,13 +75,14 @@ public class SpaceController {
             @RequestParam(value = "size", defaultValue = "20") int size,
             @RequestParam(value = "sort", required = false) String sort) {
 
-        return ResponseEntity.ok(queryService.listSpaces(orgId, status, search, page, size, sort));
+        return ResponseEntity.ok(restMapper.toPageResponse(
+                spaceQueryCase.listSpaces(orgId, status, search, page, size, sort)));
     }
 
     @GetMapping("/{spaceId}")
     public ResponseEntity<SpaceResponse> getSpace(@PathVariable("orgId") UUID orgId,
                                                   @PathVariable("spaceId") UUID spaceId) {
 
-        return ResponseEntity.ok(queryService.getSpace(orgId, spaceId));
+        return ResponseEntity.ok(restMapper.toSpaceResponse(spaceQueryCase.getSpace(orgId, spaceId)));
     }
 }

@@ -22,6 +22,8 @@ public final class SentinelRuleRegistrar {
                 SentinelRuleHandlers::ruleClientProfileInvalid);
         registry.tryRegister("com.takibo.managementservice.domain.exception.ClientAlreadyExistsException",
                 SentinelRuleHandlers::ruleClientAlreadyExists);
+        registry.tryRegister("com.takibo.managementservice.domain.exception.SpaceNotFoundException",
+                SentinelRuleHandlers::ruleTmsSpaceNotFound);
 
         registry.register(UserNotFoundException.class, SentinelRuleHandlers::ruleUserNotFound);
         registry.register(UserAlreadyExistsException.class, SentinelRuleHandlers::ruleUserAlreadyExists);
