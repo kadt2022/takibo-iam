@@ -3,6 +3,7 @@ package com.takibo.managementservice.domain.mapper;
 import com.takibo.managementservice.domain.model.Space;
 import com.takibo.managementservice.domain.vo.SpaceId;
 import com.takibo.managementservice.interfaces.rest.response.SpaceResponse;
+import com.takibo.managementservice.interfaces.rest.response.SpaceSummaryResponse;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.Named;
@@ -15,6 +16,9 @@ public interface SpaceMapper {
 
     @Mapping(target = "id", source = "id", qualifiedByName = "spaceIdToUuid")
     SpaceResponse toSpaceResponse(Space space);
+
+    @Mapping(target = "id", source = "id", qualifiedByName = "spaceIdToUuid")
+    SpaceSummaryResponse toSpaceSummaryResponse(Space space);
 
     @Named("spaceIdToUuid")
     default UUID spaceIdToUuid(SpaceId id) {

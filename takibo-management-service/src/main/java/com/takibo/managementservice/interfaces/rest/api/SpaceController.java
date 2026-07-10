@@ -5,21 +5,29 @@ import com.takibo.managementservice.application.command.CreateSpaceCommand;
 import com.takibo.managementservice.application.port.CurrentActorProvider;
 import com.takibo.managementservice.application.security.ActorSource;
 import com.takibo.managementservice.application.service.SpaceApplicationService;
-import com.takibo.managementservice.domain.exception.OrganizationDisabledException;
-import com.takibo.managementservice.domain.exception.SpaceQuotaExceededException;
+import com.takibo.managementservice.application.service.SpaceQueryService;
+import com.takibo.managementservice.domain.model.SpaceStatus;
 import com.takibo.managementservice.interfaces.rest.request.CreateSpaceRequest;
+import com.takibo.managementservice.interfaces.rest.response.SpacePageResponse;
 import com.takibo.managementservice.interfaces.rest.response.SpaceResponse;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.*;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
+import java.net.URI;
 import java.util.UUID;
 
+/**
+ * Surface spaces du plan de management (TMS) : identification par UUID, machine-first —
+ * les codes lisibles restent le langage du plan identité (TIS-CORE).
+ * Toute la surface est gardée par le PolicyEvaluator : autorité ORG requise
+ * (R_ORG_OWNER/R_ORG_ADMIN), lecture du détail aussi ouverte au R_SPACE_ADMIN de ce space.
+ */
 @RestController
 @RequestMapping("/api/v1/orgs/{orgId}/spaces")
 @RequiredArgsConstructor
@@ -28,24 +36,17 @@ import java.util.UUID;
 public class SpaceController {
 
     private final SpaceApplicationService service;
+    private final SpaceQueryService queryService;
     private final CurrentActorProvider actorProvider;
 
     @PostMapping
-//    @PreAuthorize("hasAuthority('P_CREATE_SPACE')")
-//    @LogAction("Creation of a new port")
-//    @Audit(type = AuditType.CREATE, entityType = "SPACE", entityIdParam = "result.body.id")
-//    @TriggerAlertOnFailure(
-//        triggerOn = {OrganizationDisabledException.class, SpaceQuotaExceededException.class},
-//        threshold = 3,
-//        auditType = AuditType.MEDIUM
-//    )
     public ResponseEntity<SpaceResponse> createSpace(@PathVariable("orgId") UUID orgId,
                                                      @Valid @RequestBody CreateSpaceRequest req) {
 
         UUID creatorUserId = actorProvider.currentUserId();
         ActorSource source = actorProvider.source();
 
-        log.info("Create port request orgId={} actorUserId={} source={} payload={}",
+        log.info("Create space request orgId={} actorUserId={} source={} payload={}",
             orgId, creatorUserId, source, req);
 
         CreateSpaceCommand cmd = CreateSpaceCommand.from(orgId, creatorUserId, source, req);
@@ -55,6 +56,30 @@ public class SpaceController {
         log.info("Space created spaceId={} orgId={} code={} createdByUserId={}",
             created.id(), created.orgId(), created.code(), created.ownerAccountId());
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(created);
+        URI location = ServletUriComponentsBuilder.fromCurrentRequest()
+                .path("/{spaceId}")
+                .buildAndExpand(created.id())
+                .toUri();
+
+        return ResponseEntity.created(location).body(created);
+    }
+
+    @GetMapping
+    public ResponseEntity<SpacePageResponse> listSpaces(
+            @PathVariable("orgId") UUID orgId,
+            @RequestParam(value = "status", required = false) SpaceStatus status,
+            @RequestParam(value = "search", required = false) String search,
+            @RequestParam(value = "page", defaultValue = "0") int page,
+            @RequestParam(value = "size", defaultValue = "20") int size,
+            @RequestParam(value = "sort", required = false) String sort) {
+
+        return ResponseEntity.ok(queryService.listSpaces(orgId, status, search, page, size, sort));
+    }
+
+    @GetMapping("/{spaceId}")
+    public ResponseEntity<SpaceResponse> getSpace(@PathVariable("orgId") UUID orgId,
+                                                  @PathVariable("spaceId") UUID spaceId) {
+
+        return ResponseEntity.ok(queryService.getSpace(orgId, spaceId));
     }
 }

@@ -78,6 +78,7 @@ public class PolicyEvaluator {
                 .or(() -> denyUserRbacGovernanceSurface(path, tenantAdmin))
                 .or(() -> denyReadableUsersSurface(path, tenantAdmin))
                 .or(() -> denyReadableRbacCatalogSurface(path, tenantAdmin))
+                .or(() -> denyTmsSpaceSurface(subject, path, action))
                 .or(() -> denyLegacyClientCreation(path, action, tenantAdmin))
                 .or(() -> denyGenericUsersSurface(subject, path, action, tenantAdmin))
                 .orElseGet(() -> PolicyDecision.builder()
@@ -151,6 +152,62 @@ public class PolicyEvaluator {
                     "R_ORG_OWNER, R_ORG_ADMIN or R_SPACE_ADMIN required to read the RBAC catalog");
         }
         return Optional.empty();
+    }
+
+    // /api/v1/orgs/{orgId}/spaces[/{spaceId}] (surface TMS, plan de management)
+    // Doctrine d'identification : TMS parle en UUID, TIS-CORE en codes lisibles.
+    // Le discriminant UUID laisse donc les routes lisibles (codes) à leurs règles dédiées.
+    // Lister/créer les spaces révèle/étend les frontières de l'org : autorité ORG exigée.
+    // Seule exception : un R_SPACE_ADMIN lit le space que son token désigne déjà.
+    private static Optional<PolicyDecision> denyTmsSpaceSurface(Subject subject, String path, Action action) {
+        // ["", "api", "v1", "orgs", {orgId}, "spaces"] (+ [{spaceId}] pour le détail)
+        String[] seg = path.split("/");
+        boolean detail = seg.length == 7;
+        if (seg.length != 6 && !detail) return Optional.empty();
+        if (!"api".equals(seg[1]) || !"v1".equals(seg[2])
+                || !"orgs".equals(seg[3]) || !"spaces".equals(seg[5])) {
+            return Optional.empty();
+        }
+        String pathOrgId = seg[4];
+        if (!isUuid(pathOrgId) || (detail && !isUuid(seg[6]))) return Optional.empty();
+
+        // Frontière stricte : un token PLATFORM sans org ou un token d'une autre org
+        // ne peut pas utiliser cette surface située.
+        if (subject.orgId() == null || !subject.orgId().equalsIgnoreCase(pathOrgId)) {
+            return deny("POL_ORG_MISMATCH",
+                    "Token organization does not match the target organization");
+        }
+
+        if (hasAnyRole(subject, "R_ORG_OWNER", "ORG_OWNER", "R_ORG_ADMIN", "ORG_ADMIN")) {
+            return Optional.empty();
+        }
+
+        if (detail) {
+            boolean readsOwnSpace = action == Action.READ
+                    && hasAnyRole(subject, "R_SPACE_ADMIN", "SPACE_ADMIN")
+                    && seg[6].equalsIgnoreCase(subject.spaceId());
+            if (readsOwnSpace) {
+                return Optional.empty();
+            }
+            return deny("POL_SPACE_READ_ORG_OR_LOCAL_ADMIN_REQUIRED",
+                    "R_ORG_OWNER/R_ORG_ADMIN required, or R_SPACE_ADMIN of this space for read");
+        }
+
+        if (action == Action.READ) {
+            return deny("POL_SPACE_LIST_ORG_AUTHORITY_REQUIRED",
+                    "R_ORG_OWNER or R_ORG_ADMIN required to list the spaces of an organization");
+        }
+        return deny("POL_SPACE_CREATE_ORG_AUTHORITY_REQUIRED",
+                "R_ORG_OWNER or R_ORG_ADMIN required to create a space in an organization");
+    }
+
+    private static boolean isUuid(String value) {
+        try {
+            java.util.UUID.fromString(value);
+            return true;
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
     }
 
     // /api/spaces/{spaceId}/clients (création de clients OAuth2, route UUID historique)
