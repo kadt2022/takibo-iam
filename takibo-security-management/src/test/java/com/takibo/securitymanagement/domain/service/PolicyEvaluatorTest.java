@@ -164,6 +164,145 @@ class PolicyEvaluatorTest {
         assertThat(decision.isDeny()).isTrue();
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // Surface spaces TMS : /api/v1/orgs/{uuid}/spaces[/{uuid}] (PR #31)
+    // ─────────────────────────────────────────────────────────────
+
+    private static final String TMS_SPACES_PATH = "/api/v1/orgs/" + ORG + "/spaces";
+    private static final String OTHER_SPACE = "cccccccc-0000-0000-0000-000000000003";
+
+    private PolicyDecision evaluateTmsRoute(Subject subject, String path, Action action) {
+        // Câblage prod : Resource porte le path seul (orgId/spaceId null) —
+        // la frontière org se lit dans le chemin.
+        return evaluator.evaluate(subject, new Resource(path, null, null), action,
+                new Environment(Instant.now(), "127.0.0.1", 0));
+    }
+
+    @Test
+    void tmsSpaceList_requiresOrgAuthority() {
+        assertThat(evaluateTmsRoute(subject(Set.of("R_ORG_OWNER")), TMS_SPACES_PATH, Action.READ).isDeny()).isFalse();
+        assertThat(evaluateTmsRoute(subject(Set.of("R_ORG_ADMIN")), TMS_SPACES_PATH, Action.READ).isDeny()).isFalse();
+
+        for (Set<String> roles : java.util.List.of(Set.of("R_SPACE_ADMIN"), Set.<String>of())) {
+            PolicyDecision decision = evaluateTmsRoute(subject(roles), TMS_SPACES_PATH, Action.READ);
+            assertThat(decision.isDeny()).as(roles.toString()).isTrue();
+            assertThat(decision.getPolicyId()).isEqualTo("POL_SPACE_LIST_ORG_AUTHORITY_REQUIRED");
+        }
+    }
+
+    @Test
+    void tmsSpaceCreate_requiresOrgAuthority() {
+        assertThat(evaluateTmsRoute(subject(Set.of("R_ORG_OWNER")), TMS_SPACES_PATH, Action.CREATE).isDeny()).isFalse();
+        assertThat(evaluateTmsRoute(subject(Set.of("R_ORG_ADMIN")), TMS_SPACES_PATH, Action.CREATE).isDeny()).isFalse();
+
+        // R_SPACE_ADMIN ne crée pas de nouvelle frontière dans l'org.
+        for (Set<String> roles : java.util.List.of(Set.of("R_SPACE_ADMIN"), Set.<String>of())) {
+            PolicyDecision decision = evaluateTmsRoute(subject(roles), TMS_SPACES_PATH, Action.CREATE);
+            assertThat(decision.isDeny()).as(roles.toString()).isTrue();
+            assertThat(decision.getPolicyId()).isEqualTo("POL_SPACE_CREATE_ORG_AUTHORITY_REQUIRED");
+        }
+    }
+
+    @Test
+    void tmsSpaceDetail_allowedForOrgAuthorityOrLocalSpaceAdmin() {
+        assertThat(evaluateTmsRoute(subject(Set.of("R_ORG_ADMIN")),
+                TMS_SPACES_PATH + "/" + OTHER_SPACE, Action.READ).isDeny()).isFalse();
+
+        // Un space admin lit le space que son token désigne déjà (pas de 403 absurde).
+        assertThat(evaluateTmsRoute(subject(Set.of("R_SPACE_ADMIN")),
+                TMS_SPACES_PATH + "/" + SPACE, Action.READ).isDeny()).isFalse();
+    }
+
+    @Test
+    void tmsSpaceDetail_deniedForSpaceAdminOfAnotherSpace() {
+        PolicyDecision decision = evaluateTmsRoute(subject(Set.of("R_SPACE_ADMIN")),
+                TMS_SPACES_PATH + "/" + OTHER_SPACE, Action.READ);
+
+        assertThat(decision.isDeny()).isTrue();
+        assertThat(decision.getPolicyId()).isEqualTo("POL_SPACE_READ_ORG_OR_LOCAL_ADMIN_REQUIRED");
+    }
+
+    @Test
+    void tmsSpaceDetail_ordinaryMember_denied() {
+        PolicyDecision decision = evaluateTmsRoute(subject(Set.of()),
+                TMS_SPACES_PATH + "/" + SPACE, Action.READ);
+
+        assertThat(decision.isDeny()).isTrue();
+        assertThat(decision.getPolicyId()).isEqualTo("POL_SPACE_READ_ORG_OR_LOCAL_ADMIN_REQUIRED");
+    }
+
+    @Test
+    void tmsSpaceCollection_ungovernedActions_failClosed() {
+        // UPDATE/DELETE sur la collection ne sont gouvernés pour personne,
+        // pas même une autorité ORG.
+        for (Action action : new Action[]{Action.UPDATE, Action.DELETE}) {
+            PolicyDecision decision = evaluateTmsRoute(subject(Set.of("R_ORG_OWNER")),
+                    TMS_SPACES_PATH, action);
+            assertThat(decision.isDeny()).as(action.name()).isTrue();
+            assertThat(decision.getPolicyId()).isEqualTo("POL_SPACE_ACTION_NOT_SUPPORTED");
+        }
+    }
+
+    @Test
+    void tmsSpaceDetail_ungovernedActions_failClosed_evenForOrgAuthority() {
+        String detail = TMS_SPACES_PATH + "/" + SPACE;
+
+        // Tant que le lifecycle n'est pas gouverné, seule la lecture existe sur le
+        // détail — un futur UPDATE/DELETE ne doit jamais passer par accident.
+        assertThat(evaluateTmsRoute(subject(Set.of("R_ORG_OWNER")), detail, Action.UPDATE).getPolicyId())
+                .isEqualTo("POL_SPACE_ACTION_NOT_SUPPORTED");
+        assertThat(evaluateTmsRoute(subject(Set.of("R_ORG_ADMIN")), detail, Action.DELETE).getPolicyId())
+                .isEqualTo("POL_SPACE_ACTION_NOT_SUPPORTED");
+        assertThat(evaluateTmsRoute(subject(Set.of("R_SPACE_ADMIN")), detail, Action.UPDATE).getPolicyId())
+                .isEqualTo("POL_SPACE_ACTION_NOT_SUPPORTED");
+        assertThat(evaluateTmsRoute(subject(Set.of("R_SPACE_ADMIN")), detail, Action.DELETE).getPolicyId())
+                .isEqualTo("POL_SPACE_ACTION_NOT_SUPPORTED");
+    }
+
+    @Test
+    void tmsSpaceSubRoutes_notGoverned_failClosed() {
+        String detail = TMS_SPACES_PATH + "/" + SPACE;
+
+        record Case(String path, Action action) {}
+        for (Case c : new Case[]{
+                new Case(detail + "/suspend", Action.CREATE),
+                new Case(detail + "/disable", Action.CREATE),
+                new Case(detail + "/unknown-command", Action.CREATE),
+                new Case(detail + "/purge", Action.DELETE)}) {
+            PolicyDecision decision = evaluateTmsRoute(subject(Set.of("R_ORG_OWNER")), c.path(), c.action());
+            assertThat(decision.isDeny()).as(c.path()).isTrue();
+            assertThat(decision.getPolicyId()).as(c.path()).isEqualTo("POL_SPACE_ROUTE_NOT_GOVERNED");
+        }
+    }
+
+    @Test
+    void tmsSpaceSurface_crossOrgPath_deniedEvenForOrgOwner() {
+        String foreignOrgPath = "/api/v1/orgs/99999999-0000-0000-0000-000000000009/spaces";
+        PolicyDecision decision = evaluateTmsRoute(subject(Set.of("R_ORG_OWNER")), foreignOrgPath, Action.READ);
+
+        assertThat(decision.isDeny()).isTrue();
+        assertThat(decision.getPolicyId()).isEqualTo("POL_ORG_MISMATCH");
+    }
+
+    @Test
+    void tmsSpaceSurface_platformTokenWithoutOrg_denied() {
+        Subject platform = new Subject("actor", Set.of("R_PLATFORM_ADMIN"), Set.of(), null, null);
+        PolicyDecision decision = evaluateTmsRoute(platform, TMS_SPACES_PATH, Action.READ);
+
+        assertThat(decision.isDeny()).isTrue();
+        assertThat(decision.getPolicyId()).isEqualTo("POL_ORG_MISMATCH");
+    }
+
+    @Test
+    void tmsSpaceRules_ignoreReadableCodeRoutes() {
+        // Doctrine d'identification : TMS = UUID, TIS-CORE = codes lisibles.
+        // Une route en codes ne doit jamais tomber dans les règles spaces TMS.
+        PolicyDecision decision = evaluateTmsRoute(subject(Set.of("R_SPACE_ADMIN")),
+                "/api/v1/orgs/takibo-iam/spaces", Action.READ);
+
+        assertThat(decision.isDeny()).isFalse();
+    }
+
     @Test
     void orgMismatch_alwaysDenied_evenForOrgOwner() {
         PolicyDecision decision = evaluator.evaluate(
