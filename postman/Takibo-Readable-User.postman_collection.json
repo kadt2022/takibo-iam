@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Takibo - Readable saga (signup, login, RBAC catalog, assignments, effective token, lifecycle)",
-    "description": "Doctrine : la plateforme peut initier la naissance ; le fondateur humain recoit la souverainete.\nLe catalogue nomme le pouvoir. L assignation delegue le pouvoir. Le groupe transmet le pouvoir par appartenance.\nLe token porte le pouvoir effectif. La decision appartient toujours a la securite.\n\nSaga validee (PR #23 -> #27), organisee en dossiers metier :\n  00 - Auth & bootstrap : token plateforme.\n  01 - Organization & space : signup org+space+founder, login humain situe.\n  02 - Users : creation employee, read-side users, premier login employee, refus anti-admin.\n  03 - Roles : catalogue roles, assignation directe, refus d escalade, retrait effectif.\n  04 - Groups : catalogue groups, heritage G_SPACE_ADMINS, retrait effectif.\n  05 - Permissions : catalogue permissions tenant sans SYSTEM.\n  90 - Security & negative cases : lifecycle user et negatifs token PLATFORM.\n\nVariables d env requises : baseUrl, postmanSecret (secret du client postman-client).\nLes codes org/space sont generes uniques a chaque run (pre-request).",
+    "description": "Doctrine : la plateforme peut initier la naissance ; le fondateur humain recoit la souverainete.\nLe catalogue nomme le pouvoir. L assignation delegue le pouvoir. Le groupe transmet le pouvoir par appartenance.\nLe token porte le pouvoir effectif. La decision appartient toujours a la securite.\n\nSaga validee (PR #23 -> #27), organisee en dossiers metier :\n  00 - Auth & bootstrap : token plateforme.\n  01 - Organization & space : signup org+space+founder, login humain situe.\n  02 - Users : creation employee, read-side users, premier login employee, refus anti-admin.\n  03 - Roles : catalogue roles, assignation directe, refus d escalade, retrait effectif.\n  04 - Groups : catalogue groups, heritage G_SPACE_ADMINS, retrait effectif.\n  05 - Permissions : catalogue permissions tenant sans SYSTEM.\n  90 - Security & negative cases : lifecycle user et negatifs token PLATFORM.\n\nVariables d env requises : baseUrl, postmanSecret (secret du client postman-client).\nLes codes org/space sont generes uniques a chaque run (pre-request). | Collection unique de verite BVT depuis PR #30 : sagas thematiques 00-07 + negatifs 90. L ancienne bvt.postman_collection.json est supprimee.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -30,6 +30,36 @@
     {
       "name": "00 - Auth & bootstrap",
       "item": [
+        {
+          "name": "200 - 00 - Boot - Health check - no token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.expect(pm.response.code).to.eql(200));",
+                  "pm.test('status UP', () => pm.expect(pm.response.json().status).to.eql('UP'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "health"
+              ]
+            }
+          },
+          "response": []
+        },
         {
           "name": "200 - 01 - Auth - Token PLATFORM - postman-client",
           "request": {
@@ -225,6 +255,144 @@
               }
             }
           ]
+        },
+        {
+          "name": "201 - 03 - OrgSpace - Founder creates second space with Location - founder token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', () => pm.expect(pm.response.code).to.eql(201));",
+                  "const json = pm.response.json();",
+                  "pm.environment.set('space2Id', json.id);",
+                  "pm.test('PR #30: header Location vers le nouveau space', () => {",
+                  "    const location = pm.response.headers.get('Location');",
+                  "    pm.expect(location).to.include('/api/v1/orgs/' + pm.environment.get('organizationId') + '/spaces/' + json.id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/spaces",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{organizationId}}",
+                "spaces"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Ops\",\n  \"code\": \"ops\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "200 - 04 - OrgSpace - Founder lists org spaces - founder token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.expect(pm.response.code).to.eql(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('PR #30: enveloppe paginee alignee sur UserPageResponse', () => {",
+                  "    pm.expect(json).to.have.all.keys('content', 'page', 'size', 'totalElements', 'totalPages');",
+                  "    pm.expect(json.content).to.be.an('array');",
+                  "    pm.expect(json.totalElements).to.be.at.least(2);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/spaces",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{organizationId}}",
+                "spaces"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "200 - 05 - OrgSpace - Founder reads space detail - founder token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.expect(pm.response.code).to.eql(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('PR #30: detail avec statut et version', () => {",
+                  "    pm.expect(json.id).to.eql(pm.environment.get('spaceId'));",
+                  "    pm.expect(json.status).to.be.a('string');",
+                  "    pm.expect(json.version).to.be.a('number');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/spaces/{{spaceId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}"
+              ]
+            }
+          },
+          "response": []
         }
       ]
     },
@@ -1589,6 +1757,399 @@
       ]
     },
     {
+      "name": "06 - Spaces",
+      "item": [
+        {
+          "name": "403 - 01 - Space - Member creates space denied - employee token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403 - creer une frontiere exige une autorite ORG', () => pm.expect(pm.response.code).to.eql(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employee_access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/spaces",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{organizationId}}",
+                "spaces"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Intrusion\",\n  \"code\": \"intrusion\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "403 - 02 - Space - Member lists org spaces denied - employee token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403 - la liste revele les frontieres de l org', () => pm.expect(pm.response.code).to.eql(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employee_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/spaces",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{organizationId}}",
+                "spaces"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "200 - 03 - RoleAssignment - Delegate R_SPACE_ADMIN for spaces surface - founder token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{employeeUserId}}/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "{{employeeUserId}}",
+                "roles"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roleCode\": \"R_SPACE_ADMIN\",\n  \"reason\": \"Delegation de l administration du space\"\n}"
+            },
+            "description": "Deleguer, c est nommer, situer, tracer et pouvoir retirer. La reponse est l etat courant des assignations directes (idempotence)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.expect(pm.response.code).to.eql(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - 04 - Auth - Re-login employee - space admin for spaces surface",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"employee1@takibo.io\",\n  \"password\": \"An0ther!Passw0rd\",\n  \"orgCode\": \"{{orgCode}}\",\n  \"spaceCode\": \"{{spaceCode}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('login 200', () => pm.expect(pm.response.code).to.eql(200));",
+                  "const json = pm.response.json();",
+                  "pm.environment.set('employee_access_token', json.accessToken);",
+                  "const payload = JSON.parse(atob(json.accessToken.split('.')[1]));",
+                  "pm.test('R_SPACE_ADMIN dans le token', () => pm.expect(payload.roles).to.include('R_SPACE_ADMIN'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "403 - 05 - Space - Space admin creates space denied - employee token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403 - un admin local ne cree pas de frontiere dans l org', () => pm.expect(pm.response.code).to.eql(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employee_access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/spaces",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{organizationId}}",
+                "spaces"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Intrusion\",\n  \"code\": \"intrusion-2\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "403 - 06 - Space - Space admin lists org spaces denied - employee token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403 - la liste exige une autorite ORG, R_SPACE_ADMIN ne suffit pas', () => pm.expect(pm.response.code).to.eql(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employee_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/spaces",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{organizationId}}",
+                "spaces"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "200 - 07 - Space - Space admin reads own space - employee token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 - un space admin lit le space que son token designe', () => pm.expect(pm.response.code).to.eql(200));",
+                  "pm.test('c est bien son space', () => pm.expect(pm.response.json().id).to.eql(pm.environment.get('spaceId')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employee_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/spaces/{{spaceId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "403 - 08 - Space - Space admin reads another space denied - employee token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403 - l exception locale ne vaut que pour le space du token', () => pm.expect(pm.response.code).to.eql(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employee_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/spaces/{{space2Id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{organizationId}}",
+                "spaces",
+                "{{space2Id}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "07 - OAuth clients",
+      "item": [
+        {
+          "name": "201 - 01 - Client - Founder creates tenant client - one-time secret",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('client cree', () => pm.expect([200, 201]).to.include(pm.response.code));",
+                  "const json = pm.response.json();",
+                  "pm.test('secret one-time delivre une seule fois', () => {",
+                  "    pm.expect(json.oneTimePlainSecret).to.be.a('string').and.to.not.be.empty;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/orgs/{{organizationId}}/spaces/{{spaceId}}/clients",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "orgs",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "clients"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientId\": \"readable-client-{{orgCode}}\",\n  \"clientName\": \"Readable Client\",\n  \"clientType\": \"CONFIDENTIAL\",\n  \"grantTypes\": [\"client_credentials\"],\n  \"scopes\": [\"api.read\"]\n}"
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
       "name": "90 - Security & negative cases",
       "item": [
         {
@@ -2008,6 +2569,383 @@
               }
             }
           ]
+        },
+        {
+          "name": "404 - 10 - TmsSpaces - Foreign or unknown space invisible - anti-enumeration",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// UUID inconnu : indistinguable d un space d une autre org (meme 404).",
+                  "pm.environment.set('unknownSpaceId', '00000000-0000-4000-8000-' + Date.now().toString().slice(-12).padStart(12, '0'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404 - ce qui n appartient pas a la frontiere n existe pas', () => pm.expect(pm.response.code).to.eql(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/spaces/{{unknownSpaceId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{organizationId}}",
+                "spaces",
+                "{{unknownSpaceId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "403 - 11 - TmsSpaces - Platform token denied on org spaces surface",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403 - un token PLATFORM sans org ne lit pas une surface situee', () => pm.expect(pm.response.code).to.eql(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{platform_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/spaces",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{organizationId}}",
+                "spaces"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "201 - 12 - Security - Signup org B - second frontier",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const now = Date.now();",
+                  "pm.environment.set('orgCodeB', 'takibo-b-' + now);",
+                  "pm.environment.set('spaceCodeB', 'ops');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('org B creee', () => pm.expect([200, 201]).to.include(pm.response.code));",
+                  "const json = pm.response.json();",
+                  "pm.environment.set('spaceBId', json.spaceId);",
+                  "pm.environment.set('founderB_userId', json.userId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{platform_access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/signup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "signup"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organization\": { \"code\": \"{{orgCodeB}}\", \"name\": \"Org {{orgCodeB}}\" },\n  \"space\":        { \"code\": \"{{spaceCodeB}}\", \"name\": \"Ops\" },\n  \"account\":      { \"email\": \"founder-b@takibo.io\", \"password\": \"Str0ng!Passw0rd\" },\n  \"profile\":      { \"username\": \"founderb\", \"firstName\": \"F\", \"lastName\": \"B\" }\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "200 - 13 - Auth - Login founder B - second frontier",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('login 200', () => pm.expect(pm.response.code).to.eql(200));",
+                  "pm.environment.set('founderB_access_token', pm.response.json().accessToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"founder-b@takibo.io\",\n  \"password\": \"Str0ng!Passw0rd\",\n  \"orgCode\": \"{{orgCodeB}}\",\n  \"spaceCode\": \"{{spaceCodeB}}\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "403 - 14 - Security - Cross-org token B on org A users - boundary",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403 - aucun role n elargit la frontiere du token', () => pm.expect(pm.response.code).to.eql(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founderB_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "403 - 15 - Space - Cross-org token B on org A spaces - boundary",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403 - token.org_id != path.orgId', () => pm.expect(pm.response.code).to.eql(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founderB_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/spaces",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{organizationId}}",
+                "spaces"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "404 - 16 - Security - User of another frontier invisible - anti-enumeration",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404 - ce qui n appartient pas a la frontiere n existe pas', () => pm.expect(pm.response.code).to.eql(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{founderB_userId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "{{founderB_userId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "404 - 17 - Space - Space of another frontier invisible - anti-enumeration",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404 - un space d une autre org n existe pas ici', () => pm.expect(pm.response.code).to.eql(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/spaces/{{spaceBId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceBId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "403 - 18 - Security - Platform token denied on readable users route",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403 - un token PLATFORM sans space ne lit pas l annuaire d un tenant', () => pm.expect(pm.response.code).to.eql(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{platform_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users"
+              ]
+            }
+          },
+          "response": []
         }
       ]
     }
