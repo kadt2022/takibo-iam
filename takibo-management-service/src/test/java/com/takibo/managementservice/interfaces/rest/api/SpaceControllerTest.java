@@ -1,7 +1,7 @@
 package com.takibo.managementservice.interfaces.rest.api;
 
+import com.takibo.identitycore.integration.security.port.CurrentAccountContextCase;
 import com.takibo.managementservice.application.command.CreateSpaceCommand;
-import com.takibo.managementservice.application.port.CurrentActorProvider;
 import com.takibo.managementservice.application.query.port.SpaceQueryCase;
 import com.takibo.managementservice.application.query.result.SpaceDetailsResult;
 import com.takibo.managementservice.application.query.result.SpacePageResult;
@@ -15,6 +15,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mapstruct.factory.Mappers;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
@@ -25,6 +26,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -55,21 +57,20 @@ class SpaceControllerTest {
     private SpaceQueryCase spaceQueryCase;
 
     @Mock
-    private CurrentActorProvider actorProvider;
+    private CurrentAccountContextCase currentAccountContext;
 
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         SpaceController controller = new SpaceController(
-                service, spaceQueryCase, Mappers.getMapper(SpaceRestMapper.class), actorProvider);
+                service, spaceQueryCase, Mappers.getMapper(SpaceRestMapper.class), currentAccountContext);
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
     }
 
     @Test
-    void createSpace_returns201WithLocationHeader() throws Exception {
-        when(actorProvider.currentUserId()).thenReturn(OWNER_ID);
-        when(actorProvider.source()).thenReturn(ActorSource.HUMAN);
+    void createSpace_returns201WithLocationHeader_andOwnsSpaceByAccount() throws Exception {
+        when(currentAccountContext.requireCurrentAccountId()).thenReturn(OWNER_ID);
         when(service.createSpace(any(CreateSpaceCommand.class))).thenReturn(new SpaceResponse(
                 SPACE_ID, ORG_ID, "busa", "Busa", null,
                 SpaceStatus.ACTIVE, null, CREATED_AT, OWNER_ID, CREATED_AT, CREATED_AT, 0L));
@@ -81,6 +82,13 @@ class SpaceControllerTest {
                 .andExpect(header().string("Location", "http://localhost" + BASE + "/" + SPACE_ID))
                 .andExpect(jsonPath("$.id").value(SPACE_ID.toString()))
                 .andExpect(jsonPath("$.code").value("busa"));
+
+        // La FK spaces.owner_account_id -> accounts(org_id, id) exige l'ACCOUNT du
+        // créateur, jamais son userId ni l'acteur SYSTEM (cause du 500 vu en BVT).
+        ArgumentCaptor<CreateSpaceCommand> captor = ArgumentCaptor.forClass(CreateSpaceCommand.class);
+        verify(service).createSpace(captor.capture());
+        assertThat(captor.getValue().ownerAccountId()).isEqualTo(OWNER_ID);
+        assertThat(captor.getValue().source()).isEqualTo(ActorSource.HUMAN);
     }
 
     @Test

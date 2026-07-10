@@ -1,8 +1,8 @@
 package com.takibo.managementservice.interfaces.rest.api;
 
 
+import com.takibo.identitycore.integration.security.port.CurrentAccountContextCase;
 import com.takibo.managementservice.application.command.CreateSpaceCommand;
-import com.takibo.managementservice.application.port.CurrentActorProvider;
 import com.takibo.managementservice.application.query.port.SpaceQueryCase;
 import com.takibo.managementservice.application.security.ActorSource;
 import com.takibo.managementservice.application.service.SpaceApplicationService;
@@ -39,19 +39,21 @@ public class SpaceController {
     private final SpaceApplicationService service;
     private final SpaceQueryCase spaceQueryCase;
     private final SpaceRestMapper restMapper;
-    private final CurrentActorProvider actorProvider;
+    private final CurrentAccountContextCase currentAccountContext;
 
     @PostMapping
     public ResponseEntity<SpaceResponse> createSpace(@PathVariable("orgId") UUID orgId,
                                                      @Valid @RequestBody CreateSpaceRequest req) {
 
-        UUID creatorUserId = actorProvider.currentUserId();
-        ActorSource source = actorProvider.source();
+        // Le propriétaire d'un space est l'ACCOUNT du créateur (FK spaces.owner_account_id
+        // -> accounts(org_id, id)), pas son userId. La policy réserve cette surface aux
+        // autorités ORG humaines : un token sans account est refusé (403) par construction.
+        UUID ownerAccountId = currentAccountContext.requireCurrentAccountId();
 
-        log.info("Create space request orgId={} actorUserId={} source={} payload={}",
-            orgId, creatorUserId, source, req);
+        log.info("Create space request orgId={} ownerAccountId={} payload={}",
+            orgId, ownerAccountId, req);
 
-        CreateSpaceCommand cmd = CreateSpaceCommand.from(orgId, creatorUserId, source, req);
+        CreateSpaceCommand cmd = CreateSpaceCommand.from(orgId, ownerAccountId, ActorSource.HUMAN, req);
 
         SpaceResponse created = service.createSpace(cmd);
 
