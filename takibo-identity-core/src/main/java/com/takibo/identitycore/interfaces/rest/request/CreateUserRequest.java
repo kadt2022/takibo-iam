@@ -15,7 +15,6 @@ import java.util.UUID;
  */
 public record CreateUserRequest(
 
-
         UUID accountId,
 
         @Mask(mode = MaskMode.LEFT, showLeft = 1, showRight = 7)
