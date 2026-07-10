@@ -309,28 +309,28 @@ jobs:
       - name: Install Newman
         run: npm install -g newman@6.2.1 newman-reporter-htmlextra@1.23.1 --ignore-scripts
 
-      - name: BVT - Readable User Saga
+      - name: BVT - Takibo saga
         run: |
           mkdir -p build/newman
 
-          newman run postman/Takibo-Readable-User.postman_collection.json \
+          newman run postman/Takibo-BVT.postman_collection.json \
             --env-var baseUrl=http://127.0.0.1:${TAKIBO_APP_PORT} \
             --env-var postmanSecret="${TAKIBO_DEV_POSTMAN_SECRET}" \
             --timeout-request 15000 \
             --reporters cli,junit,json,htmlextra \
-            --reporter-junit-export build/newman/takibo-readable-user.junit.xml \
-            --reporter-json-export build/newman/takibo-readable-user.json \
-            --reporter-htmlextra-export build/newman/takibo-readable-user.html
+            --reporter-junit-export build/newman/takibo-bvt.junit.xml \
+            --reporter-json-export build/newman/takibo-bvt.json \
+            --reporter-htmlextra-export build/newman/takibo-bvt.html
 
       - name: Show application logs on failure
         if: failure()
         run: cat app.log
 
-      - name: Upload Newman readable saga report
+      - name: Upload Newman BVT report
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: takibo-readable-user-newman-report
+          name: takibo-bvt-newman-report
           path: |
             build/newman/**
             app.log

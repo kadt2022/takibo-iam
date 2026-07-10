@@ -1,7 +1,7 @@
 {
   "info": {
-    "name": "Takibo - Readable saga (signup, login, RBAC catalog, assignments, effective token, lifecycle)",
-    "description": "Doctrine : la plateforme peut initier la naissance ; le fondateur humain recoit la souverainete.\nLe catalogue nomme le pouvoir. L assignation delegue le pouvoir. Le groupe transmet le pouvoir par appartenance.\nLe token porte le pouvoir effectif. La decision appartient toujours a la securite.\n\nSaga validee (PR #23 -> #27), organisee en dossiers metier :\n  00 - Auth & bootstrap : token plateforme.\n  01 - Organization & space : signup org+space+founder, login humain situe.\n  02 - Users : creation employee, read-side users, premier login employee, refus anti-admin.\n  03 - Roles : catalogue roles, assignation directe, refus d escalade, retrait effectif.\n  04 - Groups : catalogue groups, heritage G_SPACE_ADMINS, retrait effectif.\n  05 - Permissions : catalogue permissions tenant sans SYSTEM.\n  90 - Security & negative cases : lifecycle user et negatifs token PLATFORM.\n\nVariables d env requises : baseUrl, postmanSecret (secret du client postman-client).\nLes codes org/space sont generes uniques a chaque run (pre-request). | Collection unique de verite BVT depuis PR #30 : sagas thematiques 00-07 + negatifs 90. L ancienne bvt.postman_collection.json est supprimee.",
+    "name": "Takibo BVT (signup, login, users, RBAC, spaces, clients, security)",
+    "description": "Collection unique de verite BVT : sagas thematiques 00-07 + negatifs 90. Jouee integralement par la CI (newman) et par postman/run-newman.cmd en local.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
