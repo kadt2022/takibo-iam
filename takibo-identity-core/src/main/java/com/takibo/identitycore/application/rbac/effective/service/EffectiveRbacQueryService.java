@@ -112,6 +112,78 @@ public class EffectiveRbacQueryService implements EffectiveRbacQueryCase {
         return new EffectiveRbac(List.copyOf(roles), List.copyOf(groups), List.copyOf(permissions));
     }
 
+    @Override
+    public EffectiveRbac effectiveOrgFor(UUID orgId, UUID accountId) {
+        Objects.requireNonNull(orgId, "orgId");
+        Objects.requireNonNull(accountId, "accountId");
+
+        Set<String> roles = new TreeSet<>();
+        Set<String> groups = new TreeSet<>();
+
+        // 1) Rôles directs org-level — seuls les codes techniques de scope
+        //    ORGANIZATION entrent : une ligne org-level anormale (code SPACE,
+        //    code inconnu) est ignorée en lecture, pas seulement refusée en écriture.
+        roleAssignments.findOrgLevelAssignments(orgId, accountId).stream()
+                .map(RoleAssignment::roleCode)
+                .filter(this::isOrganizationRoleCode)
+                .forEach(roles::add);
+
+        // 2) Groupes directs org-level (même filtre strict de scope).
+        List<GroupAssignment> memberships =
+                groupMemberships.findOrgLevelMemberships(orgId, accountId);
+        memberships.stream()
+                .map(GroupAssignment::groupCode)
+                .filter(this::isOrganizationGroupCode)
+                .forEach(groups::add);
+
+        // 3) Héritage des groupes techniques ORGANIZATION : uniquement leurs
+        //    rôles de scope ORGANIZATION (G_ORG_ADMINS transmet R_ORG_OWNER/ADMIN).
+        memberships.stream()
+                .filter(m -> m.groupSource() == GroupSource.TECHNICAL)
+                .map(GroupAssignment::groupCode)
+                .map(TechnicalGroup::fromCode)
+                .flatMap(Optional::stream)
+                .filter(group -> group.scope() == TechnicalScope.ORGANIZATION)
+                .flatMap(group -> group.roles().stream())
+                .filter(role -> role.scope() == TechnicalScope.ORGANIZATION)
+                .map(TechnicalRole::code)
+                .forEach(roles::add);
+
+        // Pas d'héritage group_roles : les groupes GOVERNANCE sont des lignes
+        // situées dans un space (doctrine PR #26) — rien d'org-level à hériter.
+
+        // 4) Permissions des rôles effectifs, scope ORGANIZATION exclusivement.
+        Set<String> permissions = new TreeSet<>();
+        roles.stream()
+                .map(TechnicalRole::fromCode)
+                .flatMap(Optional::stream)
+                .flatMap(role -> role.permissions().stream())
+                .filter(permission -> permission.scope() == TechnicalScope.ORGANIZATION)
+                .map(TechnicalGroup.TechnicalPermission::code)
+                .forEach(permissions::add);
+
+        return new EffectiveRbac(List.copyOf(roles), List.copyOf(groups), List.copyOf(permissions));
+    }
+
+    /** Seul un code technique de scope ORGANIZATION entre dans un token ORG. */
+    private boolean isOrganizationRoleCode(String code) {
+        if (code == null) {
+            return false;
+        }
+        return TechnicalRole.fromCode(code)
+                .map(role -> role.scope() == TechnicalScope.ORGANIZATION)
+                .orElse(false);
+    }
+
+    private boolean isOrganizationGroupCode(String code) {
+        if (code == null) {
+            return false;
+        }
+        return TechnicalGroup.fromCode(code)
+                .map(group -> group.scope() == TechnicalScope.ORGANIZATION)
+                .orElse(false);
+    }
+
     /** Un code technique de scope non visible tenant n'entre jamais dans un token tenant. */
     private boolean isTenantVisibleRoleCode(String code) {
         if (code == null) {

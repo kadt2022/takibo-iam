@@ -45,7 +45,7 @@ public class GroupAssignmentCaseImpl implements GroupAssignmentCase {
     private void validateTechnicalGroupScope(TechnicalGroup group, UUID orgId, UUID spaceId) {
         switch (group.scope()) {
             case SYSTEM       -> validateSystemGroup(group, orgId, spaceId);
-            case ORGANIZATION -> validateOrganizationGroup(group, orgId);
+            case ORGANIZATION -> validateOrganizationGroup(group, orgId, spaceId);
             case SPACE        -> validateSpaceGroup(group, orgId, spaceId);
             default           -> { /* no scope restriction for other types */ }
         }
@@ -57,9 +57,17 @@ public class GroupAssignmentCaseImpl implements GroupAssignmentCase {
         }
     }
 
-    private void validateOrganizationGroup(TechnicalGroup group, UUID orgId) {
+    /**
+     * IAM 31 : un groupe de scope ORGANIZATION s'assigne org-level (space_id NULL) —
+     * son pouvoir ne dépend d'aucun space.
+     */
+    private void validateOrganizationGroup(TechnicalGroup group, UUID orgId, UUID spaceId) {
         if (orgId == null) {
             throw new IllegalArgumentException("Organization group " + group.code() + " requires orgId");
+        }
+        if (spaceId != null) {
+            throw new IllegalArgumentException("Organization group " + group.code()
+                    + " must not be scoped to a space (org authority never depends on a space)");
         }
     }
 

@@ -17,7 +17,8 @@ public interface AuthMapper {
     @Mapping(target = "accessToken",    source = "token.accessToken")
     @Mapping(target = "tokenType",      source = "token.tokenType")
     @Mapping(target = "expiresIn",      source = "token.expiresIn")
-    @Mapping(target = "scopeLevel",     constant = "SPACE")
+    @Mapping(target = "scopeLevel",
+            expression = "java(identity.isOrganizationScoped() ? \"ORGANIZATION\" : \"SPACE\")")
     @Mapping(target = "organizationId", source = "identity.orgId")
     @Mapping(target = "spaceId",        source = "identity.spaceId")
     @Mapping(target = "accountId",      source = "identity.accountId")

@@ -28,4 +28,16 @@ public interface GovernanceGroupAssignmentRepository {
 
     /** Nombre d'identités distinctes membres de ce groupe dans le space (org-level inclus). */
     long countIdentitiesInGroup(UUID orgId, UUID spaceId, String groupCode);
+
+    /**
+     * Memberships org-level uniquement (space_id IS NULL) — les groupes de portée
+     * ORGANIZATION d'un account, indépendants de tout space (BUSINESS exclu).
+     */
+    List<GroupAssignment> findOrgLevelMemberships(UUID orgId, UUID accountId);
+
+    /**
+     * Supprime un membership org-level (space_id IS NULL).
+     * @return nombre de lignes supprimées (0 = idempotent)
+     */
+    int deleteOrgLevelMembership(UUID orgId, UUID accountId, String groupCode);
 }

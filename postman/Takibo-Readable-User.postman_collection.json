@@ -1589,6 +1589,447 @@
       ]
     },
     {
+      "name": "06 - Org login",
+      "item": [
+        {
+          "name": "200 - 01 - Auth - Login founder ORG - trois champs, scopeLevel ORGANIZATION",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"founder@takibo.io\",\n  \"password\": \"Str0ng!Passw0rd\",\n  \"orgCode\": \"{{orgCode}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.expect(pm.response.code).to.eql(200));",
+                  "const json = pm.response.json();",
+                  "pm.environment.set('founder_org_token', json.accessToken);",
+                  "pm.test('reponse ORGANIZATION sans spaceId ni userId', () => {",
+                  "    pm.expect(json.scopeLevel).to.eql('ORGANIZATION');",
+                  "    pm.expect(json).to.not.have.property('spaceId');",
+                  "    pm.expect(json).to.not.have.property('userId');",
+                  "});",
+                  "const payload = JSON.parse(atob(json.accessToken.split('.')[1]));",
+                  "pm.test('claims IAM 31 : scope ORGANIZATION, ni space_id ni user_id', () => {",
+                  "    pm.expect(payload.takibo_scope_level).to.eql('ORGANIZATION');",
+                  "    pm.expect(payload.subject_type).to.eql('HUMAN');",
+                  "    pm.expect(payload.auth_method).to.eql('PASSWORD');",
+                  "    pm.expect(payload.takibo_tenant_source).to.eql('human_login');",
+                  "    pm.expect(payload).to.not.have.property('space_id');",
+                  "    pm.expect(payload).to.not.have.property('user_id');",
+                  "});",
+                  "pm.test('autorites ORG uniquement - jamais le pouvoir d\\'un space', () => {",
+                  "    pm.expect(payload.roles).to.include('R_ORG_OWNER');",
+                  "    pm.expect(payload.roles).to.include('R_ORG_ADMIN');",
+                  "    pm.expect(payload.roles).to.not.include('R_SPACE_ADMIN');",
+                  "    pm.expect(payload.groups).to.include('G_ORG_ADMINS');",
+                  "    pm.expect(payload.groups).to.not.include('G_SPACE_ADMINS');",
+                  "});",
+                  "pm.test('permissions de scope ORGANIZATION uniquement', () => {",
+                  "    pm.expect(payload.permissions).to.include('P_READ_ORG');",
+                  "    pm.expect(payload.permissions).to.include('P_CREATE_SPACE');",
+                  "    pm.expect(payload.permissions).to.not.include('P_CREATE_ORG');",
+                  "    pm.expect(payload.permissions).to.not.include('P_DELETE_ORG');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "401 - 02 - Security - Organisation inexistante - reponse uniforme",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"founder@takibo.io\",\n  \"password\": \"Str0ng!Passw0rd\",\n  \"orgCode\": \"org-inexistante-iam31\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 - organisation inexistante : reponse uniforme', () => pm.expect(pm.response.code).to.eql(401));",
+                  "pm.test('code AUTHENTICATION_FAILED', () => pm.expect(pm.response.json().code).to.eql('AUTHENTICATION_FAILED'));",
+                  "pm.test('message unique, aucune cause revelee', () =>",
+                  "    pm.expect(pm.response.json().message).to.eql('Impossible de valider cette connexion.'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "401 - 03 - Security - Email inconnu - reponse uniforme",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"inconnu-iam31@takibo.io\",\n  \"password\": \"Str0ng!Passw0rd\",\n  \"orgCode\": \"{{orgCode}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 - email inconnu : reponse uniforme', () => pm.expect(pm.response.code).to.eql(401));",
+                  "pm.test('code AUTHENTICATION_FAILED', () => pm.expect(pm.response.json().code).to.eql('AUTHENTICATION_FAILED'));",
+                  "pm.test('message unique, aucune cause revelee', () =>",
+                  "    pm.expect(pm.response.json().message).to.eql('Impossible de valider cette connexion.'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "401 - 04 - Security - Mauvais mot de passe - reponse uniforme",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"founder@takibo.io\",\n  \"password\": \"Wr0ng!Passw0rd\",\n  \"orgCode\": \"{{orgCode}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 - mauvais mot de passe : reponse uniforme', () => pm.expect(pm.response.code).to.eql(401));",
+                  "pm.test('code AUTHENTICATION_FAILED', () => pm.expect(pm.response.json().code).to.eql('AUTHENTICATION_FAILED'));",
+                  "pm.test('message unique, aucune cause revelee', () =>",
+                  "    pm.expect(pm.response.json().message).to.eql('Impossible de valider cette connexion.'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - 05 - Auth - Login employee ORG - claims vides",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"employee1@takibo.io\",\n  \"password\": \"An0ther!Passw0rd\",\n  \"orgCode\": \"{{orgCode}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 - claims vides = login OK (AC-11)', () => pm.expect(pm.response.code).to.eql(200));",
+                  "const json = pm.response.json();",
+                  "const payload = JSON.parse(atob(json.accessToken.split('.')[1]));",
+                  "pm.test('aucune autorite organisationnelle', () => {",
+                  "    pm.expect(payload.roles || []).to.eql([]);",
+                  "    pm.expect(payload.groups || []).to.eql([]);",
+                  "    pm.expect(payload.permissions || []).to.eql([]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "403 - 06 - Security - Token ORG refuse sur une surface de space",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_org_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users?page=0&size=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403 - fail-closed : pas de space_id, pas de surface de space (I8)', () =>",
+                  "    pm.expect(pm.response.code).to.eql(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - 07 - Space - Lister les spaces de l'org avec le token ORG",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_org_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/spaces?page=0&size=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{organizationId}}",
+                "spaces"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 - surface org accessible au token ORG (AC-10)', () => pm.expect(pm.response.code).to.eql(200));",
+                  "const page = pm.response.json();",
+                  "pm.test('le space initial est visible', () => {",
+                  "    const codes = (page.items || page.content || []).map(s => s.code);",
+                  "    pm.expect(codes).to.include(pm.environment.get('spaceCode'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "201 - 08 - Space - Creer un deuxieme space - contexte fondateur",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/spaces",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{organizationId}}",
+                "spaces"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Annexe IAM31\",\n  \"code\": \"annexe-iam31\",\n  \"description\": \"Deuxieme space du recit IAM 31\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 - deuxieme space cree', () => pm.expect(pm.response.code).to.eql(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - 09 - Auth - Re-login founder ORG - autorite intacte, independante des spaces",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"founder@takibo.io\",\n  \"password\": \"Str0ng!Passw0rd\",\n  \"orgCode\": \"{{orgCode}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.expect(pm.response.code).to.eql(200));",
+                  "const payload = JSON.parse(atob(pm.response.json().accessToken.split('.')[1]));",
+                  "pm.test('loi IAM 31 : R_ORG_OWNER ne depend d\\'aucun space (AC-08)', () => {",
+                  "    pm.expect(payload.roles).to.include('R_ORG_OWNER');",
+                  "    pm.expect(payload.roles).to.not.include('R_SPACE_ADMIN');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "90 - Security & negative cases",
       "item": [
         {
@@ -1641,7 +2082,7 @@
           ]
         },
         {
-          "name": "403 - 02 - Auth - Login suspended employee denied - USER_NOT_ACTIVE",
+          "name": "401 - 02 - Auth - Login suspended employee denied - reponse uniforme",
           "request": {
             "method": "POST",
             "header": [
@@ -1674,8 +2115,9 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('403 - aucune nouvelle preuve pour un user suspendu', () => pm.expect(pm.response.code).to.eql(403));",
-                  "pm.test('code USER_NOT_ACTIVE', () => pm.expect(pm.response.json().code).to.eql('USER_NOT_ACTIVE'));"
+                  "pm.test('401 - IAM 31 : la surface de login ne raconte rien', () => pm.expect(pm.response.code).to.eql(401));",
+                  "pm.test('code AUTHENTICATION_FAILED (cause reelle en audit uniquement)', () =>",
+                  "    pm.expect(pm.response.json().code).to.eql('AUTHENTICATION_FAILED'));"
                 ]
               }
             }

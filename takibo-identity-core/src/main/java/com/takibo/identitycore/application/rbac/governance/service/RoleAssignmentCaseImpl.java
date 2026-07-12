@@ -21,6 +21,8 @@ public class RoleAssignmentCaseImpl implements RoleAssignmentCase {
 
     private static final String INVALID_SYSTEM_ROLE_SCOPE        = "System role %s must not be scoped to org/space";
     private static final String MISSING_ORG_ID_FOR_ORG_ROLE      = "Organization role %s requires orgId";
+    private static final String INVALID_SPACE_FOR_ORG_ROLE       =
+            "Organization role %s must not be scoped to a space (org authority never depends on a space)";
     private static final String MISSING_SCOPE_IDS_FOR_SPACE_ROLE = "Space role %s requires orgId and spaceId";
     private static final String MISSING_ORG_ID_FOR_USER_ROLE     = "User role %s requires orgId for ownership context";
     private static final String UNKNOWN_SCOPE_TYPE               = "Unknown scope type: %s";
@@ -59,7 +61,7 @@ public class RoleAssignmentCaseImpl implements RoleAssignmentCase {
 
         switch (scope) {
             case SYSTEM       -> validateSystemRole(role, orgId, spaceId);
-            case ORGANIZATION -> validateOrganizationRole(role, orgId);
+            case ORGANIZATION -> validateOrganizationRole(role, orgId, spaceId);
             case SPACE        -> validateSpaceRole(role, orgId, spaceId);
             case USER         -> validateUserRole(role, orgId);
             default           -> throw new InvalidRoleScopeException(String.format(UNKNOWN_SCOPE_TYPE, scope));
@@ -72,9 +74,17 @@ public class RoleAssignmentCaseImpl implements RoleAssignmentCase {
         }
     }
 
-    private void validateOrganizationRole(TechnicalRole role, UUID orgId) {
+    /**
+     * IAM 31 : une autorité d'organisation ne doit jamais dépendre de l'existence
+     * d'un space — l'assignation d'un rôle de scope ORGANIZATION est org-level
+     * (space_id NULL), toujours.
+     */
+    private void validateOrganizationRole(TechnicalRole role, UUID orgId, UUID spaceId) {
         if (orgId == null) {
             throw new InvalidRoleScopeException(String.format(MISSING_ORG_ID_FOR_ORG_ROLE, role.code()));
+        }
+        if (spaceId != null) {
+            throw new InvalidRoleScopeException(String.format(INVALID_SPACE_FOR_ORG_ROLE, role.code()));
         }
     }
 

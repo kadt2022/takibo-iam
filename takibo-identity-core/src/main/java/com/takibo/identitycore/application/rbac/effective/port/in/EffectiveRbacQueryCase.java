@@ -13,4 +13,12 @@ import java.util.UUID;
 public interface EffectiveRbacQueryCase {
 
     EffectiveRbac effectiveFor(UUID orgId, UUID spaceId, UUID accountId);
+
+    /**
+     * IAM 31 — pouvoir effectif de portée ORGANIZATION : uniquement les
+     * attributions org-level (space_id NULL) et uniquement les codes de scope
+     * ORGANIZATION. Jamais l'agrégation des pouvoirs de spaces — une autorité
+     * d'organisation ne dépend d'aucun space.
+     */
+    EffectiveRbac effectiveOrgFor(UUID orgId, UUID accountId);
 }

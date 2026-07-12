@@ -93,14 +93,18 @@ public class UserGroupGovernanceService implements UserGroupGovernanceCase {
         UUID targetAccountId = user.getAccountId().getValue();
         if (!memberships.existsMembership(key.orgId(), key.spaceId(), targetAccountId, group.code())) {
             try {
+                // IAM 31 : le niveau de la ligne suit le scope du code — un groupe
+                // ORGANIZATION est org-level (space NULL), jamais situé dans un space.
+                UUID membershipSpaceId =
+                        group.scope() == TechnicalScope.ORGANIZATION ? null : key.spaceId();
                 memberships.saveGovernanceAssignment(new GroupAssignment(
-                        null, key.orgId(), key.spaceId(),
+                        null, key.orgId(), membershipSpaceId,
                         targetAccountId, new Identity(IdentityType.ACCOUNT, targetAccountId),
                         IdentityType.ACCOUNT,
                         group.code(), group.source(), null,
                         Instant.now(), actorAccountId.toString(), null, null));
                 log.info("Group membership added groupCode={} userId={} spaceId={} actorAccountId={} reason={}",
-                        group.code(), user.getId().value(), key.spaceId(), actorAccountId, command.reason());
+                        group.code(), user.getId().value(), membershipSpaceId, actorAccountId, command.reason());
             } catch (DuplicateAssignmentException e) {
                 log.debug("Membership already exists (concurrent), idempotent groupCode={} userId={}",
                         group.code(), user.getId().value());
@@ -132,7 +136,10 @@ public class UserGroupGovernanceService implements UserGroupGovernanceCase {
                     "Cannot remove the last member of " + SPACE_ADMINS_CODE + " of the space");
         }
 
-        int deleted = memberships.deleteMembership(key.orgId(), key.spaceId(), targetAccountId, group.code());
+        // IAM 31 : le retrait cible le niveau où la ligne vit réellement.
+        int deleted = group.scope() == TechnicalScope.ORGANIZATION
+                ? memberships.deleteOrgLevelMembership(key.orgId(), targetAccountId, group.code())
+                : memberships.deleteMembership(key.orgId(), key.spaceId(), targetAccountId, group.code());
         log.info("Group membership removed groupCode={} userId={} spaceId={} actorAccountId={} deleted={} reason={}",
                 group.code(), user.getId().value(), key.spaceId(), actorAccountId, deleted, command.reason());
 

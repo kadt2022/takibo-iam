@@ -72,6 +72,21 @@ public class GovernanceGroupAssignmentRepositoryAdapter implements GovernanceGro
         return jpa.countDistinctIdentitiesInGroup(orgId, spaceId, groupCode);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<GroupAssignment> findOrgLevelMemberships(UUID orgId, UUID accountId) {
+        return jpa.findOrgLevelByOrgAndAccount(orgId, accountId).stream()
+                .filter(e -> !GroupSource.BUSINESS.name().equals(e.getGroupSource()))
+                .map(mapper::toDomain)
+                .toList();
+    }
+
+    @Override
+    @Transactional
+    public int deleteOrgLevelMembership(UUID orgId, UUID accountId, String groupCode) {
+        return jpa.deleteOrgLevelMembership(orgId, accountId, groupCode);
+    }
+
     private void assertGovernanceShape(GroupAssignment assignment) {
         boolean codeBased = assignment.groupSource() == GroupSource.TECHNICAL
                 || assignment.groupSource() == GroupSource.GOVERNANCE;

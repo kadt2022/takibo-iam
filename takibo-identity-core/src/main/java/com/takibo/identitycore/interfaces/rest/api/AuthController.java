@@ -25,6 +25,10 @@ import org.springframework.web.bind.annotation.RestController;
  * aucun token. La vérification d'identité est entièrement déléguée à
  * {@link HumanLoginCase} ; la signature du token appartient à TAS via le port
  * {@code HumanAccessTokenIssuer}.
+ * <p>
+ * IAM 31 : {@code orgCode + email + password} → token ORGANIZATION ; avec
+ * {@code spaceCode} (transitoire) → token SPACE. Toute cause d'échec est indistincte
+ * de l'extérieur : 401 uniforme, la cause réelle vit dans l'audit.
  */
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -36,16 +40,16 @@ public class AuthController {
     private final AuthMapper authMapper;
 
     @PostMapping("/login")
-    @LogAction("Human login (password, space-scoped token)")
-    @Operation(summary = "Authenticate a human with email/password inside an org/space boundary")
+    @LogAction("Human login (password, org- or space-scoped token)")
+    @Operation(summary = "Authenticate a human with orgCode/email/password"
+            + " (spaceCode optional and transitional: present -> SPACE token)")
     @ApiResponse(
             responseCode = "200",
-            description = "Space-scoped human token issued",
+            description = "Human token issued (ORGANIZATION scope, or SPACE when spaceCode is provided)",
             content = @Content(schema = @Schema(implementation = LoginResponse.class))
     )
-    @ApiResponse(responseCode = "401", description = "Invalid credentials")
-    @ApiResponse(responseCode = "403", description = "Account locked, space not active or no local user in space")
-    @ApiResponse(responseCode = "404", description = "Organization or space not found")
+    @ApiResponse(responseCode = "401",
+            description = "Authentication failed — single undifferentiated response for every cause")
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
         LoginResponse response = humanLoginCase.login(authMapper.toCommand(request));
         return ResponseEntity.ok(response);
