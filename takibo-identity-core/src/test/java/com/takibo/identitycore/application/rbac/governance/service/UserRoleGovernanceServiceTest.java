@@ -3,6 +3,7 @@ package com.takibo.identitycore.application.rbac.governance.service;
 import com.takibo.identitycore.application.rbac.governance.command.AssignUserRoleCommand;
 import com.takibo.identitycore.application.rbac.governance.command.RemoveUserRoleCommand;
 import com.takibo.identitycore.application.rbac.governance.mapper.UserRbacGovernanceMapper;
+import com.takibo.identitycore.domain.exception.DuplicateAssignmentException;
 import com.takibo.identitycore.domain.exception.LastAdminRemovalException;
 import com.takibo.identitycore.domain.exception.RoleNotFoundException;
 import com.takibo.identitycore.domain.exception.RoleScopeEscalationException;
@@ -245,6 +246,38 @@ class UserRoleGovernanceServiceTest {
         verify(assignments).saveGovernanceAssignment(any());
     }
 
+    @Test
+    void assign_orgScopedRole_withOrgAuthority_persistsOrgLevelAssignment() {
+        stubActor();
+        stubTargetUser();
+        when(assignments.findAssignedTechnicalRoleCodes(ORG_ID, SPACE_ID, ACTOR_ACCOUNT_ID))
+                .thenReturn(List.of("R_ORG_OWNER"));
+        when(assignments.existsAssignment(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID, "R_ORG_ADMIN")).thenReturn(false);
+        when(assignments.findDirectAssignments(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID)).thenReturn(List.of());
+
+        service.assignRole(KEY, new AssignUserRoleCommand(USER_ID, "R_ORG_ADMIN", "org delegation"));
+
+        ArgumentCaptor<RoleAssignment> captor = ArgumentCaptor.forClass(RoleAssignment.class);
+        verify(assignments).saveGovernanceAssignment(captor.capture());
+        assertThat(captor.getValue().spaceId()).isNull();
+    }
+
+    @Test
+    void assign_concurrentDuplicate_isIdempotent() {
+        stubActor();
+        stubTargetUser();
+        when(assignments.existsAssignment(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID, "R_SPACE_ADMIN")).thenReturn(false);
+        when(assignments.saveGovernanceAssignment(any()))
+                .thenThrow(new DuplicateAssignmentException("already assigned"));
+        when(assignments.findDirectAssignments(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID))
+                .thenReturn(List.of(directAssignment("R_SPACE_ADMIN", RoleSource.TECHNICAL)));
+
+        UserRoleAssignmentsResponse state = service.assignRole(
+                KEY, new AssignUserRoleCommand(USER_ID, "R_SPACE_ADMIN", null));
+
+        assertThat(state.roles()).extracting("code").containsExactly("R_SPACE_ADMIN");
+    }
+
     // ─────────────────────────── remove ───────────────────────────
 
     @Test
@@ -310,6 +343,21 @@ class UserRoleGovernanceServiceTest {
 
         assertThatThrownBy(() -> service.removeRole(KEY, new RemoveUserRoleCommand(USER_ID, "R_ORG_OWNER", null)))
                 .isInstanceOf(RoleScopeEscalationException.class);
+    }
+
+    @Test
+    void remove_orgScopedRole_withOrgAuthority_deletesOrgLevelAssignment() {
+        stubActor();
+        stubTargetUser();
+        when(assignments.findAssignedTechnicalRoleCodes(ORG_ID, SPACE_ID, ACTOR_ACCOUNT_ID))
+                .thenReturn(List.of("R_ORG_OWNER"));
+        when(assignments.existsAssignment(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID, "R_ORG_ADMIN")).thenReturn(true);
+        when(assignments.findDirectAssignments(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID)).thenReturn(List.of());
+
+        service.removeRole(KEY, new RemoveUserRoleCommand(USER_ID, "R_ORG_ADMIN", "cleanup"));
+
+        verify(assignments).deleteOrgLevelAssignment(ORG_ID, TARGET_ACCOUNT_ID, "R_ORG_ADMIN");
+        verify(assignments, never()).deleteAssignment(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID, "R_ORG_ADMIN");
     }
 
     // ─────────────────────────── frontière ───────────────────────────

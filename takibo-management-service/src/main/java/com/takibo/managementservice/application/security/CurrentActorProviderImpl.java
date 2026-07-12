@@ -17,6 +17,13 @@ public class CurrentActorProviderImpl implements CurrentActorProvider {
     private static final UUID SYSTEM_ACTOR_ID =
             UUID.fromString("00000000-0000-0000-0000-000000000001");
 
+    private final com.takibo.identitycore.integration.security.port.CurrentAccountContextCase currentAccountContext;
+
+    public CurrentActorProviderImpl(
+            com.takibo.identitycore.integration.security.port.CurrentAccountContextCase currentAccountContext) {
+        this.currentAccountContext = currentAccountContext;
+    }
+
     @Override
     public UUID currentUserId() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
@@ -53,6 +60,21 @@ public class CurrentActorProviderImpl implements CurrentActorProvider {
         return SYSTEM_ACTOR_ID;
     }
 
+
+    /**
+     * IAM 31 : l'account de l'acteur vient du contexte de sécurité TAKIBO
+     * (claim account_id porté par le token humain, SPACE comme ORGANIZATION) —
+     * jamais du principal name, qui porte le userId sur les tokens SPACE.
+     * <p>
+     * FAIL-CLOSED (revue du sage, P0) : un contexte absent ou un token sans
+     * account_id doit produire un refus explicite, jamais devenir silencieusement
+     * l'acteur système. Le fallback système est réservé aux opérations système
+     * explicitement appelées comme telles.
+     */
+    @Override
+    public UUID currentAccountId() {
+        return currentAccountContext.requireCurrentAccountId();
+    }
 
     @Override
     public ActorSource source() {

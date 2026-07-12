@@ -50,7 +50,9 @@ public final class SentinelRuleRegistrar {
         registry.register(SpaceNotFoundException.class, SentinelRuleHandlers::ruleSpaceNotFound);
         registry.register(OrganizationNotFoundException.class, SentinelRuleHandlers::ruleOrganizationNotFound);
 
-        // Login humain
+        // Login humain — IAM 31 : la surface d'authentification ne raconte rien,
+        // toutes les causes convergent vers un 401 uniforme.
+        registry.register(AuthenticationFailedException.class, SentinelRuleHandlers::ruleLoginAuthenticationFailed);
         registry.register(InvalidCredentialsException.class, SentinelRuleHandlers::ruleInvalidCredentials);
         registry.register(AccountLockedException.class, SentinelRuleHandlers::ruleAccountLocked);
         registry.register(UserNotMemberOfSpaceException.class, SentinelRuleHandlers::ruleUserNotMemberOfSpace);

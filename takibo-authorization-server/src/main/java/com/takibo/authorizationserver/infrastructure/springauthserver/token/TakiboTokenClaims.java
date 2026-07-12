@@ -27,6 +27,7 @@ public final class TakiboTokenClaims {
 
     // Valeurs de scope
     public static final String SCOPE_SPACE = "SPACE";
+    public static final String SCOPE_ORGANIZATION = "ORGANIZATION";
     public static final String SCOPE_PLATFORM = "PLATFORM";
 
     // Valeurs de source de tenant

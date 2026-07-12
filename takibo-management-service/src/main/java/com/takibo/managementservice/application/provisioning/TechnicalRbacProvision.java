@@ -27,10 +27,13 @@ public class TechnicalRbacProvision {
 
         Identity founder = new Identity(IdentityType.ACCOUNT, founderAccountId);
 
-        roleAssignmentCase.assignTechnicalRole(orgId, initialSpaceId, founder, "R_ORG_OWNER", systemActor);
-        roleAssignmentCase.assignTechnicalRole(orgId, initialSpaceId, founder, "R_SPACE_ADMIN", systemActor);
+        // IAM 31 : l'autorité d'organisation du fondateur est org-level (space NULL) —
+        // elle ne doit jamais dépendre de l'existence du space initial.
+        roleAssignmentCase.assignTechnicalRole(orgId, null, founder, "R_ORG_OWNER", systemActor);
+        groupAssignmentCase.assignTechnicalGroup(orgId, null, founder, "G_ORG_ADMINS", systemActor);
 
-        groupAssignmentCase.assignTechnicalGroup(orgId, initialSpaceId, founder, "G_ORG_ADMINS", systemActor);
+        // Son pouvoir d'administration du space initial, lui, est bien situé.
+        roleAssignmentCase.assignTechnicalRole(orgId, initialSpaceId, founder, "R_SPACE_ADMIN", systemActor);
         groupAssignmentCase.assignTechnicalGroup(orgId, initialSpaceId, founder, "G_SPACE_ADMINS", systemActor);
     }
 

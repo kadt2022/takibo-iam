@@ -182,4 +182,94 @@ class EffectiveRbacQueryServiceTest {
         assertThat(rbac.permissions()).containsExactly(
                 "P_EXPORT_AUDIT_LOGS", "P_READ_AUDIT_LOGS", "P_READ_ORG", "P_READ_POLICY");
     }
+
+    // ───────────────────── IAM 31 — effectiveOrgFor (portée ORGANIZATION) ─────────────────────
+
+    private RoleAssignment orgLevelRole(String code) {
+        return new RoleAssignment(UUID.randomUUID(), ORG_ID, null, null,
+                code, RoleSource.TECHNICAL, null, Instant.now(), "actor", null, null);
+    }
+
+    private GroupAssignment orgLevelMembership(String code) {
+        return new GroupAssignment(UUID.randomUUID(), ORG_ID, null,
+                ACCOUNT_ID, null, null, code, GroupSource.TECHNICAL, null,
+                Instant.now(), "actor", null, null);
+    }
+
+    private void givenOrgLevelRoles(RoleAssignment... assignments) {
+        when(roleAssignments.findOrgLevelAssignments(ORG_ID, ACCOUNT_ID))
+                .thenReturn(List.of(assignments));
+    }
+
+    private void givenOrgLevelMemberships(GroupAssignment... memberships) {
+        when(groupMemberships.findOrgLevelMemberships(ORG_ID, ACCOUNT_ID))
+                .thenReturn(List.of(memberships));
+    }
+
+    @Test
+    void orgScope_directOrgRole_yieldsOrgRolesAndOrgPermissionsOnly() {
+        givenOrgLevelRoles(orgLevelRole("R_ORG_OWNER"));
+        givenOrgLevelMemberships();
+
+        EffectiveRbac rbac = service.effectiveOrgFor(ORG_ID, ACCOUNT_ID);
+
+        assertThat(rbac.roles()).containsExactly("R_ORG_OWNER");
+        assertThat(rbac.permissions()).contains("P_READ_ORG", "P_CREATE_SPACE", "P_ASSIGN_ROLES");
+        // I2 : aucun code de scope SYSTEM/SPACE/USER.
+        assertThat(rbac.permissions()).doesNotContain("P_CREATE_ORG", "P_DELETE_ORG");
+    }
+
+    @Test
+    void orgScope_orgGroup_transmitsOrgRoles() {
+        givenOrgLevelRoles();
+        givenOrgLevelMemberships(orgLevelMembership("G_ORG_ADMINS"));
+
+        EffectiveRbac rbac = service.effectiveOrgFor(ORG_ID, ACCOUNT_ID);
+
+        assertThat(rbac.groups()).containsExactly("G_ORG_ADMINS");
+        assertThat(rbac.roles()).containsExactly("R_ORG_ADMIN", "R_ORG_OWNER");
+    }
+
+    @Test
+    void orgScope_anomalousOrgLevelSpaceRole_isIgnoredOnRead() {
+        // AC-06 : garde de lecture — une ligne org-level anormale (code SPACE ou
+        // inconnu) n'entre pas dans un token ORG, même si l'écriture l'a laissée passer.
+        givenOrgLevelRoles(
+                orgLevelRole("R_SPACE_ADMIN"),
+                orgLevelRole("GOV_LOCAL"),
+                orgLevelRole("R_ORG_VIEWER"));
+        givenOrgLevelMemberships(orgLevelMembership("G_SPACE_ADMINS"));
+
+        EffectiveRbac rbac = service.effectiveOrgFor(ORG_ID, ACCOUNT_ID);
+
+        assertThat(rbac.roles()).containsExactly("R_ORG_VIEWER");
+        assertThat(rbac.groups()).isEmpty();
+        assertThat(rbac.permissions()).containsExactly("P_READ_ORG", "P_READ_POLICY");
+    }
+
+    @Test
+    void orgScope_noOrgAuthority_yieldsEmptyClaims() {
+        // AC-11 : claims vides = login OK, la découverte des spaces viendra d'IAM 32.
+        givenOrgLevelRoles();
+        givenOrgLevelMemberships();
+
+        EffectiveRbac rbac = service.effectiveOrgFor(ORG_ID, ACCOUNT_ID);
+
+        assertThat(rbac.roles()).isEmpty();
+        assertThat(rbac.groups()).isEmpty();
+        assertThat(rbac.permissions()).isEmpty();
+    }
+
+    @Test
+    void orgScope_neverTouchesSpaceSituatedReads() {
+        // I4 : le pouvoir ORG ne dépend d'aucun space — ni lecture située, ni group_roles.
+        givenOrgLevelRoles(orgLevelRole("R_ORG_ADMIN"));
+        givenOrgLevelMemberships();
+
+        service.effectiveOrgFor(ORG_ID, ACCOUNT_ID);
+
+        verify(roleAssignments, never()).findDirectAssignments(any(), any(), any());
+        verify(groupMemberships, never()).findDirectMemberships(any(), any(), any());
+        verify(groupRoles, never()).findGovernanceRoleCodesByGroups(any(), any(), anyCollection());
+    }
 }

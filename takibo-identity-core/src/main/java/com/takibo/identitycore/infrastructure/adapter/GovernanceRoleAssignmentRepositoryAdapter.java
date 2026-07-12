@@ -87,6 +87,21 @@ public class GovernanceRoleAssignmentRepositoryAdapter implements GovernanceRole
         return jpa.countDistinctIdentitiesHoldingRole(orgId, spaceId, roleCode);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<RoleAssignment> findOrgLevelAssignments(UUID orgId, UUID accountId) {
+        return jpa.findOrgLevelByOrgAndAccount(orgId, accountId).stream()
+                .filter(e -> e.getRoleSource() != RoleSource.BUSINESS)
+                .map(mapper::toDomain)
+                .toList();
+    }
+
+    @Override
+    @Transactional
+    public int deleteOrgLevelAssignment(UUID orgId, UUID accountId, String roleCode) {
+        return jpa.deleteOrgLevelAssignment(orgId, accountId, roleCode);
+    }
+
     private void assertGovernanceShape(RoleAssignment assignment) {
         boolean codeBased = assignment.roleSource() == RoleSource.TECHNICAL
                 || assignment.roleSource() == RoleSource.GOVERNANCE;

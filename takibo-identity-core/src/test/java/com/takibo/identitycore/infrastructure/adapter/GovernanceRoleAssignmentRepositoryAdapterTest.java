@@ -98,6 +98,38 @@ class GovernanceRoleAssignmentRepositoryAdapterTest {
     }
 
     @Test
+    void saveGovernanceAssignment_codeBasedSourceWithoutRoleCodeRejected() {
+        RoleAssignment withoutCode = new RoleAssignment(
+                null, ORG_ID, SPACE_ID,
+                new Identity(IdentityType.ACCOUNT, ACCOUNT_ID),
+                null, RoleSource.TECHNICAL, null,
+                Instant.now(), "system", null, null
+        );
+
+        assertThatThrownBy(() -> adapter.saveGovernanceAssignment(withoutCode))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("roleCode");
+
+        verify(jpa, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void saveGovernanceAssignment_codeBasedSourceWithBusinessRoleIdRejected() {
+        RoleAssignment withBusinessId = new RoleAssignment(
+                null, ORG_ID, SPACE_ID,
+                new Identity(IdentityType.ACCOUNT, ACCOUNT_ID),
+                "R_SPACE_ADMIN", RoleSource.GOVERNANCE, UUID.randomUUID(),
+                Instant.now(), "system", null, null
+        );
+
+        assertThatThrownBy(() -> adapter.saveGovernanceAssignment(withBusinessId))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("no businessRoleId");
+
+        verify(jpa, never()).saveAndFlush(any());
+    }
+
+    @Test
     void saveGovernanceAssignment_dataIntegrityViolation_withSpaceId_throwsDuplicateException() {
         RoleAssignment domain = technicalAssignment(null);
         RoleAssignmentEntity entity = entityWithoutId();
@@ -139,6 +171,40 @@ class GovernanceRoleAssignmentRepositoryAdapterTest {
         List<String> result = adapter.findAssignedTechnicalRoleCodes(ORG_ID, SPACE_ID, ACCOUNT_ID);
 
         assertThat(result).containsExactly("R_ORG_OWNER", "R_SPACE_ADMIN");
+    }
+
+    @Test
+    void findDirectAssignments_filtersBusinessSourceBeforeMapping() {
+        RoleAssignmentEntity technical = assignment("ACCOUNT", RoleSource.TECHNICAL, SPACE_ID, "R_SPACE_ADMIN");
+        RoleAssignmentEntity governance = assignment("ACCOUNT", RoleSource.GOVERNANCE, SPACE_ID, "GOV_LOCAL");
+        RoleAssignmentEntity business = assignment("ACCOUNT", RoleSource.BUSINESS, SPACE_ID, "B_APPROVER");
+        RoleAssignment technicalDomain = technicalAssignment(null);
+        RoleAssignment governanceDomain = technicalAssignmentWithoutSpace();
+
+        when(jpa.findDirectByOrgAndSpaceAndAccount(ORG_ID, SPACE_ID, ACCOUNT_ID))
+                .thenReturn(List.of(technical, business, governance));
+        when(mapper.toDomain(technical)).thenReturn(technicalDomain);
+        when(mapper.toDomain(governance)).thenReturn(governanceDomain);
+
+        List<RoleAssignment> result = adapter.findDirectAssignments(ORG_ID, SPACE_ID, ACCOUNT_ID);
+
+        assertThat(result).containsExactly(technicalDomain, governanceDomain);
+        verify(mapper, never()).toDomain(business);
+    }
+
+    @Test
+    void findOrgLevelAssignments_filtersBusinessSourceBeforeMapping() {
+        RoleAssignmentEntity governance = assignment("ACCOUNT", RoleSource.GOVERNANCE, null, "R_ORG_ADMIN");
+        RoleAssignmentEntity business = assignment("ACCOUNT", RoleSource.BUSINESS, null, "B_APPROVER");
+        RoleAssignment governanceDomain = technicalAssignmentWithoutSpace();
+
+        when(jpa.findOrgLevelByOrgAndAccount(ORG_ID, ACCOUNT_ID)).thenReturn(List.of(business, governance));
+        when(mapper.toDomain(governance)).thenReturn(governanceDomain);
+
+        List<RoleAssignment> result = adapter.findOrgLevelAssignments(ORG_ID, ACCOUNT_ID);
+
+        assertThat(result).containsExactly(governanceDomain);
+        verify(mapper, never()).toDomain(business);
     }
 
     private RoleAssignment technicalAssignment(UUID id) {

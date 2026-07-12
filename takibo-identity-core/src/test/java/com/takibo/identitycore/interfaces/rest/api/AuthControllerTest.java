@@ -94,9 +94,34 @@ class AuthControllerTest {
         assertBadRequest(new LoginRequest("founder@takibo.io", "Str0ng!Passw0rd", " ", "finance"));
     }
 
+    /** IAM 31 : spaceCode est optionnel — trois champs suffisent (login ORGANIZATION). */
     @Test
-    void login_blankSpaceCode_returnsBadRequest() throws Exception {
-        assertBadRequest(new LoginRequest("founder@takibo.io", "Str0ng!Passw0rd", "takibo-iam", " "));
+    void login_withoutSpaceCode_isAccepted_andReturnsOrgScopedResponse() throws Exception {
+        LoginRequest request = new LoginRequest("founder@takibo.io", "Str0ng!Passw0rd", "takibo-iam", null);
+        LoginCommand command = new LoginCommand("founder@takibo.io", "Str0ng!Passw0rd", "takibo-iam", null);
+        when(authMapper.toCommand(request)).thenReturn(command);
+        when(humanLoginCase.login(command)).thenReturn(new LoginResponse(
+                "human.org.jwt",
+                "Bearer",
+                300,
+                "ORGANIZATION",
+                ORG_ID,
+                null,
+                ACCOUNT_ID,
+                null
+        ));
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType("application/json")
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.scopeLevel", is("ORGANIZATION")))
+                .andExpect(jsonPath("$.organizationId", is(ORG_ID.toString())))
+                .andExpect(jsonPath("$.accountId", is(ACCOUNT_ID.toString())))
+                .andExpect(jsonPath("$.spaceId").doesNotExist())
+                .andExpect(jsonPath("$.userId").doesNotExist());
+
+        verify(humanLoginCase).login(command);
     }
 
     private void assertBadRequest(LoginRequest request) throws Exception {

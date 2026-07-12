@@ -23,4 +23,15 @@ public interface SpaceKeyResolutionCase {
      * @throws com.takibo.identitycore.domain.exception.SpaceNotFoundException        si aucun Space ne porte ce code dans cette organisation
      */
     ResolvedSpaceKey resolve(String orgCode, String spaceCode);
+
+    /**
+     * IAM 31 — résout une organisation seule, sans space : le login organisationnel
+     * identifie le compte par son organisation, le space viendra plus tard (contexte).
+     *
+     * @param orgCode code lisible de l'organisation (brut, non normalisé)
+     * @return l'identifiant technique et le code canonique de l'organisation
+     * @throws com.takibo.identitycore.domain.exception.OrganizationNotFoundException  si aucune organisation ne porte ce code
+     * @throws com.takibo.identitycore.domain.exception.OrganizationNotActiveException si l'organisation n'est pas ACTIVE
+     */
+    ResolvedOrgKey resolveActiveOrganization(String orgCode);
 }

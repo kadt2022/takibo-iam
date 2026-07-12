@@ -3,6 +3,7 @@ package com.takibo.identitycore.application.rbac.governance.service;
 import com.takibo.identitycore.application.rbac.governance.command.AddUserToGroupCommand;
 import com.takibo.identitycore.application.rbac.governance.command.RemoveUserFromGroupCommand;
 import com.takibo.identitycore.application.rbac.governance.mapper.UserRbacGovernanceMapper;
+import com.takibo.identitycore.domain.exception.DuplicateAssignmentException;
 import com.takibo.identitycore.domain.exception.GroupNotFoundException;
 import com.takibo.identitycore.domain.exception.GroupTypeNotAllowedException;
 import com.takibo.identitycore.domain.exception.LastAdminRemovalException;
@@ -195,6 +196,38 @@ class UserGroupGovernanceServiceTest {
     }
 
     @Test
+    void add_orgScopedGroup_withOrgAuthority_persistsOrgLevelMembership() {
+        stubActor();
+        stubTargetUser();
+        when(roleAssignments.findAssignedTechnicalRoleCodes(ORG_ID, SPACE_ID, ACTOR_ACCOUNT_ID))
+                .thenReturn(List.of("R_ORG_ADMIN"));
+        when(memberships.existsMembership(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID, "G_ORG_ADMINS")).thenReturn(false);
+        when(memberships.findDirectMemberships(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID)).thenReturn(List.of());
+
+        service.addToGroup(KEY, new AddUserToGroupCommand(USER_ID, "G_ORG_ADMINS", "org admins"));
+
+        ArgumentCaptor<GroupAssignment> captor = ArgumentCaptor.forClass(GroupAssignment.class);
+        verify(memberships).saveGovernanceAssignment(captor.capture());
+        assertThat(captor.getValue().spaceId()).isNull();
+    }
+
+    @Test
+    void add_concurrentDuplicate_isIdempotent() {
+        stubActor();
+        stubTargetUser();
+        when(memberships.existsMembership(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID, "G_SPACE_ADMINS")).thenReturn(false);
+        when(memberships.saveGovernanceAssignment(any()))
+                .thenThrow(new DuplicateAssignmentException("already assigned"));
+        when(memberships.findDirectMemberships(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID))
+                .thenReturn(List.of(membership("G_SPACE_ADMINS", GroupSource.TECHNICAL)));
+
+        UserGroupMembershipsResponse state = service.addToGroup(
+                KEY, new AddUserToGroupCommand(USER_ID, "G_SPACE_ADMINS", null));
+
+        assertThat(state.groups()).extracting("code").containsExactly("G_SPACE_ADMINS");
+    }
+
+    @Test
     void remove_membership_deletesAndReturnsState() {
         stubActor();
         stubTargetUser();
@@ -243,5 +276,20 @@ class UserGroupGovernanceServiceTest {
         assertThatThrownBy(() -> service.removeFromGroup(
                 KEY, new RemoveUserFromGroupCommand(USER_ID, "G_SPACE_ADMINS", null)))
                 .isInstanceOf(SelfDemotionException.class);
+    }
+
+    @Test
+    void remove_orgScopedGroup_withOrgAuthority_deletesOrgLevelMembership() {
+        stubActor();
+        stubTargetUser();
+        when(roleAssignments.findAssignedTechnicalRoleCodes(ORG_ID, SPACE_ID, ACTOR_ACCOUNT_ID))
+                .thenReturn(List.of("R_ORG_OWNER"));
+        when(memberships.existsMembership(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID, "G_ORG_ADMINS")).thenReturn(true);
+        when(memberships.findDirectMemberships(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID)).thenReturn(List.of());
+
+        service.removeFromGroup(KEY, new RemoveUserFromGroupCommand(USER_ID, "G_ORG_ADMINS", "cleanup"));
+
+        verify(memberships).deleteOrgLevelMembership(ORG_ID, TARGET_ACCOUNT_ID, "G_ORG_ADMINS");
+        verify(memberships, never()).deleteMembership(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID, "G_ORG_ADMINS");
     }
 }

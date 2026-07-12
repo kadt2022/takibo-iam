@@ -88,6 +88,16 @@ class RoleAssignmentCaseImplTest {
     }
 
     @Test
+    void assignTechnicalRole_orgRoleWithSpaceId_throwsScopeViolation() {
+        assertThatThrownBy(() ->
+                service.assignTechnicalRole(ORG_ID, SPACE_ID, FOUNDER, "R_ORG_ADMIN", "system"))
+                .isInstanceOf(InvalidRoleScopeException.class)
+                .hasMessageContaining("must not be scoped to a space");
+
+        verify(governanceRoleAssignmentRepository, never()).saveGovernanceAssignment(any());
+    }
+
+    @Test
     void assignTechnicalRole_spaceRoleWithoutSpaceId_throwsScopeViolation() {
         assertThatThrownBy(() ->
                 service.assignTechnicalRole(ORG_ID, null, FOUNDER, "R_SPACE_ADMIN", "system"))

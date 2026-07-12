@@ -82,4 +82,29 @@ public interface JpaRoleAssignmentRepository extends JpaRepository<RoleAssignmen
     long countDistinctIdentitiesHoldingRole(@Param("orgId") UUID orgId,
                                             @Param("spaceId") UUID spaceId,
                                             @Param("roleCode") String roleCode);
+
+    /** Assignations org-level uniquement (space_id IS NULL) — pouvoir de portée ORGANIZATION. */
+    @Query("""
+        select a from RoleAssignmentEntity a
+        where a.orgId = :orgId
+          and a.identityType = 'ACCOUNT'
+          and a.identityId = :accountId
+          and a.roleCode is not null
+          and a.spaceId is null
+        """)
+    List<RoleAssignmentEntity> findOrgLevelByOrgAndAccount(@Param("orgId") UUID orgId,
+                                                           @Param("accountId") UUID accountId);
+
+    @Modifying
+    @Query("""
+        delete from RoleAssignmentEntity a
+        where a.orgId = :orgId
+          and a.spaceId is null
+          and a.identityType = 'ACCOUNT'
+          and a.identityId = :accountId
+          and a.roleCode = :roleCode
+        """)
+    int deleteOrgLevelAssignment(@Param("orgId") UUID orgId,
+                                 @Param("accountId") UUID accountId,
+                                 @Param("roleCode") String roleCode);
 }

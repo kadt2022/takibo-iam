@@ -68,4 +68,29 @@ public interface JpaGroupAssignmentRepository extends JpaRepository<GroupAssignm
     long countDistinctIdentitiesInGroup(@Param("orgId") UUID orgId,
                                         @Param("spaceId") UUID spaceId,
                                         @Param("groupCode") String groupCode);
+
+    /** Memberships org-level uniquement (space_id IS NULL) — pouvoir de portée ORGANIZATION. */
+    @Query("""
+        select a from GroupAssignmentEntity a
+        where a.orgId = :orgId
+          and a.identityType = 'ACCOUNT'
+          and a.identityId = :accountId
+          and a.groupCode is not null
+          and a.spaceId is null
+        """)
+    List<GroupAssignmentEntity> findOrgLevelByOrgAndAccount(@Param("orgId") UUID orgId,
+                                                            @Param("accountId") UUID accountId);
+
+    @Modifying
+    @Query("""
+        delete from GroupAssignmentEntity a
+        where a.orgId = :orgId
+          and a.spaceId is null
+          and a.identityType = 'ACCOUNT'
+          and a.identityId = :accountId
+          and a.groupCode = :groupCode
+        """)
+    int deleteOrgLevelMembership(@Param("orgId") UUID orgId,
+                                 @Param("accountId") UUID accountId,
+                                 @Param("groupCode") String groupCode);
 }

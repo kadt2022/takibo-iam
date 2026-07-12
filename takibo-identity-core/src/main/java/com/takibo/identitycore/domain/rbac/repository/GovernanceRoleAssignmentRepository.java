@@ -35,4 +35,16 @@ public interface GovernanceRoleAssignmentRepository {
 
     /** Nombre d'identités distinctes tenant ce code dans le space (org-level inclus). */
     long countIdentitiesHoldingRole(UUID orgId, UUID spaceId, String roleCode);
+
+    /**
+     * Assignations org-level uniquement (space_id IS NULL) — le pouvoir de portée
+     * ORGANIZATION d'un account, indépendant de tout space (BUSINESS exclu).
+     */
+    List<RoleAssignment> findOrgLevelAssignments(UUID orgId, UUID accountId);
+
+    /**
+     * Supprime une assignation org-level (space_id IS NULL).
+     * @return nombre de lignes supprimées (0 = idempotent)
+     */
+    int deleteOrgLevelAssignment(UUID orgId, UUID accountId, String roleCode);
 }

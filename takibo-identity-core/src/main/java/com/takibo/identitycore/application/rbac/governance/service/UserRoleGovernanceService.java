@@ -96,13 +96,17 @@ public class UserRoleGovernanceService implements UserRoleGovernanceCase {
         UUID targetAccountId = user.getAccountId().getValue();
         if (!assignments.existsAssignment(key.orgId(), key.spaceId(), targetAccountId, role.code())) {
             try {
+                // IAM 31 : le niveau de la ligne suit le scope du code — un pouvoir
+                // ORGANIZATION est org-level (space NULL), jamais situé dans un space.
+                UUID assignmentSpaceId =
+                        role.scope() == TechnicalScope.ORGANIZATION ? null : key.spaceId();
                 assignments.saveGovernanceAssignment(new RoleAssignment(
-                        null, key.orgId(), key.spaceId(),
+                        null, key.orgId(), assignmentSpaceId,
                         new Identity(IdentityType.ACCOUNT, targetAccountId),
                         role.code(), role.source(), null,
                         Instant.now(), actorAccountId.toString(), null, null));
                 log.info("Role assigned roleCode={} userId={} spaceId={} actorAccountId={} reason={}",
-                        role.code(), user.getId().value(), key.spaceId(), actorAccountId, command.reason());
+                        role.code(), user.getId().value(), assignmentSpaceId, actorAccountId, command.reason());
             } catch (DuplicateAssignmentException e) {
                 log.debug("Role already assigned (concurrent), idempotent roleCode={} userId={}",
                         role.code(), user.getId().value());
@@ -134,7 +138,10 @@ public class UserRoleGovernanceService implements UserRoleGovernanceCase {
                     "Cannot remove the last " + SPACE_ADMIN_CODE + " of the space");
         }
 
-        int deleted = assignments.deleteAssignment(key.orgId(), key.spaceId(), targetAccountId, role.code());
+        // IAM 31 : le retrait cible le niveau où la ligne vit réellement.
+        int deleted = role.scope() == TechnicalScope.ORGANIZATION
+                ? assignments.deleteOrgLevelAssignment(key.orgId(), targetAccountId, role.code())
+                : assignments.deleteAssignment(key.orgId(), key.spaceId(), targetAccountId, role.code());
         log.info("Role removed roleCode={} userId={} spaceId={} actorAccountId={} deleted={} reason={}",
                 role.code(), user.getId().value(), key.spaceId(), actorAccountId, deleted, command.reason());
 

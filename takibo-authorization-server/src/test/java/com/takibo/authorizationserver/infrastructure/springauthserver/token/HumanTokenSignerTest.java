@@ -48,7 +48,7 @@ class HumanTokenSignerTest {
         TasAuthorizationServerProperties properties = new TasAuthorizationServerProperties();
         properties.setIssuer("http://localhost:8081");
 
-        signer = new HumanTokenSigner(new NimbusJwtEncoder(jwkSource), properties, 300);
+        signer = new HumanTokenSigner(new NimbusJwtEncoder(jwkSource), properties, 300, 600);
     }
 
     private HumanTokenCommand command() {
@@ -56,6 +56,13 @@ class HumanTokenSignerTest {
                 List.of("R_ORG_OWNER", "R_SPACE_ADMIN"),
                 List.of("G_SPACE_ADMINS"),
                 List.of("P_ASSIGN_ROLES", "P_MANAGE_USERS"));
+    }
+
+    private HumanTokenCommand orgCommand() {
+        return new HumanTokenCommand(ORG_ID, null, ACCOUNT_ID, null,
+                List.of("R_ORG_ADMIN", "R_ORG_OWNER"),
+                List.of("G_ORG_ADMINS"),
+                List.of("P_READ_ORG", "P_UPDATE_ORG_SETTINGS"));
     }
 
     @Test
@@ -117,10 +124,46 @@ class HumanTokenSignerTest {
 
         assertThatThrownBy(() -> signer.sign(
                 new HumanTokenCommand(null, SPACE_ID, ACCOUNT_ID, USER_ID, List.of(), List.of(), List.of())))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("HUMAN_TOKEN_REQUIRES_ORG_AND_ACCOUNT");
+    }
 
+    // ───────────────────────── IAM 31 — forme ORGANIZATION ─────────────────────────
+
+    @Test
+    void sign_orgForm_emitsOrganizationScopedClaims_withoutSpaceOrUser() throws Exception {
+        SignedHumanToken signed = signer.sign(orgCommand());
+
+        // TTL dédié à la forme ORG (600 dans ce test, distinct des 300 du SPACE).
+        assertThat(signed.expiresInSeconds()).isEqualTo(600);
+
+        JWTClaimsSet claims = SignedJWT.parse(signed.tokenValue()).getJWTClaimsSet();
+
+        assertThat(claims.getSubject()).isEqualTo(ACCOUNT_ID.toString());
+        assertThat(claims.getStringClaim(TakiboTokenClaims.SCOPE_LEVEL)).isEqualTo("ORGANIZATION");
+        assertThat(claims.getStringClaim(TakiboTokenClaims.SUBJECT_TYPE)).isEqualTo("HUMAN");
+        assertThat(claims.getStringClaim(TakiboTokenClaims.AUTH_METHOD)).isEqualTo("PASSWORD");
+        assertThat(claims.getStringClaim(TakiboTokenClaims.TENANT_SOURCE)).isEqualTo("human_login");
+        assertThat(claims.getStringClaim(TakiboTokenClaims.ORG_ID)).isEqualTo(ORG_ID.toString());
+        assertThat(claims.getStringClaim(TakiboTokenClaims.ACCOUNT_ID)).isEqualTo(ACCOUNT_ID.toString());
+
+        // I3 : un token ORGANIZATION ne porte ni space_id ni user_id — pas même à null.
+        assertThat(claims.getClaims()).doesNotContainKeys(
+                TakiboTokenClaims.SPACE_ID, TakiboTokenClaims.USER_ID);
+
+        assertThat(claims.getStringListClaim(TakiboTokenClaims.ROLES))
+                .containsExactly("R_ORG_ADMIN", "R_ORG_OWNER");
+        assertThat(claims.getStringListClaim(TakiboTokenClaims.GROUPS))
+                .containsExactly("G_ORG_ADMINS");
+        assertThat(claims.getStringListClaim(TakiboTokenClaims.PERMISSIONS))
+                .containsExactly("P_READ_ORG", "P_UPDATE_ORG_SETTINGS");
+    }
+
+    @Test
+    void sign_orgForm_failsClosed_whenUserLeaksIntoOrgScope() {
         assertThatThrownBy(() -> signer.sign(
                 new HumanTokenCommand(ORG_ID, null, ACCOUNT_ID, USER_ID, List.of(), List.of(), List.of())))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("ORG_TOKEN_MUST_NOT_CARRY_USER");
     }
 }

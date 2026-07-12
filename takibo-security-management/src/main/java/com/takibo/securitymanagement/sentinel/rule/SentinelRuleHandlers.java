@@ -145,6 +145,17 @@ public final class SentinelRuleHandlers {
     }
 
     /**
+     * IAM 31 — échec de login uniforme : organisation inexistante ou inactive, compte
+     * inconnu, mauvais mot de passe, compte verrouillé, space inaccessible, user non
+     * actif — une seule réponse externe (statut, code, message identiques). La cause
+     * réelle vit dans les logs/audit, jamais dans la réponse.
+     */
+    static SentinelResponse ruleLoginAuthenticationFailed(AuthenticationFailedException ex, String path, String traceId) {
+        return response(HttpStatus.UNAUTHORIZED, SentinelErrorCode.AUTHENTICATION_FAILED,
+                "Impossible de valider cette connexion.", path, traceId);
+    }
+
+    /**
      * Message volontairement générique et identique pour toutes les causes
      * (email inconnu, mauvais password, credentials absents, account d'une autre org) :
      * zéro oracle d'énumération. La cause réelle vit dans les logs/audit, pas dans la réponse.

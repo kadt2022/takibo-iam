@@ -1,9 +1,12 @@
 package com.takibo.managementservice.integration;
 
+import com.takibo.identitycore.domain.exception.OrganizationNotActiveException;
 import com.takibo.identitycore.domain.exception.OrganizationNotFoundException;
 import com.takibo.identitycore.domain.exception.SpaceNotFoundException;
+import com.takibo.identitycore.integration.space.port.ResolvedOrgKey;
 import com.takibo.identitycore.integration.space.port.ResolvedSpaceKey;
 import com.takibo.identitycore.integration.space.port.SpaceKeyResolutionCase;
+import com.takibo.managementservice.domain.model.OrganizationStatus;
 import com.takibo.managementservice.application.common.TakiboCodeNormalizer;
 import com.takibo.managementservice.infrastructure.entity.OrganizationEntity;
 import com.takibo.managementservice.infrastructure.entity.SpaceEntity;
@@ -41,5 +44,21 @@ public class SpaceKeyResolutionTmsAdapter implements SpaceKeyResolutionCase {
                         "Space not found: " + normalizedSpaceCode + " in organization " + normalizedOrgCode));
 
         return new ResolvedSpaceKey(org.getId(), space.getId(), normalizedOrgCode, normalizedSpaceCode);
+    }
+
+    @Override
+    public ResolvedOrgKey resolveActiveOrganization(String orgCode) {
+        String normalizedOrgCode = TakiboCodeNormalizer.normalize(orgCode);
+
+        OrganizationEntity org = organizations.findByCode(normalizedOrgCode)
+                .orElseThrow(() -> new OrganizationNotFoundException(
+                        "Organization not found: " + normalizedOrgCode));
+
+        if (org.getStatus() != OrganizationStatus.ACTIVE) {
+            throw new OrganizationNotActiveException(
+                    "Organization not active: " + normalizedOrgCode);
+        }
+
+        return new ResolvedOrgKey(org.getId(), normalizedOrgCode);
     }
 }

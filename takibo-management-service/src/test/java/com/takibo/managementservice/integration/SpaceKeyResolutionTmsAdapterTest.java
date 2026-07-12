@@ -1,8 +1,11 @@
 package com.takibo.managementservice.integration;
 
+import com.takibo.identitycore.domain.exception.OrganizationNotActiveException;
 import com.takibo.identitycore.domain.exception.OrganizationNotFoundException;
 import com.takibo.identitycore.domain.exception.SpaceNotFoundException;
+import com.takibo.identitycore.integration.space.port.ResolvedOrgKey;
 import com.takibo.identitycore.integration.space.port.ResolvedSpaceKey;
+import com.takibo.managementservice.domain.model.OrganizationStatus;
 import com.takibo.managementservice.infrastructure.entity.OrganizationEntity;
 import com.takibo.managementservice.infrastructure.entity.SpaceEntity;
 import com.takibo.managementservice.infrastructure.jpa.repository.JpaOrganizationRepository;
@@ -72,6 +75,35 @@ class SpaceKeyResolutionTmsAdapterTest {
         assertThatThrownBy(() -> adapter.resolve("takibo", "Unknown"))
                 .isInstanceOf(SpaceNotFoundException.class)
                 .hasMessageContaining("unknown")
+                .hasMessageContaining("takibo");
+    }
+
+    @Test
+    void given_active_organization_when_resolve_active_organization_then_returns_normalized_org_key() {
+        when(organizations.findByCode("takibo"))
+                .thenReturn(Optional.of(OrganizationEntity.builder()
+                        .id(ORG_ID)
+                        .code("takibo")
+                        .status(OrganizationStatus.ACTIVE)
+                        .build()));
+
+        ResolvedOrgKey key = adapter.resolveActiveOrganization(" Takibo ");
+
+        assertThat(key.orgId()).isEqualTo(ORG_ID);
+        assertThat(key.orgCode()).isEqualTo("takibo");
+    }
+
+    @Test
+    void given_inactive_organization_when_resolve_active_organization_then_throws_not_active() {
+        when(organizations.findByCode("takibo"))
+                .thenReturn(Optional.of(OrganizationEntity.builder()
+                        .id(ORG_ID)
+                        .code("takibo")
+                        .status(OrganizationStatus.SUSPENDED)
+                        .build()));
+
+        assertThatThrownBy(() -> adapter.resolveActiveOrganization("Takibo"))
+                .isInstanceOf(OrganizationNotActiveException.class)
                 .hasMessageContaining("takibo");
     }
 }
