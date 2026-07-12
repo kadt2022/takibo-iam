@@ -114,6 +114,18 @@ class TakiboSecurityContextFactoryTest {
         assertThat(context.attributes().get(StandardAttributeKeys.USER_ID, UUID.class)).contains(USER_ID);
     }
 
+    @Test
+    void scopeLevelClaim_populatesAttributes() {
+        TakiboSecurityContext context = TakiboSecurityContextFactory.from(Map.of(
+                "subjectType", "HUMAN",
+                "accountId", ACCOUNT_ID.toString(),
+                "scopeLevel", "ORGANIZATION"
+        ), request());
+
+        assertThat(context.attributes().get(StandardAttributeKeys.SCOPE_LEVEL, String.class))
+                .contains("ORGANIZATION");
+    }
+
     private MockHttpServletRequest request() {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.setRemoteAddr("127.0.0.1");

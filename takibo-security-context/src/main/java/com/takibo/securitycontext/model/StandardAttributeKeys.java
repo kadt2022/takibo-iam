@@ -16,4 +16,7 @@ public final class StandardAttributeKeys {
 
     public static final AttributeKey USER_ID =
             new AttributeKey(StandardNamespaces.IDENTITY, "userId");
+
+    public static final AttributeKey SCOPE_LEVEL =
+            new AttributeKey(StandardNamespaces.TENANT, "scopeLevel");
 }
