@@ -16,6 +16,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -82,6 +83,38 @@ class GovernanceGroupAssignmentRepositoryAdapterTest {
     }
 
     @Test
+    void saveGovernanceAssignment_codeBasedSourceWithoutGroupCodeRejected() {
+        GroupAssignment withoutCode = new GroupAssignment(
+                null, ORG_ID, SPACE_ID,
+                ACCOUNT_ID, new Identity(IdentityType.ACCOUNT, ACCOUNT_ID), IdentityType.ACCOUNT,
+                null, GroupSource.TECHNICAL, null,
+                Instant.now(), "system", null, null
+        );
+
+        assertThatThrownBy(() -> adapter.saveGovernanceAssignment(withoutCode))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("groupCode");
+
+        verify(jpa, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void saveGovernanceAssignment_codeBasedSourceWithBusinessGroupIdRejected() {
+        GroupAssignment withBusinessId = new GroupAssignment(
+                null, ORG_ID, SPACE_ID,
+                ACCOUNT_ID, new Identity(IdentityType.ACCOUNT, ACCOUNT_ID), IdentityType.ACCOUNT,
+                "G_SPACE_ADMINS", GroupSource.GOVERNANCE, UUID.randomUUID(),
+                Instant.now(), "system", null, null
+        );
+
+        assertThatThrownBy(() -> adapter.saveGovernanceAssignment(withBusinessId))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("no businessGroupId");
+
+        verify(jpa, never()).saveAndFlush(any());
+    }
+
+    @Test
     void saveGovernanceAssignment_dataIntegrityViolation_throwsDuplicateAssignmentException() {
         GroupAssignment domain = technicalAssignment();
         GroupAssignmentEntity entity = entityWithoutId();
@@ -105,6 +138,40 @@ class GovernanceGroupAssignmentRepositoryAdapterTest {
         assertThatThrownBy(() -> adapter.saveGovernanceAssignment(domain))
                 .isInstanceOf(DuplicateAssignmentException.class)
                 .hasMessageNotContaining("and space");
+    }
+
+    @Test
+    void findDirectMemberships_filtersBusinessSourceBeforeMapping() {
+        GroupAssignmentEntity technical = entityWithSource(GroupSource.TECHNICAL.name());
+        GroupAssignmentEntity governance = entityWithSource(GroupSource.GOVERNANCE.name());
+        GroupAssignmentEntity business = entityWithSource(GroupSource.BUSINESS.name());
+        GroupAssignment technicalDomain = technicalAssignment();
+        GroupAssignment governanceDomain = technicalAssignmentWithoutSpace();
+
+        when(jpa.findDirectByOrgAndSpaceAndAccount(ORG_ID, SPACE_ID, ACCOUNT_ID))
+                .thenReturn(List.of(technical, business, governance));
+        when(mapper.toDomain(technical)).thenReturn(technicalDomain);
+        when(mapper.toDomain(governance)).thenReturn(governanceDomain);
+
+        List<GroupAssignment> result = adapter.findDirectMemberships(ORG_ID, SPACE_ID, ACCOUNT_ID);
+
+        assertThat(result).containsExactly(technicalDomain, governanceDomain);
+        verify(mapper, never()).toDomain(business);
+    }
+
+    @Test
+    void findOrgLevelMemberships_filtersBusinessSourceBeforeMapping() {
+        GroupAssignmentEntity governance = entityWithSource(GroupSource.GOVERNANCE.name());
+        GroupAssignmentEntity business = entityWithSource(GroupSource.BUSINESS.name());
+        GroupAssignment governanceDomain = technicalAssignmentWithoutSpace();
+
+        when(jpa.findOrgLevelByOrgAndAccount(ORG_ID, ACCOUNT_ID)).thenReturn(List.of(business, governance));
+        when(mapper.toDomain(governance)).thenReturn(governanceDomain);
+
+        List<GroupAssignment> result = adapter.findOrgLevelMemberships(ORG_ID, ACCOUNT_ID);
+
+        assertThat(result).containsExactly(governanceDomain);
+        verify(mapper, never()).toDomain(business);
     }
 
     private GroupAssignment technicalAssignment() {
@@ -141,6 +208,17 @@ class GovernanceGroupAssignmentRepositoryAdapterTest {
                 .identityType(IdentityType.ACCOUNT.name())
                 .identityId(ACCOUNT_ID)
                 .groupCode("G_SPACE_ADMINS")
+                .build();
+    }
+
+    private GroupAssignmentEntity entityWithSource(String groupSource) {
+        return GroupAssignmentEntity.builder()
+                .id(UUID.randomUUID())
+                .orgId(ORG_ID).spaceId(SPACE_ID)
+                .identityType(IdentityType.ACCOUNT.name())
+                .identityId(ACCOUNT_ID)
+                .groupCode("G_SPACE_ADMINS")
+                .groupSource(groupSource)
                 .build();
     }
 }

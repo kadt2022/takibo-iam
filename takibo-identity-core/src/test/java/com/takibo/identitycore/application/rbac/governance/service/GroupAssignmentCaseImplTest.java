@@ -87,6 +87,16 @@ class GroupAssignmentCaseImplTest {
     }
 
     @Test
+    void assignTechnicalGroup_orgGroupWithSpaceId_throwsScopeViolation() {
+        assertThatThrownBy(() ->
+                service.assignTechnicalGroup(ORG_ID, SPACE_ID, FOUNDER, "G_ORG_ADMINS", "system"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("must not be scoped to a space");
+
+        verify(governanceGroupAssignmentRepository, never()).saveGovernanceAssignment(any());
+    }
+
+    @Test
     void assignTechnicalGroup_spaceGroupWithoutSpaceId_throwsScopeViolation() {
         assertThatThrownBy(() ->
                 service.assignTechnicalGroup(ORG_ID, null, FOUNDER, "G_SPACE_ADMINS", "system"))

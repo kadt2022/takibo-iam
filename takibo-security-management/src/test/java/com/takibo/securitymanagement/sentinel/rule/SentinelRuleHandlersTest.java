@@ -66,6 +66,17 @@ class SentinelRuleHandlersTest {
     }
 
     @Test
+    void tmsSpaceNotFound_mapsToSpaceNotFound404() {
+        SentinelResponse response = SentinelRuleHandlers.ruleTmsSpaceNotFound(
+                new RuntimeException("Space not found"),
+                PATH,
+                TRACE_ID
+        );
+
+        assertResponse(response, 404, SentinelErrorCode.SPACE_NOT_FOUND, "Space not found");
+    }
+
+    @Test
     void userNotActive_mapsToForbidden403() {
         SentinelResponse response = SentinelRuleHandlers.ruleUserNotActive(
                 new UserNotActiveException(USER_ID, UserStatus.SUSPENDED),
