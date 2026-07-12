@@ -68,7 +68,8 @@ class SpaceControllerTest {
 
     @Test
     void createSpace_returns201WithLocationHeader() throws Exception {
-        when(actorProvider.currentUserId()).thenReturn(OWNER_ID);
+        // IAM 31 : le propriétaire d'un space est un ACCOUNT, pas un user local.
+        when(actorProvider.currentAccountId()).thenReturn(OWNER_ID);
         when(actorProvider.source()).thenReturn(ActorSource.HUMAN);
         when(service.createSpace(any(CreateSpaceCommand.class))).thenReturn(new SpaceResponse(
                 SPACE_ID, ORG_ID, "busa", "Busa", null,

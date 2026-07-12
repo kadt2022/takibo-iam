@@ -45,13 +45,15 @@ public class SpaceController {
     public ResponseEntity<SpaceResponse> createSpace(@PathVariable("orgId") UUID orgId,
                                                      @Valid @RequestBody CreateSpaceRequest req) {
 
-        UUID creatorUserId = actorProvider.currentUserId();
+        // IAM 31 : le propriétaire d'un space est un ACCOUNT (le user local est une
+        // réalité de space) — l'ancien passage du userId violait fk_spaces_owner_account_scope.
+        UUID ownerAccountId = actorProvider.currentAccountId();
         ActorSource source = actorProvider.source();
 
-        log.info("Create space request orgId={} actorUserId={} source={} payload={}",
-            orgId, creatorUserId, source, req);
+        log.info("Create space request orgId={} ownerAccountId={} source={} payload={}",
+            orgId, ownerAccountId, source, req);
 
-        CreateSpaceCommand cmd = CreateSpaceCommand.from(orgId, creatorUserId, source, req);
+        CreateSpaceCommand cmd = CreateSpaceCommand.from(orgId, ownerAccountId, source, req);
 
         SpaceResponse created = service.createSpace(cmd);
 
