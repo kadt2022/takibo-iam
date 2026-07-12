@@ -81,10 +81,13 @@ class HumanLoginServiceTest {
     private Account account;
     private AccountCredentials credentials;
 
+    private static final String DUMMY_HASH = "$2a$dummy-timing-hash";
+
     @BeforeEach
     void setUp() {
         ReflectionTestUtils.setField(service, "maxFailedAttempts", 5);
         ReflectionTestUtils.setField(service, "lockSeconds", 900L);
+        ReflectionTestUtils.setField(service, "dummyPasswordHash", DUMMY_HASH);
 
         account = Account.create(new EmailAddress(EMAIL), null, null, Map.of()).withOrgId(ORG_ID);
         credentials = AccountCredentials.create(account.getId(), PasswordHash.of("$2a$hash", "bcrypt", 1));
@@ -176,6 +179,8 @@ class HumanLoginServiceTest {
                 .isInstanceOf(AuthenticationFailedException.class)
                 .hasMessage(UNIFORM_MESSAGE);
 
+        // Égalisation temporelle : le coût du hash est payé même sans compte.
+        verify(passwordHasher).matches(PASSWORD, DUMMY_HASH);
         verify(tokenIssuer, never()).issue(any());
     }
 
@@ -275,7 +280,10 @@ class HumanLoginServiceTest {
                 .isInstanceOf(AuthenticationFailedException.class)
                 .hasMessage(UNIFORM_MESSAGE);
 
-        verifyNoInteractions(accountRepository, accountCredentialsRepository, passwordHasher, tokenIssuer);
+        verifyNoInteractions(accountRepository, accountCredentialsRepository, tokenIssuer);
+        // Le hash factice est quand même exécuté : pas d'oracle temporel.
+        verify(passwordHasher).matches(PASSWORD, DUMMY_HASH);
+        verifyNoMoreInteractions(passwordHasher);
     }
 
     @Test
@@ -386,7 +394,10 @@ class HumanLoginServiceTest {
                 .isInstanceOf(AuthenticationFailedException.class)
                 .hasMessage(UNIFORM_MESSAGE);
 
-        verifyNoInteractions(accountRepository, accountCredentialsRepository, passwordHasher, tokenIssuer);
+        verifyNoInteractions(accountRepository, accountCredentialsRepository, tokenIssuer);
+        // Le hash factice est quand même exécuté : pas d'oracle temporel.
+        verify(passwordHasher).matches(PASSWORD, DUMMY_HASH);
+        verifyNoMoreInteractions(passwordHasher);
     }
 
     @Test
@@ -398,6 +409,19 @@ class HumanLoginServiceTest {
                 .isInstanceOf(AuthenticationFailedException.class)
                 .hasMessage(UNIFORM_MESSAGE);
 
+        verify(passwordHasher).matches(PASSWORD, DUMMY_HASH);
         verify(tokenIssuer, never()).issue(any());
+    }
+
+    @Test
+    void dummyHash_isGeneratedOnceAtStartup_whenNotConfigured() {
+        ReflectionTestUtils.setField(service, "dummyPasswordHash", "");
+        when(passwordHasher.hash(any())).thenReturn("$2a$generated-once");
+
+        service.initDummyPasswordHash();
+
+        assertThat(ReflectionTestUtils.getField(service, "dummyPasswordHash"))
+                .isEqualTo("$2a$generated-once");
+        verify(passwordHasher).hash(any());
     }
 }

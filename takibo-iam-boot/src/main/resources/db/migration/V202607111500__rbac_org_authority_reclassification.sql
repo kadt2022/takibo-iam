@@ -1,4 +1,4 @@
-﻿-- IAM 31 : une autorité d'organisation ne doit jamais dépendre de l'existence d'un space.
+-- IAM 31 : une autorité d'organisation ne doit jamais dépendre de l'existence d'un space.
 --
 -- Jusqu'ici, la provision écrivait les autorités de scope ORGANIZATION
 -- (R_ORG_OWNER du fondateur, G_ORG_ADMINS…) rattachées au space initial :

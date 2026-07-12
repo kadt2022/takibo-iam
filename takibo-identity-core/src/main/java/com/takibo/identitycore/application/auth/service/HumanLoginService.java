@@ -35,6 +35,7 @@ import com.takibo.identitycore.integration.space.port.ResolvedOrgKey;
 import com.takibo.identitycore.integration.space.port.ResolvedSpaceKey;
 import com.takibo.identitycore.integration.space.port.SpaceKeyResolutionCase;
 import com.takibo.identitycore.interfaces.rest.response.LoginResponse;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -86,6 +87,23 @@ public class HumanLoginService implements HumanLoginCase {
     @Value("${takibo.auth.login.lock-seconds:900}")
     private long lockSeconds;
 
+    /**
+     * Hash factice pour l'égalisation temporelle (revue du sage, P1) : lorsqu'aucun
+     * hash réel n'est disponible (organisation inconnue/inactive, space inaccessible,
+     * compte ou credentials absents), un matches() est quand même exécuté pour que
+     * le temps de réponse ne trahisse pas la cause. Configurable ; sinon généré UNE
+     * fois au démarrage — jamais par requête.
+     */
+    @Value("${takibo.auth.login.dummy-password-hash:}")
+    private String dummyPasswordHash;
+
+    @PostConstruct
+    void initDummyPasswordHash() {
+        if (dummyPasswordHash == null || dummyPasswordHash.isBlank()) {
+            dummyPasswordHash = passwordHasher.hash("takibo-dummy-" + UUID.randomUUID());
+        }
+    }
+
     @Override
     public LoginResponse login(LoginCommand command) {
         Assert.notNull(command, "Login command must not be null");
@@ -94,12 +112,22 @@ public class HumanLoginService implements HumanLoginCase {
             return hasSpaceCode(command) ? loginSpaceScoped(command) : loginOrganizationScoped(command);
         } catch (OrganizationNotFoundException | OrganizationNotActiveException
                  | SpaceNotFoundException | SpaceNotActiveException | SpaceDisabledException
-                 | SpaceGuardException | InvalidCredentialsException | AccountLockedException
+                 | SpaceGuardException ex) {
+            // Échec de résolution AVANT toute lecture de credentials : le coût du
+            // hash n'a pas été payé — on l'égalise pour fermer l'oracle temporel.
+            performDummyPasswordCheck(command.password());
+            log.warn("Login refused cause={} detail={}", ex.getClass().getSimpleName(), ex.getMessage());
+            throw new AuthenticationFailedException();
+        } catch (InvalidCredentialsException | AccountLockedException
                  | UserNotMemberOfSpaceException | UserNotActiveException ex) {
             // Réponse externe unique ; la cause réelle reste côté serveur (logs + audit).
             log.warn("Login refused cause={} detail={}", ex.getClass().getSimpleName(), ex.getMessage());
             throw new AuthenticationFailedException();
         }
+    }
+
+    private void performDummyPasswordCheck(String rawPassword) {
+        passwordHasher.matches(rawPassword, dummyPasswordHash);
     }
 
     private boolean hasSpaceCode(LoginCommand command) {
@@ -181,11 +209,17 @@ public class HumanLoginService implements HumanLoginCase {
     private Account verifyAccountCredentials(UUID orgId, String rawEmail, String rawPassword) {
         EmailAddress email = new EmailAddress(rawEmail);
         Account account = accountRepository.findByEmail(new OrganizationId(orgId), email)
-                .orElseThrow(InvalidCredentialsException::new);
+                .orElseThrow(() -> {
+                    performDummyPasswordCheck(rawPassword);
+                    return new InvalidCredentialsException();
+                });
 
         AccountCredentials credentials = accountCredentialsRepository
                 .find(new OrganizationId(orgId), account.getId())
-                .orElseThrow(InvalidCredentialsException::new);
+                .orElseThrow(() -> {
+                    performDummyPasswordCheck(rawPassword);
+                    return new InvalidCredentialsException();
+                });
 
         if (credentials.isLocked()) {
             log.warn("Login refused: account locked accountId={} orgId={}", account.getId(), orgId);

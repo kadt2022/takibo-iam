@@ -65,14 +65,15 @@ public class CurrentActorProviderImpl implements CurrentActorProvider {
      * IAM 31 : l'account de l'acteur vient du contexte de sécurité TAKIBO
      * (claim account_id porté par le token humain, SPACE comme ORGANIZATION) —
      * jamais du principal name, qui porte le userId sur les tokens SPACE.
+     * <p>
+     * FAIL-CLOSED (revue du sage, P0) : un contexte absent ou un token sans
+     * account_id doit produire un refus explicite, jamais devenir silencieusement
+     * l'acteur système. Le fallback système est réservé aux opérations système
+     * explicitement appelées comme telles.
      */
     @Override
     public UUID currentAccountId() {
-        try {
-            return currentAccountContext.requireCurrentAccountId();
-        } catch (Exception missingContext) {
-            return SYSTEM_ACTOR_ID;
-        }
+        return currentAccountContext.requireCurrentAccountId();
     }
 
     @Override
