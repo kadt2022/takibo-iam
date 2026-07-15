@@ -86,6 +86,80 @@ public interface OAuthClientJpaMapper {
         }
     }
 
+    // ========== Domain -> Entity (UPDATE d'un client existant) ==========
+    // Piège récurrent du dépôt : toEntity fabrique une entité NEUVE (children avec de
+    // nouveaux UUID, version par défaut) — la sauver pour un client existant tente de
+    // ré-INSÉRER les enfants et casse les contraintes uniques (ex. uk_ocg_client_grant).
+    // L'update doit donc s'appliquer sur l'entité MANAGÉE : scalaires copiés, enfants
+    // synchronisés par différence (rien n'est touché quand les valeurs sont identiques,
+    // cas de la rotation de secret).
+    default void applyDomainState(OAuthClient src, OAuth2ClientEntity dst) {
+        UUID orgId = dst.getOrgId();
+        UUID spaceId = dst.getSpaceId();
+        UUID clientId = dst.getId();
+
+        dst.setClientId(src.getClientId());
+        dst.setClientName(src.getClientName());
+        dst.setClientType(src.getClientType() == null
+                ? null
+                : OAuth2ClientEntity.ClientType.valueOf(src.getClientType().name()));
+        dst.setRequireClientSecret(src.isRequireClientSecret());
+        dst.setClientSecretHash(src.getClientSecretHash());
+        dst.setClientSecretExpiresAt(src.getClientSecretExpiresAt());
+        dst.setTokenEndpointAuthMethod(map(src.getTokenEndpointAuthMethod()));
+        dst.setRequirePkce(src.isRequirePkce());
+        dst.setRequireConsent(src.isRequireConsent());
+        dst.setJwksUri(src.getJwksUri());
+        dst.setJwksJson(src.getJwksJson());
+        dst.setIdTokenSignedAlg(src.getIdTokenSignedAlg());
+        dst.setAccessTokenTtlSeconds(src.getAccessTokenTtlSeconds());
+        dst.setRefreshTokenTtlSeconds(src.getRefreshTokenTtlSeconds());
+        dst.setIdTokenTtlSeconds(src.getIdTokenTtlSeconds());
+        dst.setAdditionalSettings(src.getAdditionalSettings());
+
+        syncChildren(dst.getScopes(), src.getScopes(),
+                OAuth2ClientScopeEntity::getScope,
+                v -> OAuth2ClientScopeEntity.builder()
+                        .id(UUID.randomUUID()).orgId(orgId).spaceId(spaceId)
+                        .clientId(clientId).client(dst).scope(v).build());
+        syncChildren(dst.getGrantTypes(), src.getGrantTypes(),
+                OAuth2ClientGrantTypeEntity::getGrantType,
+                v -> OAuth2ClientGrantTypeEntity.builder()
+                        .id(UUID.randomUUID()).orgId(orgId).spaceId(spaceId)
+                        .clientId(clientId).client(dst).grantType(v).build());
+        syncChildren(dst.getRedirectUris(), src.getRedirectUris(),
+                OAuth2ClientRedirectUriEntity::getUri,
+                v -> OAuth2ClientRedirectUriEntity.builder()
+                        .id(UUID.randomUUID()).orgId(orgId).spaceId(spaceId)
+                        .clientId(clientId).client(dst).uri(v).build());
+        syncChildren(dst.getPostLogoutRedirectUris(), src.getPostLogoutRedirectUris(),
+                OAuth2ClientPostLogoutRedirectUriEntity::getUri,
+                v -> OAuth2ClientPostLogoutRedirectUriEntity.builder()
+                        .id(UUID.randomUUID()).orgId(orgId).spaceId(spaceId)
+                        .clientId(clientId).client(dst).uri(v).build());
+        syncChildren(dst.getCorsOrigins(), src.getCorsOrigins(),
+                OAuth2ClientCorsOriginEntity::getOrigin,
+                v -> OAuth2ClientCorsOriginEntity.builder()
+                        .id(UUID.randomUUID()).orgId(orgId).spaceId(spaceId)
+                        .clientId(clientId).client(dst).origin(v).build());
+    }
+
+    // Synchronisation par différence : supprime ce qui n'est plus déclaré
+    // (orphanRemoval fait le DELETE), ajoute ce qui manque, ne touche à rien d'autre.
+    default <E> void syncChildren(java.util.List<E> current,
+                                  Set<String> target,
+                                  java.util.function.Function<E, String> valueOf,
+                                  java.util.function.Function<String, E> factory) {
+        Set<String> wanted = target == null ? Set.of() : target;
+        current.removeIf(e -> !wanted.contains(valueOf.apply(e)));
+        Set<String> present = current.stream().map(valueOf).collect(Collectors.toSet());
+        for (String v : wanted) {
+            if (!present.contains(v)) {
+                current.add(factory.apply(v));
+            }
+        }
+    }
+
     // ========== Entity -> Domain ==========
     @Mapping(target = "id",      source = "id")
     @Mapping(target = "spaceId", source = "space")

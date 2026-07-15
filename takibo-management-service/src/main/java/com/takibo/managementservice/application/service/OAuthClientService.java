@@ -82,16 +82,20 @@ public class OAuthClientService {
     return values != null && !values.isEmpty();
   }
 
+  private static final String CLIENT_NOT_FOUND = "client not found";
+
   public RegisteredClientResult rotateSecret(UUID orgId, SpaceId spaceId, UUID clientId, Instant expiresAt) {
     Assert.notNull(orgId, "orgId is required");
     Assert.notNull(spaceId, "spaceId is required");
     Assert.notNull(clientId, "clientId is required");
 
     OAuthClient existing = repository.findById(clientId)
-            .orElseThrow(() -> new InvalidClientConfigurationException("client not found"));
+            .orElseThrow(() -> new InvalidClientConfigurationException(CLIENT_NOT_FOUND));
 
+    // Anti-énumération : un client inexistant et un client d'un autre (org, space)
+    // produisent la MÊME réponse — aucun oracle sur l'existence hors frontière.
     if (!orgId.equals(existing.getOrgId()) || !spaceId.equals(existing.getSpaceId())) {
-      throw new InvalidClientConfigurationException("client not in org/space");
+      throw new InvalidClientConfigurationException(CLIENT_NOT_FOUND);
     }
     if (existing.getClientType() == ClientType.PUBLIC || !usesSecret(existing.getTokenEndpointAuthMethod())) {
       throw new InvalidClientConfigurationException("client does not use secrets");

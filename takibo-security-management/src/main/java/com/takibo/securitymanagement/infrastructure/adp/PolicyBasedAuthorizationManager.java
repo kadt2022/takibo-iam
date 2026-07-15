@@ -65,6 +65,9 @@ public class PolicyBasedAuthorizationManager implements AuthorizationManager<Req
         HttpServletRequest request = context.getRequest();
 
         String subjectId = ctx.subject().subjectId();
+        // Nature du sujet telle qu'émise par le token (HUMAN / SERVICE / SYSTEM) :
+        // les règles réservées aux humains la lisent, jamais une inférence locale.
+        String subjectType = ctx.subject().nature() != null ? ctx.subject().nature().name() : null;
         String organizationId = ctx.tenant() != null ? ctx.tenant().organizationId() : null;
         String spaceId = ctx.tenant() != null ? ctx.tenant().spaceId() : null;
 
@@ -77,7 +80,7 @@ public class PolicyBasedAuthorizationManager implements AuthorizationManager<Req
         //    L'ADP évalue ensuite le risque adaptatif — il ne peut jamais ré-autoriser un DENY.
         String ipAddress = ctx.transport() != null ? ctx.transport().ipAddress() : request.getRemoteAddr();
         PolicyDecision policyDecision = policyEvaluator.evaluate(
-                new Subject(subjectId, roles, permissions, organizationId, spaceId),
+                new Subject(subjectId, subjectType, roles, permissions, organizationId, spaceId),
                 new Resource(request.getRequestURI(), null, null),
                 Action.fromHttpMethod(request.getMethod()),
                 new Environment(Instant.now(), ipAddress, 0));

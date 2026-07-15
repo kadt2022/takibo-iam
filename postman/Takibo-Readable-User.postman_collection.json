@@ -2425,12 +2425,13 @@
               "raw": "{\n  \"clientId\": \"should-be-denied\",\n  \"clientName\": \"Denied\",\n  \"clientType\": \"CONFIDENTIAL\",\n  \"requireClientSecret\": true,\n  \"tokenEndpointAuthMethod\": \"client_secret_basic\",\n  \"grantTypes\": [\"client_credentials\"],\n  \"scopes\": [\"api.read\"]\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/orgs/{{organizationId}}/spaces/{{spaceId}}/clients",
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/spaces/{{spaceId}}/clients",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
+                "v1",
                 "orgs",
                 "{{organizationId}}",
                 "spaces",

@@ -1,6 +1,9 @@
 package com.takibo.managementservice.interfaces.rest.api;
 
+import com.takibo.identitycore.integration.security.SpaceBoundaryGuard;
 import com.takibo.identitycore.integration.security.port.CurrentOrganizationContextCase;
+import com.takibo.identitycore.integration.security.port.CurrentSpaceContextCase;
+import com.takibo.identitycore.integration.space.annotations.RequireActiveSpace;
 import com.takibo.identitycore.integration.space.port.SpaceOwnershipGuardCase;
 import com.takibo.managementservice.application.command.RegisterClientCommand;
 import com.takibo.managementservice.application.mapper.ClientRegistrationMapper;
@@ -24,11 +27,13 @@ import java.time.Instant;
 import java.util.Set;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -50,6 +55,9 @@ class OAuthClientControllerTest {
     private CurrentOrganizationContextCase currentOrganizationContext;
 
     @Mock
+    private CurrentSpaceContextCase currentSpaceContext;
+
+    @Mock
     private SpaceOwnershipGuardCase spaceOwnershipGuard;
 
     private OAuthClientController controller;
@@ -57,8 +65,28 @@ class OAuthClientControllerTest {
 
     @BeforeEach
     void setUp() {
-        controller = new OAuthClientController(service, mapper, currentOrganizationContext, spaceOwnershipGuard);
+        // Couture réelle : la frontière token<->chemin est portée par SpaceBoundaryGuard
+        // (org ET space du token), pas par une garde locale au contrôleur.
+        SpaceBoundaryGuard spaceBoundaryGuard =
+                new SpaceBoundaryGuard(currentOrganizationContext, currentSpaceContext);
+        controller = new OAuthClientController(service, mapper, spaceBoundaryGuard, spaceOwnershipGuard);
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
+    }
+
+    @Test
+    void controller_is_mounted_on_v1_route() {
+        String[] paths = OAuthClientController.class
+                .getAnnotation(org.springframework.web.bind.annotation.RequestMapping.class)
+                .value();
+
+        assertThat(paths).containsExactly("/api/v1/orgs/{orgId}/spaces/{spaceId}/clients");
+    }
+
+    @Test
+    void controller_still_requires_active_space() {
+        // Non-régression : la création dans un space suspendu reste refusée par
+        // @RequireActiveSpace (SpaceActiveAspect) — la garde ne doit pas disparaître.
+        assertThat(OAuthClientController.class.getAnnotation(RequireActiveSpace.class)).isNotNull();
     }
 
     @Test
@@ -67,6 +95,7 @@ class OAuthClientControllerTest {
         OAuthClient domainClient = OAuthClient.create(ORG_ID, SpaceId.of(SPACE_ID), "conf-client", "Conf Client", ClientType.CONFIDENTIAL);
 
         when(currentOrganizationContext.requireCurrentOrganizationId()).thenReturn(ORG_ID);
+        when(currentSpaceContext.requireCurrentSpaceId()).thenReturn(SPACE_ID);
         when(mapper.toCommand(any())).thenReturn(commandFor(ClientType.CONFIDENTIAL));
         when(service.register(eq(ORG_ID), eq(SpaceId.of(SPACE_ID)), any(RegisterClientCommand.class)))
                 .thenReturn(new RegisteredClientResult(domainClient, "one-time-secret"));
@@ -87,7 +116,7 @@ class OAuthClientControllerTest {
                 Set.of()
         ));
 
-        mockMvc.perform(post("/api/orgs/{orgId}/spaces/{spaceId}/clients", ORG_ID, SPACE_ID)
+        mockMvc.perform(post("/api/v1/orgs/{orgId}/spaces/{spaceId}/clients", ORG_ID, SPACE_ID)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -100,6 +129,8 @@ class OAuthClientControllerTest {
                 .andExpect(jsonPath("$.oneTimePlainSecret").value("one-time-secret"))
                 .andExpect(jsonPath("$.client.clientSecretExpiresAt").exists())
                 .andExpect(jsonPath("$.clientSecretExpiresAt").doesNotExist());
+
+        verify(spaceOwnershipGuard).assertSpaceBelongsToOrg(SPACE_ID, ORG_ID);
     }
 
     @Test
@@ -107,6 +138,7 @@ class OAuthClientControllerTest {
         OAuthClient domainClient = OAuthClient.create(ORG_ID, SpaceId.of(SPACE_ID), "pub-client", "Pub Client", ClientType.PUBLIC);
 
         when(currentOrganizationContext.requireCurrentOrganizationId()).thenReturn(ORG_ID);
+        when(currentSpaceContext.requireCurrentSpaceId()).thenReturn(SPACE_ID);
         when(mapper.toCommand(any())).thenReturn(commandFor(ClientType.PUBLIC));
         when(service.register(eq(ORG_ID), eq(SpaceId.of(SPACE_ID)), any(RegisterClientCommand.class)))
                 .thenReturn(new RegisteredClientResult(domainClient, null));
@@ -127,7 +159,7 @@ class OAuthClientControllerTest {
                 Set.of("https://app.example")
         ));
 
-        mockMvc.perform(post("/api/orgs/{orgId}/spaces/{spaceId}/clients", ORG_ID, SPACE_ID)
+        mockMvc.perform(post("/api/v1/orgs/{orgId}/spaces/{spaceId}/clients", ORG_ID, SPACE_ID)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -150,7 +182,7 @@ class OAuthClientControllerTest {
                 .isInstanceOf(AccessDeniedException.class)
                 .hasMessageContaining("ORG_CONTEXT_REQUIRED");
 
-        verify(service, never()).register(any(), any(), any());
+        verifyNoInteractions(service);
     }
 
     @Test
@@ -162,7 +194,53 @@ class OAuthClientControllerTest {
                 .isInstanceOf(AccessDeniedException.class)
                 .hasMessageContaining("ORG_MISMATCH");
 
-        verify(service, never()).register(any(), any(), any());
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void register_with_token_of_another_space_is_denied_and_does_not_register() {
+        // La faille IAM 33 : token.org == path.org ne suffit PAS — le token doit
+        // désigner exactement le space du chemin, aucun secret ne sort après refus.
+        UUID otherSpace = UUID.fromString("88888888-8888-8888-8888-888888888888");
+        when(currentOrganizationContext.requireCurrentOrganizationId()).thenReturn(ORG_ID);
+        when(currentSpaceContext.requireCurrentSpaceId()).thenReturn(otherSpace);
+
+        assertThatThrownBy(() -> controller.register(ORG_ID, SPACE_ID, null))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("SPACE_CONTEXT_MISMATCH");
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void rotateSecret_with_token_of_another_space_is_denied_and_returns_no_secret() {
+        UUID otherSpace = UUID.fromString("88888888-8888-8888-8888-888888888888");
+        UUID clientId = UUID.fromString("55555555-5555-5555-5555-555555555555");
+        when(currentOrganizationContext.requireCurrentOrganizationId()).thenReturn(ORG_ID);
+        when(currentSpaceContext.requireCurrentSpaceId()).thenReturn(otherSpace);
+
+        assertThatThrownBy(() -> controller.rotateSecret(ORG_ID, SPACE_ID, clientId, null))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("SPACE_CONTEXT_MISMATCH");
+
+        verify(service, never()).rotateSecret(any(), any(), any(), any());
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void rotateSecret_without_space_context_is_denied() {
+        // Token ORGANIZATION (sans space_id) : la surface reste inutilisable
+        // jusqu'à l'échange ORG->SPACE (IAM 34).
+        UUID clientId = UUID.fromString("55555555-5555-5555-5555-555555555555");
+        when(currentOrganizationContext.requireCurrentOrganizationId()).thenReturn(ORG_ID);
+        when(currentSpaceContext.requireCurrentSpaceId())
+                .thenThrow(new AccessDeniedException("SPACE_CONTEXT_REQUIRED"));
+
+        assertThatThrownBy(() -> controller.rotateSecret(ORG_ID, SPACE_ID, clientId, null))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("SPACE_CONTEXT_REQUIRED");
+
+        verifyNoInteractions(service);
     }
 
     private static RegisterClientCommand commandFor(ClientType type) {

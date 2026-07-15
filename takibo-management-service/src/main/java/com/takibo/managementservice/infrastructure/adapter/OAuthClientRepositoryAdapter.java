@@ -30,6 +30,18 @@ public class OAuthClientRepositoryAdapter implements OAuthClientRepository {
     @Override public boolean existsByClientId(String clientId) { return jpa.existsByClientId(clientId); }
 
     @Override public OAuthClient save(OAuthClient client) {
+        // Update (ex. rotation de secret) : appliquer l'état domaine sur l'entité
+        // MANAGÉE — re-mapper via toEntity fabriquerait des enfants neufs et
+        // ré-insérerait des doublons (violation d'unicité, ex. uk_ocg_client_grant).
+        UUID id = client.getId() == null ? null : client.getId().getValue();
+        if (id != null) {
+            Optional<OAuth2ClientEntity> managed = jpa.findById(id);
+            if (managed.isPresent()) {
+                mapper.applyDomainState(client, managed.get());
+                return mapper.toDomain(jpa.save(managed.get()));
+            }
+        }
+
         OAuth2ClientEntity entity = mapper.toEntity(client, spaceRef());
         OAuth2ClientEntity saved  = jpa.save(entity);
         return mapper.toDomain(saved);

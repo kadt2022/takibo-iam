@@ -22,6 +22,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -100,6 +101,37 @@ class OAuthClientServiceTest {
         assertThatThrownBy(() -> service.register(UUID.randomUUID(), SpaceId.of(UUID.randomUUID()), cmd))
                 .isInstanceOf(InvalidClientConfigurationException.class)
                 .hasMessageContaining("redirect/cors/post-logout");
+    }
+
+    @Test
+    void rotateSecret_unknownClient_and_clientOfAnotherSpace_yieldIdenticalResponse() {
+        // Anti-énumération : « client inexistant » et « client d'un autre space »
+        // doivent être indistinguables pour l'appelant — même exception, même message.
+        UUID orgId = UUID.randomUUID();
+        SpaceId spaceId = SpaceId.of(UUID.randomUUID());
+
+        UUID unknownClientId = UUID.randomUUID();
+        when(repository.findById(unknownClientId)).thenReturn(java.util.Optional.empty());
+
+        Throwable unknown = catchThrowable(() ->
+                service.rotateSecret(orgId, spaceId, unknownClientId, null));
+
+        UUID foreignClientId = UUID.randomUUID();
+        OAuthClient foreignClient = OAuthClient.create(
+                orgId, SpaceId.of(UUID.randomUUID()), "foreign-client", "Foreign", ClientType.CONFIDENTIAL);
+        when(repository.findById(foreignClientId)).thenReturn(java.util.Optional.of(foreignClient));
+
+        Throwable foreign = catchThrowable(() ->
+                service.rotateSecret(orgId, spaceId, foreignClientId, null));
+
+        assertThat(unknown).isInstanceOf(InvalidClientConfigurationException.class);
+        assertThat(foreign).isInstanceOf(InvalidClientConfigurationException.class);
+        assertThat(foreign.getClass()).isEqualTo(unknown.getClass());
+        assertThat(foreign.getMessage()).isEqualTo(unknown.getMessage());
+
+        // Aucun secret régénéré, rien de persisté après un refus.
+        verify(repository, never()).save(any());
+        verifyNoInteractions(passwordEncoder);
     }
 
     private static RegisterClientCommandBuilder baseCommand() {
