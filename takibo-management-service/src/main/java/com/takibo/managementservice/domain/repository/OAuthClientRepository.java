@@ -11,5 +11,10 @@ public interface OAuthClientRepository {
     OAuthClient save(OAuthClient client);
     Optional<OAuthClient> findById(UUID id);
     Optional<OAuthClient> findByIdAndOrgIdAndSpaceId(UUID id, UUID orgId, UUID spaceId);
-    boolean updateSecretByIdAndOrgIdAndSpaceId(UUID id, UUID orgId, UUID spaceId, String secretHash, Instant expiresAt);
+    boolean updateSecretByIdAndOrgIdAndSpaceId(UUID id,
+                                               UUID orgId,
+                                               UUID spaceId,
+                                               Long expectedVersion,
+                                               String secretHash,
+                                               Instant expiresAt);
 }

@@ -18,14 +18,17 @@ public interface OAuth2ClientJpaRepository extends JpaRepository<OAuth2ClientEnt
     @Query("""
             update OAuth2ClientEntity c
                set c.clientSecretHash = :secretHash,
-                   c.clientSecretExpiresAt = :expiresAt
+                   c.clientSecretExpiresAt = :expiresAt,
+                   c.version = c.version + 1
              where c.id = :id
                and c.orgId = :orgId
                and c.spaceId = :spaceId
+               and c.version = :expectedVersion
             """)
     int updateSecretByIdAndOrgIdAndSpaceId(@Param("id") UUID id,
                                            @Param("orgId") UUID orgId,
                                            @Param("spaceId") UUID spaceId,
+                                           @Param("expectedVersion") Long expectedVersion,
                                            @Param("secretHash") String secretHash,
                                            @Param("expiresAt") Instant expiresAt);
 }

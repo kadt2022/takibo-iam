@@ -60,8 +60,10 @@ public class OAuthClientRepositoryAdapter implements OAuthClientRepository {
     public boolean updateSecretByIdAndOrgIdAndSpaceId(UUID id,
                                                       UUID orgId,
                                                       UUID spaceId,
+                                                      Long expectedVersion,
                                                       String secretHash,
                                                       Instant expiresAt) {
-        return jpa.updateSecretByIdAndOrgIdAndSpaceId(id, orgId, spaceId, secretHash, expiresAt) == 1;
+        return jpa.updateSecretByIdAndOrgIdAndSpaceId(
+                id, orgId, spaceId, expectedVersion, secretHash, expiresAt) == 1;
     }
 }

@@ -98,9 +98,9 @@ public class OAuthClientService {
     Instant newExpiresAt = expiresAt != null ? expiresAt : existing.getClientSecretExpiresAt();
     Secrets secrets = generateSecretIfNeeded(true, newExpiresAt);
     boolean updated = repository.updateSecretByIdAndOrgIdAndSpaceId(
-            clientId, orgId, spaceId.value(), secrets.hash(), secrets.expiresAt());
+            clientId, orgId, spaceId.value(), existing.getVersion(), secrets.hash(), secrets.expiresAt());
     if (!updated) {
-      throw new InvalidClientConfigurationException(CLIENT_NOT_FOUND);
+      throw new OAuthClientSecretRotationConflictException();
     }
 
     return new RegisteredClientResult(existing.withSecret(secrets.hash(), secrets.expiresAt()), secrets.plain());

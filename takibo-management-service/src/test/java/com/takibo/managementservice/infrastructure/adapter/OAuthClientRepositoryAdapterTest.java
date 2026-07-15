@@ -53,18 +53,20 @@ class OAuthClientRepositoryAdapterTest {
     }
 
     @Test
-    void updateSecretByIdAndOrgIdAndSpaceId_returnsTrueOnlyForSingleSituatedRow() {
+    void updateSecretByIdAndOrgIdAndSpaceId_usesExpectedVersionAndReturnsTrueOnlyForSingleSituatedRow() {
         OAuthClientRepositoryAdapter adapter = new OAuthClientRepositoryAdapter(jpa, mapper, entityManager);
         UUID clientId = UUID.randomUUID();
         UUID orgId = UUID.randomUUID();
         UUID spaceId = UUID.randomUUID();
         Instant expiresAt = Instant.parse("2035-01-01T00:00:00Z");
 
-        when(jpa.updateSecretByIdAndOrgIdAndSpaceId(clientId, orgId, spaceId, "hash", expiresAt))
+        when(jpa.updateSecretByIdAndOrgIdAndSpaceId(clientId, orgId, spaceId, 4L, "hash", expiresAt))
                 .thenReturn(1, 0);
 
-        assertThat(adapter.updateSecretByIdAndOrgIdAndSpaceId(clientId, orgId, spaceId, "hash", expiresAt)).isTrue();
-        assertThat(adapter.updateSecretByIdAndOrgIdAndSpaceId(clientId, orgId, spaceId, "hash", expiresAt)).isFalse();
+        assertThat(adapter.updateSecretByIdAndOrgIdAndSpaceId(clientId, orgId, spaceId, 4L, "hash", expiresAt)).isTrue();
+        assertThat(adapter.updateSecretByIdAndOrgIdAndSpaceId(clientId, orgId, spaceId, 4L, "hash", expiresAt)).isFalse();
+        verify(jpa, times(2)).updateSecretByIdAndOrgIdAndSpaceId(
+                clientId, orgId, spaceId, 4L, "hash", expiresAt);
         verifyNoInteractions(mapper);
     }
 }

@@ -2,6 +2,7 @@ package com.takibo.managementservice.application.service;
 
 import com.takibo.managementservice.application.command.RegisterClientCommand;
 import com.takibo.managementservice.domain.exception.InvalidClientConfigurationException;
+import com.takibo.managementservice.domain.exception.OAuthClientSecretRotationConflictException;
 import com.takibo.managementservice.domain.model.ClientType;
 import com.takibo.managementservice.domain.model.OAuthClient;
 import com.takibo.managementservice.domain.model.RegisteredClientResult;
@@ -149,6 +150,7 @@ class OAuthClientServiceTest {
                 .clientName("Machine Client")
                 .clientType(ClientType.CONFIDENTIAL)
                 .tokenEndpointAuthMethod(TokenEndpointAuthMethod.client_secret_basic)
+                .version(7L)
                 .scopes(Set.of("api:read"))
                 .grantTypes(Set.of("client_credentials"))
                 .build();
@@ -157,7 +159,7 @@ class OAuthClientServiceTest {
                 .thenReturn(Optional.of(existing));
         when(passwordEncoder.encode(any())).thenReturn("encoded-secret");
         when(repository.updateSecretByIdAndOrgIdAndSpaceId(clientId, orgId, spaceId.value(),
-                "encoded-secret", expiresAt)).thenReturn(true);
+                7L, "encoded-secret", expiresAt)).thenReturn(true);
 
         RegisteredClientResult result = service.rotateSecret(orgId, spaceId, clientId, expiresAt);
 
@@ -167,6 +169,35 @@ class OAuthClientServiceTest {
         assertThat(result.client().getGrantTypes()).containsExactly("client_credentials");
         assertThat(result.oneTimePlainSecret()).isNotBlank();
         verify(repository, never()).findById(any());
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void rotateSecret_concurrentVersionConflict_doesNotReturnPlainSecret() {
+        UUID orgId = UUID.randomUUID();
+        SpaceId spaceId = SpaceId.of(UUID.randomUUID());
+        UUID clientId = UUID.randomUUID();
+        Instant expiresAt = Instant.parse("2035-01-01T00:00:00Z");
+        OAuthClient existing = OAuthClient.builder()
+                .id(OAuthClientId.of(clientId))
+                .orgId(orgId)
+                .spaceId(spaceId)
+                .clientId("machine-client")
+                .clientName("Machine Client")
+                .clientType(ClientType.CONFIDENTIAL)
+                .tokenEndpointAuthMethod(TokenEndpointAuthMethod.client_secret_basic)
+                .version(4L)
+                .build();
+
+        when(repository.findByIdAndOrgIdAndSpaceId(clientId, orgId, spaceId.value()))
+                .thenReturn(Optional.of(existing));
+        when(passwordEncoder.encode(any())).thenReturn("encoded-secret");
+        when(repository.updateSecretByIdAndOrgIdAndSpaceId(clientId, orgId, spaceId.value(),
+                4L, "encoded-secret", expiresAt)).thenReturn(false);
+
+        Throwable failure = catchThrowable(() -> service.rotateSecret(orgId, spaceId, clientId, expiresAt));
+
+        assertThat(failure).isInstanceOf(OAuthClientSecretRotationConflictException.class);
         verify(repository, never()).save(any());
     }
 
