@@ -419,6 +419,18 @@ class PolicyEvaluatorTest {
     }
 
     @Test
+    void oauthClients_organizationScopedTokenWithSpaceId_denied_evenForOrgOwner() {
+        Subject incoherentToken = new Subject("actor", Set.of("R_ORG_OWNER"), Set.of(), ORG, SPACE,
+                "HUMAN", "ORGANIZATION", ACCOUNT);
+
+        PolicyDecision decision = evaluateTmsRoute(incoherentToken, CLIENTS_PATH, Action.CREATE);
+
+        assertThat(decision.isDeny()).isTrue();
+        assertThat(decision.getPolicyId()).isEqualTo("POL_OAUTH_CLIENT_ADMIN_REQUIRED");
+        assertThat(decision.getReason()).contains("SPACE-scoped token");
+    }
+
+    @Test
     void oauthClients_spaceTokenTargetingAnotherSpace_denied() {
         // Token SPACE de Finance visant les clients de Marketing : la frontière
         // token.space_id == path.spaceId prime sur tout rôle.
@@ -475,6 +487,19 @@ class PolicyEvaluatorTest {
                     CLIENTS_PATH, action);
             assertThat(decision.isDeny()).as(action.name()).isTrue();
             assertThat(decision.getPolicyId()).isEqualTo("POL_OAUTH_CLIENT_ACTION_NOT_SUPPORTED");
+        }
+    }
+
+    @Test
+    void oauthClients_unknownPostSubRoutes_failClosedWithDedicatedPolicy() {
+        for (String path : new String[]{
+                CLIENTS_PATH + "/eeeeeeee-0000-0000-0000-000000000005/disable",
+                CLIENTS_PATH + "/future-command"}) {
+            PolicyDecision decision = evaluateTmsRoute(subject(Set.of("R_ORG_OWNER")), path, Action.CREATE);
+
+            assertThat(decision.isDeny()).as(path).isTrue();
+            assertThat(decision.getPolicyId()).as(path)
+                    .isEqualTo("POL_OAUTH_CLIENT_ROUTE_NOT_GOVERNED");
         }
     }
 

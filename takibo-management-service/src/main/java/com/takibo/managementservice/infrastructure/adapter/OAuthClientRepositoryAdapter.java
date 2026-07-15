@@ -12,6 +12,7 @@ import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -49,5 +50,18 @@ public class OAuthClientRepositoryAdapter implements OAuthClientRepository {
 
     @Override public Optional<OAuthClient> findById(UUID id) {
         return jpa.findById(id).map(mapper::toDomain);
+    }
+
+    @Override public Optional<OAuthClient> findByIdAndOrgIdAndSpaceId(UUID id, UUID orgId, UUID spaceId) {
+        return jpa.findByIdAndOrgIdAndSpaceId(id, orgId, spaceId).map(mapper::toDomain);
+    }
+
+    @Override
+    public boolean updateSecretByIdAndOrgIdAndSpaceId(UUID id,
+                                                      UUID orgId,
+                                                      UUID spaceId,
+                                                      String secretHash,
+                                                      Instant expiresAt) {
+        return jpa.updateSecretByIdAndOrgIdAndSpaceId(id, orgId, spaceId, secretHash, expiresAt) == 1;
     }
 }

@@ -7,6 +7,7 @@ import com.takibo.managementservice.domain.model.OAuthClient;
 import com.takibo.managementservice.domain.model.RegisteredClientResult;
 import com.takibo.managementservice.domain.model.TokenEndpointAuthMethod;
 import com.takibo.managementservice.domain.repository.OAuthClientRepository;
+import com.takibo.managementservice.domain.vo.OAuthClientId;
 import com.takibo.managementservice.domain.vo.SpaceId;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -17,6 +18,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.time.Instant;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -105,21 +108,19 @@ class OAuthClientServiceTest {
 
     @Test
     void rotateSecret_unknownClient_and_clientOfAnotherSpace_yieldIdenticalResponse() {
-        // Anti-énumération : « client inexistant » et « client d'un autre space »
-        // doivent être indistinguables pour l'appelant — même exception, même message.
         UUID orgId = UUID.randomUUID();
         SpaceId spaceId = SpaceId.of(UUID.randomUUID());
 
         UUID unknownClientId = UUID.randomUUID();
-        when(repository.findById(unknownClientId)).thenReturn(java.util.Optional.empty());
+        when(repository.findByIdAndOrgIdAndSpaceId(unknownClientId, orgId, spaceId.value()))
+                .thenReturn(Optional.empty());
 
         Throwable unknown = catchThrowable(() ->
                 service.rotateSecret(orgId, spaceId, unknownClientId, null));
 
         UUID foreignClientId = UUID.randomUUID();
-        OAuthClient foreignClient = OAuthClient.create(
-                orgId, SpaceId.of(UUID.randomUUID()), "foreign-client", "Foreign", ClientType.CONFIDENTIAL);
-        when(repository.findById(foreignClientId)).thenReturn(java.util.Optional.of(foreignClient));
+        when(repository.findByIdAndOrgIdAndSpaceId(foreignClientId, orgId, spaceId.value()))
+                .thenReturn(Optional.empty());
 
         Throwable foreign = catchThrowable(() ->
                 service.rotateSecret(orgId, spaceId, foreignClientId, null));
@@ -129,9 +130,44 @@ class OAuthClientServiceTest {
         assertThat(foreign.getClass()).isEqualTo(unknown.getClass());
         assertThat(foreign.getMessage()).isEqualTo(unknown.getMessage());
 
-        // Aucun secret régénéré, rien de persisté après un refus.
+        verify(repository, never()).findById(any());
         verify(repository, never()).save(any());
         verifyNoInteractions(passwordEncoder);
+    }
+
+    @Test
+    void rotateSecret_updatesSecretWithSituatedPersistence_withoutSavingWholeAggregate() {
+        UUID orgId = UUID.randomUUID();
+        SpaceId spaceId = SpaceId.of(UUID.randomUUID());
+        UUID clientId = UUID.randomUUID();
+        Instant expiresAt = Instant.parse("2035-01-01T00:00:00Z");
+        OAuthClient existing = OAuthClient.builder()
+                .id(OAuthClientId.of(clientId))
+                .orgId(orgId)
+                .spaceId(spaceId)
+                .clientId("machine-client")
+                .clientName("Machine Client")
+                .clientType(ClientType.CONFIDENTIAL)
+                .tokenEndpointAuthMethod(TokenEndpointAuthMethod.client_secret_basic)
+                .scopes(Set.of("api:read"))
+                .grantTypes(Set.of("client_credentials"))
+                .build();
+
+        when(repository.findByIdAndOrgIdAndSpaceId(clientId, orgId, spaceId.value()))
+                .thenReturn(Optional.of(existing));
+        when(passwordEncoder.encode(any())).thenReturn("encoded-secret");
+        when(repository.updateSecretByIdAndOrgIdAndSpaceId(clientId, orgId, spaceId.value(),
+                "encoded-secret", expiresAt)).thenReturn(true);
+
+        RegisteredClientResult result = service.rotateSecret(orgId, spaceId, clientId, expiresAt);
+
+        assertThat(result.client().getClientSecretHash()).isEqualTo("encoded-secret");
+        assertThat(result.client().getClientSecretExpiresAt()).isEqualTo(expiresAt);
+        assertThat(result.client().getScopes()).containsExactly("api:read");
+        assertThat(result.client().getGrantTypes()).containsExactly("client_credentials");
+        assertThat(result.oneTimePlainSecret()).isNotBlank();
+        verify(repository, never()).findById(any());
+        verify(repository, never()).save(any());
     }
 
     private static RegisterClientCommandBuilder baseCommand() {

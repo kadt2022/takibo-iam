@@ -211,9 +211,17 @@ public class PolicyEvaluator {
             return deny("POL_ORG_MISMATCH",
                     "Token organization does not match the target organization");
         }
+        if (!"SPACE".equals(subject.scopeLevel())) {
+            return deny("POL_OAUTH_CLIENT_ADMIN_REQUIRED",
+                    "A SPACE-scoped token is required");
+        }
         if (subject.spaceId() == null || !subject.spaceId().equalsIgnoreCase(route.spaceId())) {
             return deny("POL_OAUTH_CLIENT_ADMIN_REQUIRED",
                     "A SPACE-scoped token designating the target space is required to manage OAuth clients");
+        }
+        if (route.kind() == OAuthClientRouteKind.UNKNOWN) {
+            return deny("POL_OAUTH_CLIENT_ROUTE_NOT_GOVERNED",
+                    "No policy governs this OAuth client route yet");
         }
         if (action != Action.CREATE) {
             return deny("POL_OAUTH_CLIENT_ACTION_NOT_SUPPORTED",
@@ -233,7 +241,13 @@ public class PolicyEvaluator {
      * la même doctrine que {@link TmsSpaceRoute} : les routes en codes lisibles ne
      * matchent jamais.
      */
-    record OAuthClientRoute(String orgId, String spaceId) {
+    enum OAuthClientRouteKind {
+        COLLECTION_CREATE,
+        ROTATE_SECRET,
+        UNKNOWN
+    }
+
+    record OAuthClientRoute(String orgId, String spaceId, OAuthClientRouteKind kind) {
 
         static OAuthClientRoute parse(String path) {
             // ["", "api", "v1", "orgs", {orgId}, "spaces", {spaceId}, "clients", ...]
@@ -247,7 +261,13 @@ public class PolicyEvaluator {
             if (!onSurface) {
                 return null;
             }
-            return new OAuthClientRoute(seg[4], seg[6]);
+            if (seg.length == 8) {
+                return new OAuthClientRoute(seg[4], seg[6], OAuthClientRouteKind.COLLECTION_CREATE);
+            }
+            if (seg.length == 10 && isUuid(seg[8]) && "rotate-secret".equals(seg[9])) {
+                return new OAuthClientRoute(seg[4], seg[6], OAuthClientRouteKind.ROTATE_SECRET);
+            }
+            return new OAuthClientRoute(seg[4], seg[6], OAuthClientRouteKind.UNKNOWN);
         }
     }
 
