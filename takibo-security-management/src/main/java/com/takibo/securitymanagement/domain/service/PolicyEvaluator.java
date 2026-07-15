@@ -10,6 +10,8 @@ import java.util.Optional;
 @Service
 public class PolicyEvaluator {
 
+    private static final String POL_ORG_MISMATCH = "POL_ORG_MISMATCH";
+
     public PolicyDecision evaluate(Subject subject,
                                    Resource resource,
                                    Action action,
@@ -49,7 +51,7 @@ public class PolicyEvaluator {
 
             return PolicyDecision.builder()
                     .effect(Effect.DENY)
-                    .policyId("POL_ORG_MISMATCH")
+                    .policyId(POL_ORG_MISMATCH)
                     .reason("User does not belong to target organization")
                     .build();
         }
@@ -126,7 +128,7 @@ public class PolicyEvaluator {
             return Optional.empty();
         }
         if (action != Action.READ
-                || !"HUMAN".equals(subject.subjectType())
+                || !Subject.TYPE_HUMAN.equals(subject.subjectType())
                 || !"ORGANIZATION".equals(subject.scopeLevel())
                 || subject.orgId() == null
                 || subject.orgId().isBlank()
@@ -208,7 +210,7 @@ public class PolicyEvaluator {
                     "Only a HUMAN subject may manage OAuth clients");
         }
         if (subject.orgId() == null || !subject.orgId().equalsIgnoreCase(route.orgId())) {
-            return deny("POL_ORG_MISMATCH",
+            return deny(POL_ORG_MISMATCH,
                     "Token organization does not match the target organization");
         }
         if (!"SPACE".equals(subject.scopeLevel())) {
@@ -295,7 +297,7 @@ public class PolicyEvaluator {
         // Frontière stricte : un token PLATFORM sans org ou un token d'une autre org
         // ne peut pas utiliser cette surface située.
         if (subject.orgId() == null || !subject.orgId().equalsIgnoreCase(route.orgId())) {
-            return deny("POL_ORG_MISMATCH",
+            return deny(POL_ORG_MISMATCH,
                     "Token organization does not match the target organization");
         }
 

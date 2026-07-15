@@ -251,6 +251,19 @@ class PolicyEvaluatorTest {
                 new Environment(Instant.now(), "127.0.0.1", 0));
     }
 
+    private static void assertDeniedBy(PolicyDecision decision, String policyId) {
+        assertThat(decision)
+                .extracting(PolicyDecision::isDeny, PolicyDecision::getPolicyId)
+                .containsExactly(true, policyId);
+    }
+
+    private static void assertDeniedBy(PolicyDecision decision, String policyId, String description) {
+        assertThat(decision)
+                .as(description)
+                .extracting(PolicyDecision::isDeny, PolicyDecision::getPolicyId)
+                .containsExactly(true, policyId);
+    }
+
     @Test
     void tmsSpaceList_requiresOrgAuthority() {
         assertThat(evaluateTmsRoute(subject(Set.of("R_ORG_OWNER")), TMS_SPACES_PATH, Action.READ).isDeny()).isFalse();
@@ -402,8 +415,7 @@ class PolicyEvaluatorTest {
     void oauthClients_memberWithoutAdminRole_denied() {
         for (String path : new String[]{CLIENTS_PATH, ROTATE_PATH}) {
             PolicyDecision decision = evaluateTmsRoute(subject(Set.of()), path, Action.CREATE);
-            assertThat(decision.isDeny()).as(path).isTrue();
-            assertThat(decision.getPolicyId()).as(path).isEqualTo("POL_OAUTH_CLIENT_ADMIN_REQUIRED");
+            assertDeniedBy(decision, "POL_OAUTH_CLIENT_ADMIN_REQUIRED", path);
         }
     }
 
@@ -414,8 +426,7 @@ class PolicyEvaluatorTest {
         PolicyDecision decision = evaluateTmsRoute(
                 human(Set.of("R_ORG_OWNER"), ORG, null), CLIENTS_PATH, Action.CREATE);
 
-        assertThat(decision.isDeny()).isTrue();
-        assertThat(decision.getPolicyId()).isEqualTo("POL_OAUTH_CLIENT_ADMIN_REQUIRED");
+        assertDeniedBy(decision, "POL_OAUTH_CLIENT_ADMIN_REQUIRED");
     }
 
     @Test
@@ -425,8 +436,7 @@ class PolicyEvaluatorTest {
 
         PolicyDecision decision = evaluateTmsRoute(incoherentToken, CLIENTS_PATH, Action.CREATE);
 
-        assertThat(decision.isDeny()).isTrue();
-        assertThat(decision.getPolicyId()).isEqualTo("POL_OAUTH_CLIENT_ADMIN_REQUIRED");
+        assertDeniedBy(decision, "POL_OAUTH_CLIENT_ADMIN_REQUIRED");
         assertThat(decision.getReason()).contains("SPACE-scoped token");
     }
 
@@ -439,8 +449,7 @@ class PolicyEvaluatorTest {
         for (String role : new String[]{"R_SPACE_ADMIN", "R_ORG_ADMIN", "R_ORG_OWNER"}) {
             PolicyDecision decision = evaluateTmsRoute(
                     human(Set.of(role), ORG, SPACE), otherSpaceClients, Action.CREATE);
-            assertThat(decision.isDeny()).as(role).isTrue();
-            assertThat(decision.getPolicyId()).as(role).isEqualTo("POL_OAUTH_CLIENT_ADMIN_REQUIRED");
+            assertDeniedBy(decision, "POL_OAUTH_CLIENT_ADMIN_REQUIRED", role);
         }
     }
 
@@ -451,8 +460,7 @@ class PolicyEvaluatorTest {
         PolicyDecision decision = evaluateTmsRoute(subject(Set.of("R_ORG_OWNER")),
                 foreignOrgClients, Action.CREATE);
 
-        assertThat(decision.isDeny()).isTrue();
-        assertThat(decision.getPolicyId()).isEqualTo("POL_ORG_MISMATCH");
+        assertDeniedBy(decision, "POL_ORG_MISMATCH");
     }
 
     @Test
@@ -460,8 +468,7 @@ class PolicyEvaluatorTest {
         PolicyDecision decision = evaluateTmsRoute(
                 human(Set.of("R_PLATFORM_ADMIN"), null, null), CLIENTS_PATH, Action.CREATE);
 
-        assertThat(decision.isDeny()).isTrue();
-        assertThat(decision.getPolicyId()).isEqualTo("POL_ORG_MISMATCH");
+        assertDeniedBy(decision, "POL_ORG_MISMATCH");
     }
 
     @Test
@@ -472,9 +479,7 @@ class PolicyEvaluatorTest {
             Subject machine = new Subject("client-app",
                     Set.of("R_ORG_OWNER", "R_SPACE_ADMIN"), Set.of(), ORG, SPACE, type, "SPACE", ACCOUNT);
             PolicyDecision decision = evaluateTmsRoute(machine, CLIENTS_PATH, Action.CREATE);
-            assertThat(decision.isDeny()).as(String.valueOf(type)).isTrue();
-            assertThat(decision.getPolicyId()).as(String.valueOf(type))
-                    .isEqualTo("POL_OAUTH_CLIENT_ADMIN_REQUIRED");
+            assertDeniedBy(decision, "POL_OAUTH_CLIENT_ADMIN_REQUIRED", String.valueOf(type));
         }
     }
 
@@ -485,8 +490,7 @@ class PolicyEvaluatorTest {
         for (Action action : new Action[]{Action.READ, Action.UPDATE, Action.DELETE}) {
             PolicyDecision decision = evaluateTmsRoute(subject(Set.of("R_ORG_OWNER")),
                     CLIENTS_PATH, action);
-            assertThat(decision.isDeny()).as(action.name()).isTrue();
-            assertThat(decision.getPolicyId()).isEqualTo("POL_OAUTH_CLIENT_ACTION_NOT_SUPPORTED");
+            assertDeniedBy(decision, "POL_OAUTH_CLIENT_ACTION_NOT_SUPPORTED", action.name());
         }
     }
 
@@ -497,9 +501,7 @@ class PolicyEvaluatorTest {
                 CLIENTS_PATH + "/future-command"}) {
             PolicyDecision decision = evaluateTmsRoute(subject(Set.of("R_ORG_OWNER")), path, Action.CREATE);
 
-            assertThat(decision.isDeny()).as(path).isTrue();
-            assertThat(decision.getPolicyId()).as(path)
-                    .isEqualTo("POL_OAUTH_CLIENT_ROUTE_NOT_GOVERNED");
+            assertDeniedBy(decision, "POL_OAUTH_CLIENT_ROUTE_NOT_GOVERNED", path);
         }
     }
 
@@ -525,8 +527,7 @@ class PolicyEvaluatorTest {
         PolicyDecision decision = evaluateTmsRoute(subject(Set.of("R_ORG_OWNER")),
                 TMS_SPACES_PATH + "/" + SPACE + "/suspend", Action.CREATE);
 
-        assertThat(decision.isDeny()).isTrue();
-        assertThat(decision.getPolicyId()).isEqualTo("POL_SPACE_ROUTE_NOT_GOVERNED");
+        assertDeniedBy(decision, "POL_SPACE_ROUTE_NOT_GOVERNED");
     }
 
     @Test
@@ -537,7 +538,6 @@ class PolicyEvaluatorTest {
                 Action.CREATE,
                 new Environment(Instant.now(), "127.0.0.1", 0));
 
-        assertThat(decision.isDeny()).isTrue();
-        assertThat(decision.getPolicyId()).isEqualTo("POL_ORG_MISMATCH");
+        assertDeniedBy(decision, "POL_ORG_MISMATCH");
     }
 }

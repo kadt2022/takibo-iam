@@ -39,7 +39,7 @@ public record Subject(
                 permissions,
                 orgId,
                 spaceId,
-                "HUMAN",
+                TYPE_HUMAN,
                 spaceId == null ? "ORGANIZATION" : "SPACE",
                 "account");
     }

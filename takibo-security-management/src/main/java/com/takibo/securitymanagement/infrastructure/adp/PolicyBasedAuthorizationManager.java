@@ -48,9 +48,7 @@ public class PolicyBasedAuthorizationManager implements AuthorizationManager<Req
     ) {
         Authentication authentication = authenticationSupplier.get();
 
-        if (authentication == null
-                || !authentication.isAuthenticated()
-                || authentication instanceof AnonymousAuthenticationToken) {
+        if (isAnonymousOrUnauthenticated(authentication)) {
             log.debug("ADP: anonymous or unauthenticated request, denying access");
             return new AuthorizationDecision(false);
         }
@@ -131,6 +129,18 @@ public class PolicyBasedAuthorizationManager implements AuthorizationManager<Req
                 Map.of()
         );
 
+        return evaluateAdaptiveDecision(subjectId, request, decisionRequest);
+    }
+
+    private boolean isAnonymousOrUnauthenticated(Authentication authentication) {
+        return authentication == null
+                || !authentication.isAuthenticated()
+                || authentication instanceof AnonymousAuthenticationToken;
+    }
+
+    private AuthorizationDecision evaluateAdaptiveDecision(String subjectId,
+                                                           HttpServletRequest request,
+                                                           DecisionRequest decisionRequest) {
         try {
             DecisionResponse response = adaptiveDecisionPort.evaluate(decisionRequest);
 
