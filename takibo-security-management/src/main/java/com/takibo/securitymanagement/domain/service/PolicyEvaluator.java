@@ -23,7 +23,7 @@ public class PolicyEvaluator {
 
         // 2️⃣ Politiques spécifiques aux ressources
         PolicyDecision resourcePolicy = evaluateResourcePolicies(subject, resource, action);
-        if (resourcePolicy.isDeny()) {
+        if (resourcePolicy.isDeny() || isExplicitPermit(resourcePolicy)) {
             return resourcePolicy;
         }
 
@@ -78,6 +78,7 @@ public class PolicyEvaluator {
         // TmsSpaceRoute.parse classe .../spaces/{uuid}/clients comme sous-route et la
         // refuserait pour tous (POL_SPACE_ROUTE_NOT_GOVERNED), admins légitimes compris.
         return denyLegacyUserCreation(path, action, tenantAdmin)
+                .or(() -> currentUserSpacesPolicy(subject, path, action))
                 .or(() -> denyUserRbacGovernanceSurface(path, tenantAdmin))
                 .or(() -> denyReadableUsersSurface(path, tenantAdmin))
                 .or(() -> denyReadableRbacCatalogSurface(path, tenantAdmin))
@@ -90,6 +91,10 @@ public class PolicyEvaluator {
                         .policyId("POL_RESOURCE_ALLOW")
                         .reason("No specific resource policy denied access")
                         .build());
+    }
+
+    private static boolean isExplicitPermit(PolicyDecision decision) {
+        return !decision.isDeny() && !"POL_RESOURCE_ALLOW".equals(decision.getPolicyId());
     }
 
     /**
@@ -112,6 +117,30 @@ public class PolicyEvaluator {
             }
         }
         return false;
+    }
+
+    // /api/v1/me/spaces (IAM 32) : surface personnelle, sans rôle, mais strictement
+    // réservée à un humain authentifié au niveau ORGANIZATION avec org_id/account_id.
+    private static Optional<PolicyDecision> currentUserSpacesPolicy(Subject subject, String path, Action action) {
+        if (!"/api/v1/me/spaces".equals(path)) {
+            return Optional.empty();
+        }
+        if (action != Action.READ
+                || !"HUMAN".equals(subject.subjectType())
+                || !"ORGANIZATION".equals(subject.scopeLevel())
+                || subject.orgId() == null
+                || subject.orgId().isBlank()
+                || subject.accountId() == null
+                || subject.accountId().isBlank()
+                || subject.spaceId() != null) {
+            return deny("POL_MY_SPACES_ORG_HUMAN_REQUIRED",
+                    "Organization-scoped human account token required to list accessible spaces");
+        }
+        return Optional.of(PolicyDecision.builder()
+                .effect(Effect.PERMIT)
+                .policyId("POL_MY_SPACES_ORG_HUMAN_REQUIRED")
+                .reason("Organization-scoped human account token may list its own accessible spaces")
+                .build());
     }
 
     // /api/spaces/{spaceId}/users (création d'utilisateur, route UUID historique)

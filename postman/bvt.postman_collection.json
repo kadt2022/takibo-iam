@@ -437,6 +437,118 @@
           ]
         },
         {
+          "name": "RB4a. Login employee organisationnel -> token ORGANIZATION",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"employee1@takibo.io\",\n  \"password\": \"An0ther!Passw0rd\",\n  \"orgCode\": \"{{rb_orgCode}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('login organisationnel employee 200', () => pm.expect(pm.response.code).to.eql(200));",
+                  "const json = pm.response.json();",
+                  "pm.environment.set('rb_employee_org_token', json.accessToken);",
+                  "const payload = JSON.parse(atob(json.accessToken.split('.')[1]));",
+                  "pm.test('token ORGANIZATION sans contexte SPACE', () => {",
+                  "    pm.expect(payload.takibo_scope_level).to.eql('ORGANIZATION');",
+                  "    pm.expect(payload.org_id).to.eql(pm.environment.get('rb_orgId'));",
+                  "    pm.expect(payload.account_id).to.exist;",
+                  "    pm.expect(payload.space_id).to.be.undefined;",
+                  "    pm.expect(payload.user_id).to.be.undefined;",
+                  "});",
+                  "pm.test('aucun role organisationnel necessaire', () => {",
+                  "    pm.expect(payload.roles || []).to.be.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Auth Context - Employee liste ses Spaces accessibles",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{rb_employee_org_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/me/spaces",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "spaces"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.expect(pm.response.code).to.eql(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('structure stable', () => {",
+                  "    pm.expect(json.organizationId).to.eql(pm.environment.get('rb_orgId'));",
+                  "    pm.expect(json.items).to.be.an('array');",
+                  "});",
+                  "const item = (json.items || []).find(i => i.code === pm.environment.get('rb_spaceCode'));",
+                  "pm.test('la reponse contient son Space', () => {",
+                  "    pm.expect(item).to.exist;",
+                  "});",
+                  "pm.test('champs requis presents', () => {",
+                  "    pm.expect(item.spaceId).to.eql(pm.environment.get('rb_spaceId'));",
+                  "    pm.expect(item.code).to.eql(pm.environment.get('rb_spaceCode'));",
+                  "    pm.expect(item.userId).to.eql(pm.environment.get('rb_employeeUserId'));",
+                  "    pm.expect(item.spaceStatus).to.exist;",
+                  "    pm.expect(item.userStatus).to.exist;",
+                  "    pm.expect(item).to.have.property('selectable');",
+                  "});",
+                  "pm.test('Space actif selectionnable', () => {",
+                  "    pm.expect(item.spaceStatus).to.eql('ACTIVE');",
+                  "    pm.expect(item.userStatus).to.eql('ACTIVE');",
+                  "    pm.expect(item.selectable).to.eql(true);",
+                  "});",
+                  "pm.test('aucun token SPACE emis', () => {",
+                  "    pm.expect(JSON.stringify(json)).to.not.include('accessToken');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "RB5. Login employee -> aucun pouvoir",
           "request": {
             "method": "POST",

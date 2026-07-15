@@ -5,6 +5,7 @@ import com.takibo.adp.api.DecisionRequest;
 import com.takibo.adp.api.DecisionResponse;
 import com.takibo.adp.spring.adapter.RequestVelocityTracker;
 import com.takibo.securitycontext.exception.TakiboSecurityContextNotAvailableException;
+import com.takibo.securitycontext.model.StandardAttributeKeys;
 import com.takibo.securitycontext.model.TakiboSecurityContext;
 import com.takibo.securitycontext.spi.CurrentTakiboSecurityContextProvider;
 import com.takibo.securitymanagement.domain.model.Action;
@@ -70,6 +71,13 @@ public class PolicyBasedAuthorizationManager implements AuthorizationManager<Req
         String subjectType = ctx.subject().nature() != null ? ctx.subject().nature().name() : null;
         String organizationId = ctx.tenant() != null ? ctx.tenant().organizationId() : null;
         String spaceId = ctx.tenant() != null ? ctx.tenant().spaceId() : null;
+        String scopeLevel = ctx.attributes()
+                .get(StandardAttributeKeys.SCOPE_LEVEL, String.class)
+                .orElseGet(() -> spaceId != null ? "SPACE" : organizationId != null ? "ORGANIZATION" : null);
+        String accountId = ctx.attributes()
+                .get(StandardAttributeKeys.ACCOUNT_ID, java.util.UUID.class)
+                .map(java.util.UUID::toString)
+                .orElse(null);
 
         velocityTracker.recordRequest(subjectId);
 
@@ -80,7 +88,7 @@ public class PolicyBasedAuthorizationManager implements AuthorizationManager<Req
         //    L'ADP évalue ensuite le risque adaptatif — il ne peut jamais ré-autoriser un DENY.
         String ipAddress = ctx.transport() != null ? ctx.transport().ipAddress() : request.getRemoteAddr();
         PolicyDecision policyDecision = policyEvaluator.evaluate(
-                new Subject(subjectId, subjectType, roles, permissions, organizationId, spaceId),
+                new Subject(subjectId, roles, permissions, organizationId, spaceId, subjectType, scopeLevel, accountId),
                 new Resource(request.getRequestURI(), null, null),
                 Action.fromHttpMethod(request.getMethod()),
                 new Environment(Instant.now(), ipAddress, 0));
