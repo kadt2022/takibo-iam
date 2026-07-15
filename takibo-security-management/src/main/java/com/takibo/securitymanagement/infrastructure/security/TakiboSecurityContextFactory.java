@@ -21,6 +21,7 @@ final class TakiboSecurityContextFactory {
         UUID userId = ClaimReader.readUuid(claims, "userId");
         String sub = ClaimReader.readString(claims, "sub");
         String subjectType = ClaimReader.readString(claims, "subjectType");
+        String scopeLevel = ClaimReader.readString(claims, "scopeLevel");
         String authMethodClaim = ClaimReader.readString(claims, "authMethod");
 
         SubjectNature subjectNature;
@@ -118,6 +119,9 @@ final class TakiboSecurityContextFactory {
         }
         if (userId != null) {
             attributes.put(StandardAttributeKeys.USER_ID, userId);
+        }
+        if (scopeLevel != null && !scopeLevel.isBlank()) {
+            attributes.put(StandardAttributeKeys.SCOPE_LEVEL, scopeLevel);
         }
 
         return TakiboSecurityContext.builder()

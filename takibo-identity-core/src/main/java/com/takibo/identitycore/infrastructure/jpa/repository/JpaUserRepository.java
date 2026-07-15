@@ -1,6 +1,7 @@
 package com.takibo.identitycore.infrastructure.jpa.repository;
 
 import com.takibo.identitycore.application.identity.readmodel.UserReadModel;
+import com.takibo.identitycore.application.spacecontext.model.UserSpaceMembership;
 import com.takibo.identitycore.domain.status.UserStatus;
 import com.takibo.identitycore.domain.type.UserType;
 import com.takibo.identitycore.infrastructure.entity.UserEntity;
@@ -61,6 +62,15 @@ public interface JpaUserRepository extends JpaRepository<UserEntity, UUID>, JpaS
     Optional<UserReadModel> findReadModelBySpaceAndId(@Param("spaceId") UUID spaceId,
                                                       @Param("userId") UUID userId);
 
+    @Query("""
+            select new com.takibo.identitycore.application.spacecontext.model.UserSpaceMembership(
+                u.spaceId, u.id, u.status)
+            from UserEntity u
+            where u.orgId = :orgId
+              and u.accountId = :accountId
+            """)
+    java.util.List<UserSpaceMembership> findSpaceMembershipsByOrgAndAccount(@Param("orgId") UUID orgId,
+                                                                            @Param("accountId") UUID accountId);
 
     boolean existsBySpaceIdAndUsernameIgnoreCase(UUID spaceId, String username);
 

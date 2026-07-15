@@ -16,12 +16,25 @@ class PolicyEvaluatorTest {
 
     private static final String ORG = "aaaaaaaa-0000-0000-0000-000000000001";
     private static final String SPACE = "bbbbbbbb-0000-0000-0000-000000000002";
+    private static final String ACCOUNT = "cccccccc-0000-0000-0000-000000000003";
     private static final String READABLE_USERS_PATH = "/api/v1/orgs/takibo-iam/spaces/finance/users";
 
     private final PolicyEvaluator evaluator = new PolicyEvaluator();
 
     private Subject subject(Set<String> roles) {
         return new Subject("actor", roles, Set.of(), ORG, SPACE);
+    }
+
+    private Subject orgHuman(Set<String> roles) {
+        return new Subject("actor", roles, Set.of(), ORG, null, "HUMAN", "ORGANIZATION", ACCOUNT);
+    }
+
+    private PolicyDecision evaluateMySpaces(Subject subject) {
+        return evaluator.evaluate(
+                subject,
+                new Resource("/api/v1/me/spaces", null, null),
+                Action.READ,
+                new Environment(Instant.now(), "127.0.0.1", 0));
     }
 
     private PolicyDecision evaluateUsersRoute(Set<String> roles, String path, Action action) {
@@ -151,6 +164,61 @@ class PolicyEvaluatorTest {
         PolicyDecision decision = evaluateUsersRoute(Set.of(), "/api/v1/orgs/signup", Action.CREATE);
 
         assertThat(decision.isDeny()).isFalse();
+    }
+
+    @Test
+    void currentUserSpaces_allowsOrganizationScopedHumanWithoutRole() {
+        PolicyDecision decision = evaluateMySpaces(orgHuman(Set.of()));
+
+        assertThat(decision.isDeny()).isFalse();
+        assertThat(decision.getPolicyId()).isEqualTo("POL_MY_SPACES_ORG_HUMAN_REQUIRED");
+    }
+
+    @Test
+    void currentUserSpaces_orgOwnerStillUsesPersonalSurface() {
+        PolicyDecision decision = evaluateMySpaces(orgHuman(Set.of("R_ORG_OWNER")));
+
+        assertThat(decision.isDeny()).isFalse();
+        assertThat(decision.getPolicyId()).isEqualTo("POL_MY_SPACES_ORG_HUMAN_REQUIRED");
+    }
+
+    @Test
+    void currentUserSpaces_deniesPlatformOrServiceTokens() {
+        for (Subject subject : java.util.List.of(
+                new Subject("platform", Set.of("R_PLATFORM_ADMIN"), Set.of(), ORG, null,
+                        "PLATFORM", "ORGANIZATION", null),
+                new Subject("client", Set.of(), Set.of(), ORG, null,
+                        "SERVICE", "ORGANIZATION", null))) {
+            PolicyDecision decision = evaluateMySpaces(subject);
+
+            assertThat(decision.isDeny()).isTrue();
+            assertThat(decision.getPolicyId()).isEqualTo("POL_MY_SPACES_ORG_HUMAN_REQUIRED");
+        }
+    }
+
+    @Test
+    void currentUserSpaces_deniesSpaceToken() {
+        Subject spaceToken = new Subject("actor", Set.of(), Set.of(), ORG, SPACE,
+                "HUMAN", "SPACE", ACCOUNT);
+
+        PolicyDecision decision = evaluateMySpaces(spaceToken);
+
+        assertThat(decision.isDeny()).isTrue();
+        assertThat(decision.getPolicyId()).isEqualTo("POL_MY_SPACES_ORG_HUMAN_REQUIRED");
+    }
+
+    @Test
+    void currentUserSpaces_deniesTokenWithoutOrgOrAccount() {
+        for (Subject subject : java.util.List.of(
+                new Subject("actor", Set.of(), Set.of(), null, null,
+                        "HUMAN", "ORGANIZATION", ACCOUNT),
+                new Subject("actor", Set.of(), Set.of(), ORG, null,
+                        "HUMAN", "ORGANIZATION", null))) {
+            PolicyDecision decision = evaluateMySpaces(subject);
+
+            assertThat(decision.isDeny()).isTrue();
+            assertThat(decision.getPolicyId()).isEqualTo("POL_MY_SPACES_ORG_HUMAN_REQUIRED");
+        }
     }
 
     @Test

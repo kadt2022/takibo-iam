@@ -9,6 +9,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.Optional;
+import java.util.Collection;
+import java.util.List;
 import java.util.UUID;
 
 public interface JpaSpaceRepository extends JpaRepository<SpaceEntity, UUID> {
@@ -44,6 +46,8 @@ public interface JpaSpaceRepository extends JpaRepository<SpaceEntity, UUID> {
     boolean existsByOrgIdAndCode(UUID orgId, String code);
 
     Optional<SpaceEntity> findByOrgIdAndCode(UUID orgId, String code);
+
+    List<SpaceEntity> findByOrgIdAndIdIn(UUID orgId, Collection<UUID> ids);
 
     /**
      * Retourne l'orgId d'un space à partir de son id.
