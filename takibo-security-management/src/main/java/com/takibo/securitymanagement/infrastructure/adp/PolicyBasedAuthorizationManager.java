@@ -48,9 +48,7 @@ public class PolicyBasedAuthorizationManager implements AuthorizationManager<Req
     ) {
         Authentication authentication = authenticationSupplier.get();
 
-        if (authentication == null
-                || !authentication.isAuthenticated()
-                || authentication instanceof AnonymousAuthenticationToken) {
+        if (isAnonymousOrUnauthenticated(authentication)) {
             log.debug("ADP: anonymous or unauthenticated request, denying access");
             return new AuthorizationDecision(false);
         }
@@ -66,9 +64,11 @@ public class PolicyBasedAuthorizationManager implements AuthorizationManager<Req
         HttpServletRequest request = context.getRequest();
 
         String subjectId = ctx.subject().subjectId();
+        // Nature du sujet telle qu'émise par le token (HUMAN / SERVICE / SYSTEM) :
+        // les règles réservées aux humains la lisent, jamais une inférence locale.
+        String subjectType = ctx.subject().nature() != null ? ctx.subject().nature().name() : null;
         String organizationId = ctx.tenant() != null ? ctx.tenant().organizationId() : null;
         String spaceId = ctx.tenant() != null ? ctx.tenant().spaceId() : null;
-        String subjectType = ctx.subject().nature().name();
         String scopeLevel = ctx.attributes()
                 .get(StandardAttributeKeys.SCOPE_LEVEL, String.class)
                 .orElseGet(() -> spaceId != null ? "SPACE" : organizationId != null ? "ORGANIZATION" : null);
@@ -129,6 +129,18 @@ public class PolicyBasedAuthorizationManager implements AuthorizationManager<Req
                 Map.of()
         );
 
+        return evaluateAdaptiveDecision(subjectId, request, decisionRequest);
+    }
+
+    private boolean isAnonymousOrUnauthenticated(Authentication authentication) {
+        return authentication == null
+                || !authentication.isAuthenticated()
+                || authentication instanceof AnonymousAuthenticationToken;
+    }
+
+    private AuthorizationDecision evaluateAdaptiveDecision(String subjectId,
+                                                           HttpServletRequest request,
+                                                           DecisionRequest decisionRequest) {
         try {
             DecisionResponse response = adaptiveDecisionPort.evaluate(decisionRequest);
 

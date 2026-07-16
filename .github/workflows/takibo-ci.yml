@@ -279,6 +279,11 @@ jobs:
           SPRING_DATASOURCE_PASSWORD: takibo
           SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${{ secrets.CI_JWT_ISSUER_URI }}
           SERVER_PORT: ${{ env.TAKIBO_APP_PORT }}
+          # BVT déterministe : neutralise l'ADP adaptatif (TimeRiskEvaluator peut
+          # renvoyer CHALLENGE hors 08h-18h UTC sur le runner). Le PolicyEvaluator
+          # reste actif : aucun DENY de rôle ni de frontière n'est neutralisé.
+          # ADP reste actif en local, dev et production.
+          TAKIBO_ADP_ENABLED: "false"
         run: |
           JAR_FILE="$(find build-artifacts -type f -path '*takibo-iam-boot*' \
             -name '*.jar' ! -name '*-plain.jar' | head -n 1)"

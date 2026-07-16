@@ -12,6 +12,7 @@ import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -30,6 +31,18 @@ public class OAuthClientRepositoryAdapter implements OAuthClientRepository {
     @Override public boolean existsByClientId(String clientId) { return jpa.existsByClientId(clientId); }
 
     @Override public OAuthClient save(OAuthClient client) {
+        // Update (ex. rotation de secret) : appliquer l'état domaine sur l'entité
+        // MANAGÉE — re-mapper via toEntity fabriquerait des enfants neufs et
+        // ré-insérerait des doublons (violation d'unicité, ex. uk_ocg_client_grant).
+        UUID id = client.getId() == null ? null : client.getId().getValue();
+        if (id != null) {
+            Optional<OAuth2ClientEntity> managed = jpa.findById(id);
+            if (managed.isPresent()) {
+                mapper.applyDomainState(client, managed.get());
+                return mapper.toDomain(jpa.save(managed.get()));
+            }
+        }
+
         OAuth2ClientEntity entity = mapper.toEntity(client, spaceRef());
         OAuth2ClientEntity saved  = jpa.save(entity);
         return mapper.toDomain(saved);
@@ -37,5 +50,20 @@ public class OAuthClientRepositoryAdapter implements OAuthClientRepository {
 
     @Override public Optional<OAuthClient> findById(UUID id) {
         return jpa.findById(id).map(mapper::toDomain);
+    }
+
+    @Override public Optional<OAuthClient> findByIdAndOrgIdAndSpaceId(UUID id, UUID orgId, UUID spaceId) {
+        return jpa.findByIdAndOrgIdAndSpaceId(id, orgId, spaceId).map(mapper::toDomain);
+    }
+
+    @Override
+    public boolean updateSecretByIdAndOrgIdAndSpaceId(UUID id,
+                                                      UUID orgId,
+                                                      UUID spaceId,
+                                                      Long expectedVersion,
+                                                      String secretHash,
+                                                      Instant expiresAt) {
+        return jpa.updateSecretByIdAndOrgIdAndSpaceId(
+                id, orgId, spaceId, expectedVersion, secretHash, expiresAt) == 1;
     }
 }

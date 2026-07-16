@@ -1620,12 +1620,13 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/orgs/{{oc_orgId}}/spaces/{{oc_spaceId}}/clients",
+              "raw": "{{baseUrl}}/api/v1/orgs/{{oc_orgId}}/spaces/{{oc_spaceId}}/clients",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
+                "v1",
                 "orgs",
                 "{{oc_orgId}}",
                 "spaces",
@@ -1646,6 +1647,7 @@
                 "exec": [
                   "pm.test('client cree', () => pm.expect([200, 201]).to.include(pm.response.code));",
                   "const json = pm.response.json();",
+                  "pm.environment.set('oc_clientDbId', json.client.id);",
                   "pm.test('secret one-time delivre une seule fois', () => {",
                   "    pm.expect(json.oneTimePlainSecret).to.be.a('string').and.to.not.be.empty;",
                   "});"
@@ -1669,12 +1671,13 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/orgs/{{oc_orgId}}/spaces/{{oc_spaceId}}/clients",
+              "raw": "{{baseUrl}}/api/v1/orgs/{{oc_orgId}}/spaces/{{oc_spaceId}}/clients",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
+                "v1",
                 "orgs",
                 "{{oc_orgId}}",
                 "spaces",
@@ -1693,7 +1696,113 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('403 - la plateforme ne gouverne pas le tenant', () => pm.expect(pm.response.code).to.eql(403));"
+                  "pm.test('403 - la plateforme ne gouverne pas le tenant', () => pm.expect(pm.response.code).to.eql(403));",
+                  "pm.test('aucun secret dans la reponse de refus', () => {",
+                  "    pm.expect(pm.response.text()).to.not.include('oneTimePlainSecret');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "OC6. Founder fait tourner le secret de SON client -> nouveau secret one-time",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{oc_founder_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{oc_orgId}}/spaces/{{oc_spaceId}}/clients/{{oc_clientDbId}}/rotate-secret",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{oc_orgId}}",
+                "spaces",
+                "{{oc_spaceId}}",
+                "clients",
+                "{{oc_clientDbId}}",
+                "rotate-secret"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('rotation 200', () => pm.expect(pm.response.code).to.eql(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('nouveau secret one-time delivre', () => {",
+                  "    pm.expect(json.oneTimePlainSecret).to.be.a('string').and.to.not.be.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "OC7. NEGATIF: token PLATFORM ne fait pas tourner un secret tenant -> 403, aucun secret",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{oc_platform_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{oc_orgId}}/spaces/{{oc_spaceId}}/clients/{{oc_clientDbId}}/rotate-secret",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{oc_orgId}}",
+                "spaces",
+                "{{oc_spaceId}}",
+                "clients",
+                "{{oc_clientDbId}}",
+                "rotate-secret"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403 - la plateforme ne gouverne pas le tenant', () => pm.expect(pm.response.code).to.eql(403));",
+                  "pm.test('aucun secret dans la reponse de refus', () => {",
+                  "    pm.expect(pm.response.text()).to.not.include('oneTimePlainSecret');",
+                  "});"
                 ]
               }
             }

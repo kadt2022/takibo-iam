@@ -30,7 +30,9 @@ final class TakiboSecurityContextFactory {
 
         // On lit la nature du sujet EXPLICITEMENT (subject_type émis par TAS) ;
         // l'inférence par présence d'accountId reste un fallback pour les anciens tokens.
-        boolean isHuman = subjectType != null ? "HUMAN".equals(subjectType) : accountId != null;
+        boolean isHuman = subjectType != null
+                ? com.takibo.securitymanagement.domain.model.Subject.TYPE_HUMAN.equals(subjectType)
+                : accountId != null;
 
         if (!isHuman) {
             if (sub == null || sub.isBlank()) {

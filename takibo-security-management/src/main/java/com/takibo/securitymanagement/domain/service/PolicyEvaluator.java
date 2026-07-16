@@ -10,6 +10,8 @@ import java.util.Optional;
 @Service
 public class PolicyEvaluator {
 
+    private static final String POL_ORG_MISMATCH = "POL_ORG_MISMATCH";
+
     public PolicyDecision evaluate(Subject subject,
                                    Resource resource,
                                    Action action,
@@ -49,7 +51,7 @@ public class PolicyEvaluator {
 
             return PolicyDecision.builder()
                     .effect(Effect.DENY)
-                    .policyId("POL_ORG_MISMATCH")
+                    .policyId(POL_ORG_MISMATCH)
                     .reason("User does not belong to target organization")
                     .build();
         }
@@ -74,11 +76,15 @@ public class PolicyEvaluator {
         String path = resource.path();
         boolean tenantAdmin = isTenantAdmin(subject);
 
+        // ORDONNANCEMENT : la règle clients OAuth2 DOIT précéder denyTmsSpaceSurface —
+        // TmsSpaceRoute.parse classe .../spaces/{uuid}/clients comme sous-route et la
+        // refuserait pour tous (POL_SPACE_ROUTE_NOT_GOVERNED), admins légitimes compris.
         return denyLegacyUserCreation(path, action, tenantAdmin)
                 .or(() -> currentUserSpacesPolicy(subject, path, action))
                 .or(() -> denyUserRbacGovernanceSurface(path, tenantAdmin))
                 .or(() -> denyReadableUsersSurface(path, tenantAdmin))
                 .or(() -> denyReadableRbacCatalogSurface(path, tenantAdmin))
+                .or(() -> denyOAuthClientSurface(subject, path, action))
                 .or(() -> denyTmsSpaceSurface(subject, path, action))
                 .or(() -> denyLegacyClientCreation(path, action, tenantAdmin))
                 .or(() -> denyGenericUsersSurface(subject, path, action, tenantAdmin))
@@ -122,7 +128,7 @@ public class PolicyEvaluator {
             return Optional.empty();
         }
         if (action != Action.READ
-                || !"HUMAN".equals(subject.subjectType())
+                || !Subject.TYPE_HUMAN.equals(subject.subjectType())
                 || !"ORGANIZATION".equals(subject.scopeLevel())
                 || subject.orgId() == null
                 || subject.orgId().isBlank()
@@ -183,6 +189,90 @@ public class PolicyEvaluator {
         return Optional.empty();
     }
 
+    // /api/v1/orgs/{UUID}/spaces/{UUID}/clients[...] (management des clients OAuth2)
+    // Règle POL_OAUTH_CLIENT_ADMIN_REQUIRED : créer un client machine ou faire tourner
+    // son secret est l'acte le plus sensible du tenant (le secret sort en clair).
+    // Exigences cumulatives : sujet HUMAIN, token de portée SPACE (org_id ET space_id
+    // présents), org et space du token == org et space du chemin, et un rôle d'admin
+    // tenant (R_ORG_OWNER / R_ORG_ADMIN / R_SPACE_ADMIN, alias legacy acceptés).
+    // Un token ORGANIZATION (sans space_id) est REFUSÉ : la surface reste volontairement
+    // inutilisable pour lui jusqu'à l'échange ORG->SPACE (IAM 34) — fail-closed assumé.
+    // Cette règle gouverne TOUTE la surface clients : rien n'y retombe jamais sur
+    // POL_DEFAULT_ALLOW.
+    private static Optional<PolicyDecision> denyOAuthClientSurface(Subject subject, String path, Action action) {
+        OAuthClientRoute route = OAuthClientRoute.parse(path);
+        if (route == null) {
+            return Optional.empty();
+        }
+
+        if (!subject.isHuman()) {
+            return deny("POL_OAUTH_CLIENT_ADMIN_REQUIRED",
+                    "Only a HUMAN subject may manage OAuth clients");
+        }
+        if (subject.orgId() == null || !subject.orgId().equalsIgnoreCase(route.orgId())) {
+            return deny(POL_ORG_MISMATCH,
+                    "Token organization does not match the target organization");
+        }
+        if (!"SPACE".equals(subject.scopeLevel())) {
+            return deny("POL_OAUTH_CLIENT_ADMIN_REQUIRED",
+                    "A SPACE-scoped token is required");
+        }
+        if (subject.spaceId() == null || !subject.spaceId().equalsIgnoreCase(route.spaceId())) {
+            return deny("POL_OAUTH_CLIENT_ADMIN_REQUIRED",
+                    "A SPACE-scoped token designating the target space is required to manage OAuth clients");
+        }
+        if (route.kind() == OAuthClientRouteKind.UNKNOWN) {
+            return deny("POL_OAUTH_CLIENT_ROUTE_NOT_GOVERNED",
+                    "No policy governs this OAuth client route yet");
+        }
+        if (action != Action.CREATE) {
+            return deny("POL_OAUTH_CLIENT_ACTION_NOT_SUPPORTED",
+                    "Only CREATE is governed on the OAuth clients surface");
+        }
+        if (!hasAnyRole(subject, "R_ORG_OWNER", "ORG_OWNER", "R_ORG_ADMIN", "ORG_ADMIN",
+                "R_SPACE_ADMIN", "SPACE_ADMIN")) {
+            return deny("POL_OAUTH_CLIENT_ADMIN_REQUIRED",
+                    "R_ORG_OWNER, R_ORG_ADMIN or R_SPACE_ADMIN required to manage OAuth clients");
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Route de la surface clients OAuth2 : /api/v1/orgs/{UUID}/spaces/{UUID}/clients
+     * et toutes ses sous-routes ({id}/rotate-secret, ...). Le discriminant UUID suit
+     * la même doctrine que {@link TmsSpaceRoute} : les routes en codes lisibles ne
+     * matchent jamais.
+     */
+    enum OAuthClientRouteKind {
+        COLLECTION_CREATE,
+        ROTATE_SECRET,
+        UNKNOWN
+    }
+
+    record OAuthClientRoute(String orgId, String spaceId, OAuthClientRouteKind kind) {
+
+        static OAuthClientRoute parse(String path) {
+            // ["", "api", "v1", "orgs", {orgId}, "spaces", {spaceId}, "clients", ...]
+            String[] seg = path.split("/");
+            boolean onSurface = seg.length >= 8
+                    && seg[0].isEmpty()
+                    && "api".equals(seg[1]) && "v1".equals(seg[2])
+                    && "orgs".equals(seg[3]) && "spaces".equals(seg[5])
+                    && "clients".equals(seg[7])
+                    && isUuid(seg[4]) && isUuid(seg[6]);
+            if (!onSurface) {
+                return null;
+            }
+            if (seg.length == 8) {
+                return new OAuthClientRoute(seg[4], seg[6], OAuthClientRouteKind.COLLECTION_CREATE);
+            }
+            if (seg.length == 10 && isUuid(seg[8]) && "rotate-secret".equals(seg[9])) {
+                return new OAuthClientRoute(seg[4], seg[6], OAuthClientRouteKind.ROTATE_SECRET);
+            }
+            return new OAuthClientRoute(seg[4], seg[6], OAuthClientRouteKind.UNKNOWN);
+        }
+    }
+
     // /api/v1/orgs/{orgId}/spaces/** (surface TMS, plan de management)
     // Doctrine d'identification : TMS parle en UUID, TIS-CORE en codes lisibles.
     // Le discriminant UUID laisse donc les routes lisibles (codes) à leurs règles dédiées.
@@ -192,6 +282,13 @@ public class PolicyEvaluator {
     // sous-route pas encore gouvernée aussi (POL_SPACE_ROUTE_NOT_GOVERNED) :
     // rien de cette surface ne retombe jamais sur POL_DEFAULT_ALLOW.
     private static Optional<PolicyDecision> denyTmsSpaceSurface(Subject subject, String path, Action action) {
+        // La surface clients OAuth2 (.../spaces/{uuid}/clients[...]) est gouvernée par
+        // sa règle dédiée (denyOAuthClientSurface, évaluée avant) : elle est retirée de
+        // cette surface, sinon la sous-route serait refusée pour tous — admins compris.
+        if (OAuthClientRoute.parse(path) != null) {
+            return Optional.empty();
+        }
+
         TmsSpaceRoute route = TmsSpaceRoute.parse(path);
         if (route == null) {
             return Optional.empty();
@@ -200,7 +297,7 @@ public class PolicyEvaluator {
         // Frontière stricte : un token PLATFORM sans org ou un token d'une autre org
         // ne peut pas utiliser cette surface située.
         if (subject.orgId() == null || !subject.orgId().equalsIgnoreCase(route.orgId())) {
-            return deny("POL_ORG_MISMATCH",
+            return deny(POL_ORG_MISMATCH,
                     "Token organization does not match the target organization");
         }
 
@@ -285,14 +382,14 @@ public class PolicyEvaluator {
         boolean isSubRoute() {
             return subRoute;
         }
+    }
 
-        private static boolean isUuid(String value) {
-            try {
-                java.util.UUID.fromString(value);
-                return true;
-            } catch (IllegalArgumentException e) {
-                return false;
-            }
+    private static boolean isUuid(String value) {
+        try {
+            java.util.UUID.fromString(value);
+            return true;
+        } catch (IllegalArgumentException e) {
+            return false;
         }
     }
 

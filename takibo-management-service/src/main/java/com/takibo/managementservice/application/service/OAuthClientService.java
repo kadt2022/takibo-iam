@@ -82,27 +82,28 @@ public class OAuthClientService {
     return values != null && !values.isEmpty();
   }
 
+  private static final String CLIENT_NOT_FOUND = "client not found";
+
   public RegisteredClientResult rotateSecret(UUID orgId, SpaceId spaceId, UUID clientId, Instant expiresAt) {
     Assert.notNull(orgId, "orgId is required");
     Assert.notNull(spaceId, "spaceId is required");
     Assert.notNull(clientId, "clientId is required");
 
-    OAuthClient existing = repository.findById(clientId)
-            .orElseThrow(() -> new InvalidClientConfigurationException("client not found"));
-
-    if (!orgId.equals(existing.getOrgId()) || !spaceId.equals(existing.getSpaceId())) {
-      throw new InvalidClientConfigurationException("client not in org/space");
-    }
+    OAuthClient existing = repository.findByIdAndOrgIdAndSpaceId(clientId, orgId, spaceId.value())
+            .orElseThrow(() -> new InvalidClientConfigurationException(CLIENT_NOT_FOUND));
     if (existing.getClientType() == ClientType.PUBLIC || !usesSecret(existing.getTokenEndpointAuthMethod())) {
       throw new InvalidClientConfigurationException("client does not use secrets");
     }
 
     Instant newExpiresAt = expiresAt != null ? expiresAt : existing.getClientSecretExpiresAt();
     Secrets secrets = generateSecretIfNeeded(true, newExpiresAt);
-    OAuthClient updated = existing.withSecret(secrets.hash(), secrets.expiresAt());
-    OAuthClient saved = repository.save(updated);
+    boolean updated = repository.updateSecretByIdAndOrgIdAndSpaceId(
+            clientId, orgId, spaceId.value(), existing.getVersion(), secrets.hash(), secrets.expiresAt());
+    if (!updated) {
+      throw new OAuthClientSecretRotationConflictException();
+    }
 
-    return new RegisteredClientResult(saved, secrets.plain());
+    return new RegisteredClientResult(existing.withSecret(secrets.hash(), secrets.expiresAt()), secrets.plain());
   }
 
   private static void validateInputs(UUID orgId, SpaceId spaceId, RegisterClientCommand cmd) {

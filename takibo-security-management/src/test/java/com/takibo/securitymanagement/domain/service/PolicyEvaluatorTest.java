@@ -22,7 +22,12 @@ class PolicyEvaluatorTest {
     private final PolicyEvaluator evaluator = new PolicyEvaluator();
 
     private Subject subject(Set<String> roles) {
-        return new Subject("actor", roles, Set.of(), ORG, SPACE);
+        return new Subject("actor", roles, Set.of(), ORG, SPACE, "HUMAN", "SPACE", ACCOUNT);
+    }
+
+    private static Subject human(Set<String> roles, String orgId, String spaceId) {
+        return new Subject("actor", roles, Set.of(), orgId, spaceId, "HUMAN",
+                spaceId == null ? "ORGANIZATION" : "SPACE", ACCOUNT);
     }
 
     private Subject orgHuman(Set<String> roles) {
@@ -246,6 +251,19 @@ class PolicyEvaluatorTest {
                 new Environment(Instant.now(), "127.0.0.1", 0));
     }
 
+    private static void assertDeniedBy(PolicyDecision decision, String policyId) {
+        assertThat(decision)
+                .extracting(PolicyDecision::isDeny, PolicyDecision::getPolicyId)
+                .containsExactly(true, policyId);
+    }
+
+    private static void assertDeniedBy(PolicyDecision decision, String policyId, String description) {
+        assertThat(decision)
+                .as(description)
+                .extracting(PolicyDecision::isDeny, PolicyDecision::getPolicyId)
+                .containsExactly(true, policyId);
+    }
+
     @Test
     void tmsSpaceList_requiresOrgAuthority() {
         assertThat(evaluateTmsRoute(subject(Set.of("R_ORG_OWNER")), TMS_SPACES_PATH, Action.READ).isDeny()).isFalse();
@@ -354,7 +372,8 @@ class PolicyEvaluatorTest {
 
     @Test
     void tmsSpaceSurface_platformTokenWithoutOrg_denied() {
-        Subject platform = new Subject("actor", Set.of("R_PLATFORM_ADMIN"), Set.of(), null, null);
+        Subject platform = new Subject("actor", Set.of("R_PLATFORM_ADMIN"), Set.of(), null, null,
+                "HUMAN", "PLATFORM", ACCOUNT);
         PolicyDecision decision = evaluateTmsRoute(platform, TMS_SPACES_PATH, Action.READ);
 
         assertThat(decision.isDeny()).isTrue();
@@ -371,15 +390,154 @@ class PolicyEvaluatorTest {
         assertThat(decision.isDeny()).isFalse();
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // Surface clients OAuth2 : /api/v1/orgs/{uuid}/spaces/{uuid}/clients (IAM 33)
+    // ─────────────────────────────────────────────────────────────
+
+    private static final String CLIENTS_PATH = TMS_SPACES_PATH + "/" + SPACE + "/clients";
+    private static final String ROTATE_PATH =
+            CLIENTS_PATH + "/eeeeeeee-0000-0000-0000-000000000005/rotate-secret";
+
+    @Test
+    void oauthClients_create_allowedForTenantAdminOfTargetSpace() {
+        // R_SPACE_ADMIN du space cible, R_ORG_ADMIN et R_ORG_OWNER porteurs d'un
+        // token SPACE du space cible : le rôle autorise, la frontière reste le token.
+        for (String role : new String[]{"R_SPACE_ADMIN", "R_ORG_ADMIN", "R_ORG_OWNER",
+                "SPACE_ADMIN", "ORG_ADMIN", "ORG_OWNER"}) {
+            assertThat(evaluateTmsRoute(subject(Set.of(role)), CLIENTS_PATH, Action.CREATE).isDeny())
+                    .as(role).isFalse();
+            assertThat(evaluateTmsRoute(subject(Set.of(role)), ROTATE_PATH, Action.CREATE).isDeny())
+                    .as(role + " rotate").isFalse();
+        }
+    }
+
+    @Test
+    void oauthClients_memberWithoutAdminRole_denied() {
+        for (String path : new String[]{CLIENTS_PATH, ROTATE_PATH}) {
+            PolicyDecision decision = evaluateTmsRoute(subject(Set.of()), path, Action.CREATE);
+            assertDeniedBy(decision, "POL_OAUTH_CLIENT_ADMIN_REQUIRED", path);
+        }
+    }
+
+    @Test
+    void oauthClients_organizationScopedToken_denied_evenForOrgOwner() {
+        // Token ORGANIZATION (sans space_id) : surface volontairement inutilisable
+        // jusqu'à l'échange ORG->SPACE (IAM 34) — fail-closed assumé.
+        PolicyDecision decision = evaluateTmsRoute(
+                human(Set.of("R_ORG_OWNER"), ORG, null), CLIENTS_PATH, Action.CREATE);
+
+        assertDeniedBy(decision, "POL_OAUTH_CLIENT_ADMIN_REQUIRED");
+    }
+
+    @Test
+    void oauthClients_organizationScopedTokenWithSpaceId_denied_evenForOrgOwner() {
+        Subject incoherentToken = new Subject("actor", Set.of("R_ORG_OWNER"), Set.of(), ORG, SPACE,
+                "HUMAN", "ORGANIZATION", ACCOUNT);
+
+        PolicyDecision decision = evaluateTmsRoute(incoherentToken, CLIENTS_PATH, Action.CREATE);
+
+        assertDeniedBy(decision, "POL_OAUTH_CLIENT_ADMIN_REQUIRED");
+        assertThat(decision.getReason()).contains("SPACE-scoped token");
+    }
+
+    @Test
+    void oauthClients_spaceTokenTargetingAnotherSpace_denied() {
+        // Token SPACE de Finance visant les clients de Marketing : la frontière
+        // token.space_id == path.spaceId prime sur tout rôle.
+        String otherSpaceClients = TMS_SPACES_PATH + "/" + OTHER_SPACE + "/clients";
+
+        for (String role : new String[]{"R_SPACE_ADMIN", "R_ORG_ADMIN", "R_ORG_OWNER"}) {
+            PolicyDecision decision = evaluateTmsRoute(
+                    human(Set.of(role), ORG, SPACE), otherSpaceClients, Action.CREATE);
+            assertDeniedBy(decision, "POL_OAUTH_CLIENT_ADMIN_REQUIRED", role);
+        }
+    }
+
+    @Test
+    void oauthClients_tokenOfAnotherOrganization_denied() {
+        String foreignOrgClients = "/api/v1/orgs/99999999-0000-0000-0000-000000000009/spaces/"
+                + SPACE + "/clients";
+        PolicyDecision decision = evaluateTmsRoute(subject(Set.of("R_ORG_OWNER")),
+                foreignOrgClients, Action.CREATE);
+
+        assertDeniedBy(decision, "POL_ORG_MISMATCH");
+    }
+
+    @Test
+    void oauthClients_platformToken_denied() {
+        PolicyDecision decision = evaluateTmsRoute(
+                human(Set.of("R_PLATFORM_ADMIN"), null, null), CLIENTS_PATH, Action.CREATE);
+
+        assertDeniedBy(decision, "POL_ORG_MISMATCH");
+    }
+
+    @Test
+    void oauthClients_machineSubject_denied_evenWithAdminRoles() {
+        // Un CLIENT_APP / machine n'administre jamais les clients d'un tenant,
+        // quels que soient les rôles portés par son token.
+        for (String type : new String[]{"SERVICE", "SYSTEM", null}) {
+            Subject machine = new Subject("client-app",
+                    Set.of("R_ORG_OWNER", "R_SPACE_ADMIN"), Set.of(), ORG, SPACE, type, "SPACE", ACCOUNT);
+            PolicyDecision decision = evaluateTmsRoute(machine, CLIENTS_PATH, Action.CREATE);
+            assertDeniedBy(decision, "POL_OAUTH_CLIENT_ADMIN_REQUIRED", String.valueOf(type));
+        }
+    }
+
+    @Test
+    void oauthClients_ungovernedActions_failClosed_evenForAdmin() {
+        // Rien de la surface clients ne retombe jamais sur le fallback : les actions
+        // non gouvernées sont refusées par la règle dédiée, même pour un admin légitime.
+        for (Action action : new Action[]{Action.READ, Action.UPDATE, Action.DELETE}) {
+            PolicyDecision decision = evaluateTmsRoute(subject(Set.of("R_ORG_OWNER")),
+                    CLIENTS_PATH, action);
+            assertDeniedBy(decision, "POL_OAUTH_CLIENT_ACTION_NOT_SUPPORTED", action.name());
+        }
+    }
+
+    @Test
+    void oauthClients_unknownPostSubRoutes_failClosedWithDedicatedPolicy() {
+        for (String path : new String[]{
+                CLIENTS_PATH + "/eeeeeeee-0000-0000-0000-000000000005/disable",
+                CLIENTS_PATH + "/future-command"}) {
+            PolicyDecision decision = evaluateTmsRoute(subject(Set.of("R_ORG_OWNER")), path, Action.CREATE);
+
+            assertDeniedBy(decision, "POL_OAUTH_CLIENT_ROUTE_NOT_GOVERNED", path);
+        }
+    }
+
+    @Test
+    void oauthClients_ruleEvaluatedBeforeTmsSpaceSubRouteDeny() {
+        // PIÈGE D'ORDONNANCEMENT : TmsSpaceRoute.parse classe .../spaces/{uuid}/clients
+        // comme SOUS-ROUTE. Si la règle clients n'était pas évaluée avant
+        // denyTmsSpaceSurface, un admin légitime prendrait POL_SPACE_ROUTE_NOT_GOVERNED.
+        PolicyDecision admin = evaluateTmsRoute(subject(Set.of("R_SPACE_ADMIN")),
+                CLIENTS_PATH, Action.CREATE);
+        assertThat(admin.isDeny()).isFalse();
+        assertThat(admin.getPolicyId()).isNotEqualTo("POL_SPACE_ROUTE_NOT_GOVERNED");
+
+        PolicyDecision member = evaluateTmsRoute(subject(Set.of()), CLIENTS_PATH, Action.CREATE);
+        assertThat(member.getPolicyId())
+                .isEqualTo("POL_OAUTH_CLIENT_ADMIN_REQUIRED")
+                .isNotEqualTo("POL_SPACE_ROUTE_NOT_GOVERNED");
+    }
+
+    @Test
+    void tmsSpaceSubRoutes_otherThanClients_remainNotGoverned() {
+        // Non-régression : la carve-out clients ne rouvre pas les autres sous-routes.
+        PolicyDecision decision = evaluateTmsRoute(subject(Set.of("R_ORG_OWNER")),
+                TMS_SPACES_PATH + "/" + SPACE + "/suspend", Action.CREATE);
+
+        assertDeniedBy(decision, "POL_SPACE_ROUTE_NOT_GOVERNED");
+    }
+
     @Test
     void orgMismatch_alwaysDenied_evenForOrgOwner() {
         PolicyDecision decision = evaluator.evaluate(
-                new Subject("actor", Set.of("R_ORG_OWNER"), Set.of(), ORG, SPACE),
+                new Subject("actor", Set.of("R_ORG_OWNER"), Set.of(), ORG, SPACE, "HUMAN", "SPACE", ACCOUNT),
                 new Resource(READABLE_USERS_PATH, "99999999-0000-0000-0000-000000000009", SPACE),
                 Action.CREATE,
                 new Environment(Instant.now(), "127.0.0.1", 0));
 
-        assertThat(decision.isDeny()).isTrue();
-        assertThat(decision.getPolicyId()).isEqualTo("POL_ORG_MISMATCH");
+        assertDeniedBy(decision, "POL_ORG_MISMATCH");
     }
 }
