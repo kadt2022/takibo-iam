@@ -3,7 +3,6 @@ package com.takibo.managementservice.application.dashboard;
 import com.takibo.identitycore.integration.metrics.port.OrganizationUserMetrics;
 import com.takibo.identitycore.integration.metrics.port.OrganizationUserMetricsCase;
 import com.takibo.managementservice.application.query.port.SpaceQueryCase;
-import com.takibo.managementservice.interfaces.rest.response.OrganizationDashboardSummaryResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,11 +27,11 @@ public class OrgDashboardSummaryService {
     private final OrganizationUserMetricsCase userMetrics;
 
     @Transactional(readOnly = true)
-    public OrganizationDashboardSummaryResponse summarize(UUID organizationId) {
+    public OrganizationDashboardSummaryResult summarize(UUID organizationId) {
         long spacesTotal = spaceQuery.countSpaces(organizationId);
         OrganizationUserMetrics metrics = userMetrics.metricsForOrganization(organizationId);
 
-        return new OrganizationDashboardSummaryResponse(
+        return new OrganizationDashboardSummaryResult(
                 organizationId,
                 metrics.usersTotal(),
                 metrics.activeUsersTotal(),

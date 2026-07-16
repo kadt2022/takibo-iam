@@ -27,9 +27,9 @@ public class OrganizationUserMetricsAdapter implements OrganizationUserMetricsCa
     @Override
     @Transactional(readOnly = true)
     public OrganizationUserMetrics metricsForOrganization(UUID organizationId) {
-        long usersTotal = users.countDistinctAccountsByOrg(organizationId);
-        long activeUsersTotal =
-                users.countDistinctAccountsByOrgAndStatus(organizationId, UserStatus.ACTIVE);
-        return new OrganizationUserMetrics(usersTotal, activeUsersTotal);
+        // Une seule requête agrégée : les deux compteurs proviennent du même snapshot.
+        JpaUserRepository.OrganizationUserCounts counts =
+                users.countOrganizationUsers(organizationId, UserStatus.ACTIVE);
+        return new OrganizationUserMetrics(counts.getUsersTotal(), counts.getActiveUsersTotal());
     }
 }

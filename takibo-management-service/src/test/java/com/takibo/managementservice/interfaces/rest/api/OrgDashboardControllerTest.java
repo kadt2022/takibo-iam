@@ -2,6 +2,7 @@ package com.takibo.managementservice.interfaces.rest.api;
 
 import com.takibo.identitycore.integration.security.port.CurrentOrganizationContextCase;
 import com.takibo.managementservice.application.dashboard.OrgDashboardSummaryService;
+import com.takibo.managementservice.application.dashboard.OrganizationDashboardSummaryResult;
 import com.takibo.managementservice.interfaces.rest.response.OrganizationDashboardSummaryResponse;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,15 +39,22 @@ class OrgDashboardControllerTest {
 
     @Test
     void returnsSummary_whenTokenOrganizationMatchesPath() {
-        OrganizationDashboardSummaryResponse body =
-                new OrganizationDashboardSummaryResponse(ORG, 342L, 128L, 7L, Instant.now());
+        Instant generatedAt = Instant.now();
+        OrganizationDashboardSummaryResult result =
+                new OrganizationDashboardSummaryResult(ORG, 342L, 128L, 7L, generatedAt);
         when(currentOrganizationContext.requireCurrentOrganizationId()).thenReturn(ORG);
-        when(service.summarize(ORG)).thenReturn(body);
+        when(service.summarize(ORG)).thenReturn(result);
 
         ResponseEntity<OrganizationDashboardSummaryResponse> response = controller.summary(ORG);
 
         assertThat(response.getStatusCode().value()).isEqualTo(200);
-        assertThat(response.getBody()).isEqualTo(body);
+        OrganizationDashboardSummaryResponse body = response.getBody();
+        assertThat(body).isNotNull();
+        assertThat(body.organizationId()).isEqualTo(ORG);
+        assertThat(body.usersTotal()).isEqualTo(342L);
+        assertThat(body.activeUsersTotal()).isEqualTo(128L);
+        assertThat(body.spacesTotal()).isEqualTo(7L);
+        assertThat(body.generatedAt()).isEqualTo(generatedAt);
     }
 
     @Test

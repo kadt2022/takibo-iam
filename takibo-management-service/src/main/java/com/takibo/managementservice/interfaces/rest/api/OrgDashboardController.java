@@ -2,6 +2,7 @@ package com.takibo.managementservice.interfaces.rest.api;
 
 import com.takibo.identitycore.integration.security.port.CurrentOrganizationContextCase;
 import com.takibo.managementservice.application.dashboard.OrgDashboardSummaryService;
+import com.takibo.managementservice.application.dashboard.OrganizationDashboardSummaryResult;
 import com.takibo.managementservice.interfaces.rest.response.OrganizationDashboardSummaryResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -38,6 +39,12 @@ public class OrgDashboardController {
             throw new AccessDeniedException("ORG_MISMATCH");
         }
 
-        return ResponseEntity.ok(service.summarize(orgId));
+        OrganizationDashboardSummaryResult result = service.summarize(orgId);
+        return ResponseEntity.ok(new OrganizationDashboardSummaryResponse(
+                result.organizationId(),
+                result.usersTotal(),
+                result.activeUsersTotal(),
+                result.spacesTotal(),
+                result.generatedAt()));
     }
 }

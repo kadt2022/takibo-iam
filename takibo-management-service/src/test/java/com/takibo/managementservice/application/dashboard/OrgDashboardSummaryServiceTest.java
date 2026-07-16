@@ -3,7 +3,6 @@ package com.takibo.managementservice.application.dashboard;
 import com.takibo.identitycore.integration.metrics.port.OrganizationUserMetrics;
 import com.takibo.identitycore.integration.metrics.port.OrganizationUserMetricsCase;
 import com.takibo.managementservice.application.query.port.SpaceQueryCase;
-import com.takibo.managementservice.interfaces.rest.response.OrganizationDashboardSummaryResponse;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -39,7 +38,7 @@ class OrgDashboardSummaryServiceTest {
         when(spaceQuery.countSpaces(ORG)).thenReturn(7L);
         when(userMetrics.metricsForOrganization(ORG)).thenReturn(new OrganizationUserMetrics(342L, 128L));
 
-        OrganizationDashboardSummaryResponse summary = service.summarize(ORG);
+        OrganizationDashboardSummaryResult summary = service.summarize(ORG);
 
         assertThat(summary.organizationId()).isEqualTo(ORG);
         assertThat(summary.usersTotal()).isEqualTo(342L);

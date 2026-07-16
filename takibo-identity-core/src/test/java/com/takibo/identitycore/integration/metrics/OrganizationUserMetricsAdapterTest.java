@@ -2,6 +2,7 @@ package com.takibo.identitycore.integration.metrics;
 
 import com.takibo.identitycore.domain.status.UserStatus;
 import com.takibo.identitycore.infrastructure.jpa.repository.JpaUserRepository;
+import com.takibo.identitycore.infrastructure.jpa.repository.JpaUserRepository.OrganizationUserCounts;
 import com.takibo.identitycore.integration.metrics.port.OrganizationUserMetrics;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -13,6 +14,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -29,12 +31,19 @@ class OrganizationUserMetricsAdapterTest {
     @InjectMocks
     private OrganizationUserMetricsAdapter adapter;
 
+    private static OrganizationUserCounts counts(long total, long active) {
+        OrganizationUserCounts projection = mock(OrganizationUserCounts.class);
+        when(projection.getUsersTotal()).thenReturn(total);
+        when(projection.getActiveUsersTotal()).thenReturn(active);
+        return projection;
+    }
+
     @Test
-    void countsDistinctAccounts_totalAndActive() {
-        // 3 comptes distincts (un même account dans plusieurs Spaces ne compte
-        // qu'une fois — sémantique portée par count(distinct account_id)) ; 2 actifs.
-        when(users.countDistinctAccountsByOrg(ORG)).thenReturn(3L);
-        when(users.countDistinctAccountsByOrgAndStatus(ORG, UserStatus.ACTIVE)).thenReturn(2L);
+    void mapsAggregatedProjection_totalAndActive() {
+        // 3 comptes distincts (un même account dans plusieurs Spaces ne compte qu'une
+        // fois — sémantique du count(distinct account_id)) ; 2 actifs.
+        OrganizationUserCounts projection = counts(3L, 2L);
+        when(users.countOrganizationUsers(ORG, UserStatus.ACTIVE)).thenReturn(projection);
 
         OrganizationUserMetrics metrics = adapter.metricsForOrganization(ORG);
 
@@ -43,22 +52,21 @@ class OrganizationUserMetricsAdapterTest {
     }
 
     @Test
-    void queriesStrictlyByGivenOrganization_noCrossOrg() {
-        when(users.countDistinctAccountsByOrg(ORG)).thenReturn(5L);
-        when(users.countDistinctAccountsByOrgAndStatus(ORG, UserStatus.ACTIVE)).thenReturn(4L);
+    void singleAggregatedQuery_scopedToGivenOrganization() {
+        OrganizationUserCounts projection = counts(5L, 4L);
+        when(users.countOrganizationUsers(ORG, UserStatus.ACTIVE)).thenReturn(projection);
 
         adapter.metricsForOrganization(ORG);
 
-        verify(users).countDistinctAccountsByOrg(ORG);
-        verify(users).countDistinctAccountsByOrgAndStatus(ORG, UserStatus.ACTIVE);
-        // Jamais l'org d'un autre tenant.
-        verify(users, never()).countDistinctAccountsByOrg(OTHER_ORG);
+        // Une seule requête, strictement sur l'org donnée — jamais une autre org.
+        verify(users).countOrganizationUsers(ORG, UserStatus.ACTIVE);
+        verify(users, never()).countOrganizationUsers(OTHER_ORG, UserStatus.ACTIVE);
     }
 
     @Test
     void countsOnly_neverLoadsAnyUserCollection() {
-        when(users.countDistinctAccountsByOrg(ORG)).thenReturn(1L);
-        when(users.countDistinctAccountsByOrgAndStatus(ORG, UserStatus.ACTIVE)).thenReturn(1L);
+        OrganizationUserCounts projection = counts(1L, 1L);
+        when(users.countOrganizationUsers(ORG, UserStatus.ACTIVE)).thenReturn(projection);
 
         adapter.metricsForOrganization(ORG);
 

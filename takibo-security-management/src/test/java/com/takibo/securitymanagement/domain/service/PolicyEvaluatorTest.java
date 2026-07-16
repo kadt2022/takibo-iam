@@ -120,6 +120,29 @@ class PolicyEvaluatorTest {
     }
 
     @Test
+    void dashboard_nonReadAction_denied_evenForOrgAdmin() {
+        PolicyDecision decision = evaluator.evaluate(
+                orgHuman(Set.of("R_ORG_ADMIN")),
+                new Resource(DASHBOARD_PATH, null, null),
+                Action.CREATE,
+                new Environment(Instant.now(), "127.0.0.1", 0));
+        assertThat(decision.isDeny()).isTrue();
+        assertThat(decision.getPolicyId()).isEqualTo("POL_ORG_DASHBOARD_ACTION_NOT_SUPPORTED");
+    }
+
+    @Test
+    void dashboard_unknownSubRoute_failClosed_evenForOrgAdmin() {
+        // Fail-closed comme la surface OAuth2 : seule /dashboard/summary est gouvernée.
+        PolicyDecision decision = evaluator.evaluate(
+                orgHuman(Set.of("R_ORG_ADMIN")),
+                new Resource("/api/v1/orgs/" + ORG + "/dashboard/exports", null, null),
+                Action.READ,
+                new Environment(Instant.now(), "127.0.0.1", 0));
+        assertThat(decision.isDeny()).isTrue();
+        assertThat(decision.getPolicyId()).isEqualTo("POL_ORG_DASHBOARD_ROUTE_NOT_GOVERNED");
+    }
+
+    @Test
     void realTechnicalCodes_areRecognizedAsTenantAdmin() {
         assertThat(evaluateCreateUser(Set.of("R_SPACE_ADMIN")).isDeny()).isFalse();
         assertThat(evaluateCreateUser(Set.of("R_ORG_OWNER")).isDeny()).isFalse();
