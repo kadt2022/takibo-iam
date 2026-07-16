@@ -72,6 +72,21 @@ public interface JpaUserRepository extends JpaRepository<UserEntity, UUID>, JpaS
     java.util.List<UserSpaceMembership> findSpaceMembershipsByOrgAndAccount(@Param("orgId") UUID orgId,
                                                                             @Param("accountId") UUID accountId);
 
+    // Résumé organisationnel : comptes DISTINCTS de l'organisation, sans charger
+    // aucune liste ni faire de fan-out par Space. Un même account présent dans
+    // plusieurs Spaces ne compte qu'une fois ; le filtre orgId exclut toute autre org.
+    @Query("select count(distinct u.accountId) from UserEntity u where u.orgId = :orgId")
+    long countDistinctAccountsByOrg(@Param("orgId") UUID orgId);
+
+    @Query("""
+            select count(distinct u.accountId)
+              from UserEntity u
+             where u.orgId = :orgId
+               and u.status = :status
+            """)
+    long countDistinctAccountsByOrgAndStatus(@Param("orgId") UUID orgId,
+                                             @Param("status") UserStatus status);
+
     boolean existsBySpaceIdAndUsernameIgnoreCase(UUID spaceId, String username);
 
     boolean existsBySpaceIdAndUsernameIgnoreCaseAndIdNot(UUID spaceId, String username, UUID excludeUserId);

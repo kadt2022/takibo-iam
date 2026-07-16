@@ -55,6 +55,11 @@ public class JpaSpaceQueryAdapter implements SpaceQueryCase {
     }
 
     @Override
+    public long countSpaces(UUID orgId) {
+        return spaceRepository.countByOrgId(orgId);
+    }
+
+    @Override
     public SpaceDetailsResult getSpace(UUID orgId, UUID spaceId) {
         // Recherche située dès la requête : jamais de findById suivi d'un contrôle d'org.
         return spaceRepository.findByIdAndOrgId(spaceId, orgId)

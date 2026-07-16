@@ -54,6 +54,71 @@ class PolicyEvaluatorTest {
         return evaluateUsersRoute(roles, READABLE_USERS_PATH, Action.CREATE);
     }
 
+    // ── Récit Dashboard 01 : /api/v1/orgs/{UUID}/dashboard/summary ──
+    private static final String OTHER_ORG = "99999999-0000-0000-0000-000000000009";
+    private static final String DASHBOARD_PATH = "/api/v1/orgs/" + ORG + "/dashboard/summary";
+
+    private PolicyDecision evaluateDashboard(Subject subject) {
+        return evaluator.evaluate(
+                subject,
+                new Resource(DASHBOARD_PATH, null, null),
+                Action.READ,
+                new Environment(Instant.now(), "127.0.0.1", 0));
+    }
+
+    @Test
+    void dashboard_orgOwnerAndOrgAdmin_allowed() {
+        assertThat(evaluateDashboard(orgHuman(Set.of("R_ORG_OWNER"))).isDeny()).isFalse();
+        assertThat(evaluateDashboard(orgHuman(Set.of("R_ORG_ADMIN"))).isDeny()).isFalse();
+    }
+
+    @Test
+    void dashboard_memberWithoutOrgRole_denied() {
+        PolicyDecision decision = evaluateDashboard(orgHuman(Set.of()));
+        assertThat(decision.isDeny()).isTrue();
+        assertThat(decision.getPolicyId()).isEqualTo("POL_ORG_DASHBOARD_ADMIN_REQUIRED");
+    }
+
+    @Test
+    void dashboard_spaceAdminOnly_denied() {
+        PolicyDecision decision = evaluateDashboard(orgHuman(Set.of("R_SPACE_ADMIN")));
+        assertThat(decision.isDeny()).isTrue();
+        assertThat(decision.getPolicyId()).isEqualTo("POL_ORG_DASHBOARD_ADMIN_REQUIRED");
+    }
+
+    @Test
+    void dashboard_platformAdmin_denied() {
+        PolicyDecision decision = evaluateDashboard(orgHuman(Set.of("R_PLATFORM_ADMIN")));
+        assertThat(decision.isDeny()).isTrue();
+        assertThat(decision.getPolicyId()).isEqualTo("POL_ORG_DASHBOARD_ADMIN_REQUIRED");
+    }
+
+    @Test
+    void dashboard_crossOrgToken_denied() {
+        Subject otherOrgAdmin = new Subject("actor", Set.of("R_ORG_ADMIN"), Set.of(),
+                OTHER_ORG, null, "HUMAN", "ORGANIZATION", ACCOUNT);
+        PolicyDecision decision = evaluateDashboard(otherOrgAdmin);
+        assertThat(decision.isDeny()).isTrue();
+        assertThat(decision.getPolicyId()).isEqualTo("POL_ORG_DASHBOARD_ORG_HUMAN_REQUIRED");
+    }
+
+    @Test
+    void dashboard_machineSubject_denied() {
+        Subject machine = new Subject("machine", Set.of("R_ORG_ADMIN"), Set.of(),
+                ORG, null, "SERVICE", "ORGANIZATION", ACCOUNT);
+        PolicyDecision decision = evaluateDashboard(machine);
+        assertThat(decision.isDeny()).isTrue();
+        assertThat(decision.getPolicyId()).isEqualTo("POL_ORG_DASHBOARD_ORG_HUMAN_REQUIRED");
+    }
+
+    @Test
+    void dashboard_spaceScopedToken_denied() {
+        // Un token situé dans un Space (scope SPACE) ne lit pas le résumé ORGANIZATION.
+        PolicyDecision decision = evaluateDashboard(subject(Set.of("R_ORG_ADMIN")));
+        assertThat(decision.isDeny()).isTrue();
+        assertThat(decision.getPolicyId()).isEqualTo("POL_ORG_DASHBOARD_ORG_HUMAN_REQUIRED");
+    }
+
     @Test
     void realTechnicalCodes_areRecognizedAsTenantAdmin() {
         assertThat(evaluateCreateUser(Set.of("R_SPACE_ADMIN")).isDeny()).isFalse();

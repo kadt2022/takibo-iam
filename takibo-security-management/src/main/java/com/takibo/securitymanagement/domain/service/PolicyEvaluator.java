@@ -81,6 +81,7 @@ public class PolicyEvaluator {
         // refuserait pour tous (POL_SPACE_ROUTE_NOT_GOVERNED), admins légitimes compris.
         return denyLegacyUserCreation(path, action, tenantAdmin)
                 .or(() -> currentUserSpacesPolicy(subject, path, action))
+                .or(() -> denyOrgDashboardSurface(subject, path))
                 .or(() -> denyUserRbacGovernanceSurface(path, tenantAdmin))
                 .or(() -> denyReadableUsersSurface(path, tenantAdmin))
                 .or(() -> denyReadableRbacCatalogSurface(path, tenantAdmin))
@@ -143,6 +144,48 @@ public class PolicyEvaluator {
                 .policyId("POL_MY_SPACES_ORG_HUMAN_REQUIRED")
                 .reason("Organization-scoped human account token may list its own accessible spaces")
                 .build());
+    }
+
+    // /api/v1/orgs/{UUID}/dashboard/summary (récit Dashboard 01) : résumé org.
+    // Autorité ORG requise, DANS la frontière du token : sujet HUMAIN de portée
+    // ORGANIZATION dont l'org == org du chemin, et R_ORG_OWNER / R_ORG_ADMIN.
+    // Un membre, un R_SPACE_ADMIN seul, un token PLATFORM ou d'une autre org : refusés.
+    private static Optional<PolicyDecision> denyOrgDashboardSurface(Subject subject, String path) {
+        OrgDashboardRoute route = OrgDashboardRoute.parse(path);
+        if (route == null) {
+            return Optional.empty();
+        }
+
+        if (!Subject.TYPE_HUMAN.equals(subject.subjectType())
+                || !"ORGANIZATION".equals(subject.scopeLevel())
+                || subject.orgId() == null
+                || !subject.orgId().equalsIgnoreCase(route.orgId())) {
+            return deny("POL_ORG_DASHBOARD_ORG_HUMAN_REQUIRED",
+                    "Organization-scoped human token matching the target organization is required");
+        }
+        if (!hasAnyRole(subject, "R_ORG_OWNER", "ORG_OWNER", "R_ORG_ADMIN", "ORG_ADMIN")) {
+            return deny("POL_ORG_DASHBOARD_ADMIN_REQUIRED",
+                    "R_ORG_OWNER or R_ORG_ADMIN required to read the organization dashboard summary");
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Route du résumé dashboard : /api/v1/orgs/{UUID}/dashboard/summary. Le segment
+     * org DOIT être un UUID (doctrine TMS) ; les routes en codes lisibles ne matchent jamais.
+     */
+    record OrgDashboardRoute(String orgId) {
+        static OrgDashboardRoute parse(String path) {
+            // ["", "api", "v1", "orgs", {orgId}, "dashboard", "summary"]
+            String[] seg = path.split("/");
+            boolean onSurface = seg.length == 7
+                    && seg[0].isEmpty()
+                    && "api".equals(seg[1]) && "v1".equals(seg[2])
+                    && "orgs".equals(seg[3]) && "dashboard".equals(seg[5])
+                    && "summary".equals(seg[6])
+                    && isUuid(seg[4]);
+            return onSurface ? new OrgDashboardRoute(seg[4]) : null;
+        }
     }
 
     // /api/spaces/{spaceId}/users (création d'utilisateur, route UUID historique)

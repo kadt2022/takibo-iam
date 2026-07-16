@@ -28,4 +28,7 @@ public interface SpaceQueryCase {
      *         existence ailleurs).
      */
     SpaceDetailsResult getSpace(UUID orgId, UUID spaceId);
+
+    /** Compteur direct des Spaces de l'organisation — aucune liste n'est chargée. */
+    long countSpaces(UUID orgId);
 }
