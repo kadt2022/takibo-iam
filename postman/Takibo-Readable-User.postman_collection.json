@@ -1820,6 +1820,7 @@
                 "exec": [
                   "pm.test('200 - claims vides = login OK (AC-11)', () => pm.expect(pm.response.code).to.eql(200));",
                   "const json = pm.response.json();",
+                  "pm.environment.set(\"employee_org_token\", json.accessToken);",
                   "const payload = JSON.parse(atob(json.accessToken.split('.')[1]));",
                   "pm.test('aucune autorite organisationnelle', () => {",
                   "    pm.expect(payload.roles || []).to.eql([]);",
@@ -1934,6 +1935,104 @@
                   "    const codes = (page.items || page.content || []).map(s => s.code);",
                   "    pm.expect(codes).to.include(pm.environment.get('spaceCode'));",
                   "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - 07b - Dashboard - Resume org - founder ORG token",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_org_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/dashboard/summary",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{organizationId}}",
+                "dashboard",
+                "summary"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 - resume dashboard accessible a l autorite ORG\", () => pm.expect(pm.response.code).to.eql(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"contrat exact du resume\", () => {",
+                  "    pm.expect(json).to.have.property(\"organizationId\");",
+                  "    pm.expect(json).to.have.property(\"usersTotal\");",
+                  "    pm.expect(json).to.have.property(\"activeUsersTotal\");",
+                  "    pm.expect(json).to.have.property(\"spacesTotal\");",
+                  "    pm.expect(json).to.have.property(\"generatedAt\");",
+                  "});",
+                  "pm.test(\"organizationId == org du chemin\", () => pm.expect(json.organizationId).to.eql(pm.environment.get(\"organizationId\")));",
+                  "pm.test(\"compteurs reels : fondateur + employe = 2 comptes distincts, 1 space\", () => {",
+                  "    pm.expect(json.usersTotal).to.eql(2);",
+                  "    pm.expect(json.activeUsersTotal).to.eql(2);",
+                  "    pm.expect(json.spacesTotal).to.eql(1);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "403 - 07c - Dashboard - Resume org refuse - employee ORG token",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employee_org_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/dashboard/summary",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{organizationId}}",
+                "dashboard",
+                "summary"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"403 - membre organisationnel refuse sur le resume\", () => pm.expect(pm.response.code).to.eql(403));"
                 ]
               }
             }

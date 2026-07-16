@@ -72,6 +72,28 @@ public interface JpaUserRepository extends JpaRepository<UserEntity, UUID>, JpaS
     java.util.List<UserSpaceMembership> findSpaceMembershipsByOrgAndAccount(@Param("orgId") UUID orgId,
                                                                             @Param("accountId") UUID accountId);
 
+    // Résumé organisationnel : UNE seule requête d'agrégation renvoie les deux
+    // compteurs depuis le même snapshot — pas de course entre deux lectures. Comptes
+    // DISTINCTS de l'organisation, sans charger aucune liste ni fan-out par Space ; un
+    // même account présent dans plusieurs Spaces ne compte qu'une fois ; le filtre orgId
+    // exclut toute autre organisation. Le compteur ACTIVE utilise une agrégation
+    // conditionnelle (case), donc issu du même snapshot.
+    @Query("""
+            select count(distinct u.accountId) as usersTotal,
+                   count(distinct case when u.status = :activeStatus then u.accountId end) as activeUsersTotal
+              from UserEntity u
+             where u.orgId = :orgId
+            """)
+    OrganizationUserCounts countOrganizationUsers(@Param("orgId") UUID orgId,
+                                                  @Param("activeStatus") UserStatus activeStatus);
+
+    /** Projection agrégée (une ligne) du résumé utilisateurs d'une organisation. */
+    interface OrganizationUserCounts {
+        long getUsersTotal();
+
+        long getActiveUsersTotal();
+    }
+
     boolean existsBySpaceIdAndUsernameIgnoreCase(UUID spaceId, String username);
 
     boolean existsBySpaceIdAndUsernameIgnoreCaseAndIdNot(UUID spaceId, String username, UUID excludeUserId);

@@ -81,6 +81,7 @@ public class PolicyEvaluator {
         // refuserait pour tous (POL_SPACE_ROUTE_NOT_GOVERNED), admins légitimes compris.
         return denyLegacyUserCreation(path, action, tenantAdmin)
                 .or(() -> currentUserSpacesPolicy(subject, path, action))
+                .or(() -> denyOrgDashboardSurface(subject, path, action))
                 .or(() -> denyUserRbacGovernanceSurface(path, tenantAdmin))
                 .or(() -> denyReadableUsersSurface(path, tenantAdmin))
                 .or(() -> denyReadableRbacCatalogSurface(path, tenantAdmin))
@@ -143,6 +144,69 @@ public class PolicyEvaluator {
                 .policyId("POL_MY_SPACES_ORG_HUMAN_REQUIRED")
                 .reason("Organization-scoped human account token may list its own accessible spaces")
                 .build());
+    }
+
+    // /api/v1/orgs/{UUID}/dashboard/** (récit Dashboard 01) : surface FAIL-CLOSED,
+    // à l'image de la surface OAuth2. Autorité ORG requise DANS la frontière du token :
+    // sujet HUMAIN de portée ORGANIZATION dont l'org == org du chemin, et R_ORG_OWNER /
+    // R_ORG_ADMIN. Un membre, un R_SPACE_ADMIN seul, un token PLATFORM ou d'une autre org :
+    // refusés. Seul /dashboard/summary en READ est gouverné : toute autre sous-route
+    // (POL_ORG_DASHBOARD_ROUTE_NOT_GOVERNED) ou action (POL_ORG_DASHBOARD_ACTION_NOT_SUPPORTED)
+    // est refusée — rien de cette surface ne retombe jamais sur POL_DEFAULT_ALLOW.
+    private static Optional<PolicyDecision> denyOrgDashboardSurface(Subject subject, String path,
+                                                                    Action action) {
+        OrgDashboardRoute route = OrgDashboardRoute.parse(path);
+        if (route == null) {
+            return Optional.empty();
+        }
+
+        if (!Subject.TYPE_HUMAN.equals(subject.subjectType())
+                || !"ORGANIZATION".equals(subject.scopeLevel())
+                || subject.orgId() == null
+                || !subject.orgId().equalsIgnoreCase(route.orgId())) {
+            return deny("POL_ORG_DASHBOARD_ORG_HUMAN_REQUIRED",
+                    "Organization-scoped human token matching the target organization is required");
+        }
+        if (!hasAnyRole(subject, "R_ORG_OWNER", "ORG_OWNER", "R_ORG_ADMIN", "ORG_ADMIN")) {
+            return deny("POL_ORG_DASHBOARD_ADMIN_REQUIRED",
+                    "R_ORG_OWNER or R_ORG_ADMIN required to read the organization dashboard");
+        }
+        if (!route.isSummary()) {
+            return deny("POL_ORG_DASHBOARD_ROUTE_NOT_GOVERNED",
+                    "No policy governs this dashboard route yet — denied by default");
+        }
+        if (action != Action.READ) {
+            return deny("POL_ORG_DASHBOARD_ACTION_NOT_SUPPORTED",
+                    "Only READ is governed on the organization dashboard summary");
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Route de la surface dashboard : /api/v1/orgs/{UUID}/dashboard… Le segment org
+     * DOIT être un UUID (doctrine TMS) ; les routes en codes lisibles ne matchent jamais.
+     * {@link #isSummary()} distingue la seule sous-route gouvernée (…/dashboard/summary)
+     * de toutes les autres, refusées par défaut.
+     */
+    record OrgDashboardRoute(String orgId, boolean summary) {
+        static OrgDashboardRoute parse(String path) {
+            // ["", "api", "v1", "orgs", {orgId}, "dashboard", ...]
+            String[] seg = path.split("/");
+            boolean onSurface = seg.length >= 6
+                    && seg[0].isEmpty()
+                    && "api".equals(seg[1]) && "v1".equals(seg[2])
+                    && "orgs".equals(seg[3]) && "dashboard".equals(seg[5])
+                    && isUuid(seg[4]);
+            if (!onSurface) {
+                return null;
+            }
+            boolean isSummary = seg.length == 7 && "summary".equals(seg[6]);
+            return new OrgDashboardRoute(seg[4], isSummary);
+        }
+
+        boolean isSummary() {
+            return summary;
+        }
     }
 
     // /api/spaces/{spaceId}/users (création d'utilisateur, route UUID historique)
