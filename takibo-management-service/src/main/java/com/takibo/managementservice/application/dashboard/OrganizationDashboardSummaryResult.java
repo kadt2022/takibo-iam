@@ -12,5 +12,6 @@ public record OrganizationDashboardSummaryResult(
         long usersTotal,
         long activeUsersTotal,
         long spacesTotal,
+        long oauthClientsTotal,
         Instant generatedAt
 ) {}

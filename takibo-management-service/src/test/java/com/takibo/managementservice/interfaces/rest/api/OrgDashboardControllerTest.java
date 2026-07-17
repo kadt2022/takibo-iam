@@ -41,7 +41,7 @@ class OrgDashboardControllerTest {
     void returnsSummary_whenTokenOrganizationMatchesPath() {
         Instant generatedAt = Instant.now();
         OrganizationDashboardSummaryResult result =
-                new OrganizationDashboardSummaryResult(ORG, 342L, 128L, 7L, generatedAt);
+                new OrganizationDashboardSummaryResult(ORG, 342L, 128L, 7L, 23L, generatedAt);
         when(currentOrganizationContext.requireCurrentOrganizationId()).thenReturn(ORG);
         when(service.summarize(ORG)).thenReturn(result);
 
@@ -54,6 +54,7 @@ class OrgDashboardControllerTest {
         assertThat(body.usersTotal()).isEqualTo(342L);
         assertThat(body.activeUsersTotal()).isEqualTo(128L);
         assertThat(body.spacesTotal()).isEqualTo(7L);
+        assertThat(body.oauthClientsTotal()).isEqualTo(23L);
         assertThat(body.generatedAt()).isEqualTo(generatedAt);
     }
 

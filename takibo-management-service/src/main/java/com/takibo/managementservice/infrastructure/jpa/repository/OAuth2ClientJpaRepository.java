@@ -14,6 +14,11 @@ public interface OAuth2ClientJpaRepository extends JpaRepository<OAuth2ClientEnt
     boolean existsByClientId(String clientId);
     Optional<OAuth2ClientEntity> findByIdAndOrgIdAndSpaceId(UUID id, UUID orgId, UUID spaceId);
 
+    // Résumé organisationnel : compteur direct de TOUS les clients persistés dans
+    // les Spaces de l'organisation (org_id est porté par chaque ligne — aucun
+    // parcours des Spaces, aucune liste chargée, aucune autre organisation).
+    long countByOrgId(UUID orgId);
+
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
             update OAuth2ClientEntity c

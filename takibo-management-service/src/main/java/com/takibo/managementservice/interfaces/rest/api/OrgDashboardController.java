@@ -45,6 +45,7 @@ public class OrgDashboardController {
                 result.usersTotal(),
                 result.activeUsersTotal(),
                 result.spacesTotal(),
+                result.oauthClientsTotal(),
                 result.generatedAt()));
     }
 }

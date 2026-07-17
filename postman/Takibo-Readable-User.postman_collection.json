@@ -1983,6 +1983,7 @@
                   "    pm.expect(json).to.have.property(\"usersTotal\");",
                   "    pm.expect(json).to.have.property(\"activeUsersTotal\");",
                   "    pm.expect(json).to.have.property(\"spacesTotal\");",
+                  "    pm.expect(json).to.have.property(\"oauthClientsTotal\");",
                   "    pm.expect(json).to.have.property(\"generatedAt\");",
                   "});",
                   "pm.test(\"organizationId == org du chemin\", () => pm.expect(json.organizationId).to.eql(pm.environment.get(\"organizationId\")));",
@@ -1990,6 +1991,9 @@
                   "    pm.expect(json.usersTotal).to.eql(2);",
                   "    pm.expect(json.activeUsersTotal).to.eql(2);",
                   "    pm.expect(json.spacesTotal).to.eql(1);",
+                  "});",
+                  "pm.test(\"oauthClientsTotal : aucun client tenant cree dans cette org (le postman-client PLATFORM est exclu)\", () => {",
+                  "    pm.expect(json.oauthClientsTotal).to.eql(0);",
                   "});"
                 ]
               }
