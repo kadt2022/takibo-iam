@@ -39,6 +39,7 @@ restent inchangées.
 - Rendre explicite l'autorisation CREATE du signup authentifié.
 - Refuser les autres actions sur le signup.
 - Ajouter un verrou terminal sur `/api/v1/orgs/{UUID}[/**]`.
+- Normaliser le chemin brut comme Spring MVC avant l'évaluation des politiques.
 - Prouver que les routes TIS-CORE à codes lisibles restent hors de ce verrou.
 
 ## Hors périmètre
@@ -70,9 +71,16 @@ actions READ, UPDATE, DELETE et OTHER sont refusées.
 Une route utilisant un code d'organisation lisible ne correspond pas au verrou TMS
 UUID et conserve sa politique actuelle.
 
+### AC-05 — Encodage et paramètres matriciels
+
+Un UUID contenant un encodage URI valide ou des paramètres matriciels est évalué
+sur la même représentation que celle routée par Spring MVC. Un chemin mal encodé est
+refusé avant la politique adaptative.
+
 ## Vérifications
 
 - Tests ciblés `PolicyEvaluatorTest` et `PolicyBasedAuthorizationManagerTest`.
+- Test HTTP `SpaceSurfaceSecurityIntegrationTest` avec UUID encodé et paramétré.
 - Suite complète `:takibo-security-management:test`.
 - Suite complète `:takibo-management-service:test`.
 - Compilation des modules concernés.

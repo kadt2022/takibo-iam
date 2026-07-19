@@ -24,6 +24,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
 import org.springframework.stereotype.Component;
+import org.springframework.web.util.UrlPathHelper;
 
 import java.time.Instant;
 import java.util.LinkedHashSet;
@@ -35,6 +36,8 @@ import java.util.function.Supplier;
 @Component
 @RequiredArgsConstructor
 public class PolicyBasedAuthorizationManager implements AuthorizationManager<RequestAuthorizationContext> {
+
+    private static final UrlPathHelper URL_PATH_HELPER = UrlPathHelper.defaultInstance;
 
     private final AdaptiveDecisionPort adaptiveDecisionPort;
     private final RequestVelocityTracker velocityTracker;
@@ -62,6 +65,16 @@ public class PolicyBasedAuthorizationManager implements AuthorizationManager<Req
         }
 
         HttpServletRequest request = context.getRequest();
+        String policyPath;
+        try {
+            // Use the same decoded, context-relative and matrix-parameter-free path
+            // representation that Spring MVC uses to select controller mappings.
+            policyPath = URL_PATH_HELPER.getPathWithinApplication(request);
+        } catch (IllegalArgumentException e) {
+            log.warn("ADP: invalid request path, denying access: rawPath={} reason={}",
+                    request.getRequestURI(), e.getMessage());
+            return new AuthorizationDecision(false);
+        }
 
         String subjectId = ctx.subject().subjectId();
         // Nature du sujet telle qu'émise par le token (HUMAN / SERVICE / SYSTEM) :
@@ -87,7 +100,7 @@ public class PolicyBasedAuthorizationManager implements AuthorizationManager<Req
         String ipAddress = ctx.transport() != null ? ctx.transport().ipAddress() : request.getRemoteAddr();
         PolicyDecision policyDecision = policyEvaluator.evaluate(
                 new Subject(subjectId, roles, permissions, organizationId, spaceId, subjectType, scopeLevel, accountId),
-                new Resource(request.getRequestURI(), null, null),
+                new Resource(policyPath, null, null),
                 Action.fromHttpMethod(request.getMethod()),
                 new Environment(Instant.now(), ipAddress, 0));
 
@@ -110,7 +123,7 @@ public class PolicyBasedAuthorizationManager implements AuthorizationManager<Req
                 spaceId,
                 roles,
                 permissions,
-                request.getRequestURI(),
+                policyPath,
                 request.getMethod(),
                 Instant.now(),
                 ipAddress,
