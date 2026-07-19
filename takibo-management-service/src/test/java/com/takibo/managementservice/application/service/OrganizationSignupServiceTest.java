@@ -3,7 +3,6 @@ package com.takibo.managementservice.application.service;
 import com.takibo.identitycore.application.identity.command.ProvisionFounderUserCommand;
 import com.takibo.identitycore.application.identity.port.AccountApplicationCase;
 import com.takibo.identitycore.application.identity.port.FounderUserProvisioningCase;
-import com.takibo.identitycore.integration.security.port.CurrentOrganizationContextCase;
 import com.takibo.identitycore.interfaces.rest.response.AccountResponse;
 import com.takibo.identitycore.interfaces.rest.response.UserResponse;
 import com.takibo.managementservice.application.command.CreateOrganizationCommand;
@@ -45,7 +44,6 @@ class OrganizationSignupServiceTest {
     @Mock private SpaceApplicationService spaceApp;
     @Mock private AccountApplicationCase accountApp;
     @Mock private FounderUserProvisioningCase founderProvisioning;
-    @Mock private CurrentOrganizationContextCase currentOrganizationContext;
     @Mock private TechnicalRbacProvision technicalRbacProvision;
 
     @InjectMocks private OrganizationSignupService service;
@@ -82,36 +80,17 @@ class OrganizationSignupServiceTest {
         assertThat(founderCaptor.getValue().username()).isEqualTo("founder");
 
         verify(technicalRbacProvision).provisionFounder(ORG_ID, SPACE_ID, ACCOUNT_ID, "SYSTEM");
-        verify(currentOrganizationContext, never()).requireCurrentOrganizationId();
     }
 
     @Test
-    void given_existing_organization_matching_current_context_when_signup_then_continues_without_creating_organization() {
+    void given_existing_organization_when_signup_then_denies_before_any_side_effect() {
         OrganizationSignupRequest req = request(new OrganizationInput(ORG_ID, "Takibo IAM", "Takibo"));
-        when(currentOrganizationContext.requireCurrentOrganizationId()).thenReturn(ORG_ID);
-        when(accountApp.createAccountInOrg(ORG_ID, "founder@takibo.io", "Str0ng!Passw0rd"))
-                .thenReturn(new AccountResponse(ACCOUNT_ID, "founder@takibo.io"));
-        when(spaceApp.createSpace(any(CreateSpaceCommand.class))).thenReturn(spaceResponse());
-        when(founderProvisioning.provisionFounder(any(ProvisionFounderUserCommand.class))).thenReturn(userResponse());
-
-        var response = service.signup(req);
-
-        assertThat(response.organizationId()).isEqualTo(ORG_ID);
-        verify(orgApp, never()).create(any(), any());
-        verify(founderProvisioning).provisionFounder(any(ProvisionFounderUserCommand.class));
-        verify(technicalRbacProvision).provisionFounder(ORG_ID, SPACE_ID, ACCOUNT_ID, "SYSTEM");
-    }
-
-    @Test
-    void given_existing_organization_not_matching_current_context_when_signup_then_throws_access_denied() {
-        UUID otherOrg = UUID.fromString("eeeeeeee-0000-0000-0000-000000000005");
-        OrganizationSignupRequest req = request(new OrganizationInput(ORG_ID, "Takibo IAM", "Takibo"));
-        when(currentOrganizationContext.requireCurrentOrganizationId()).thenReturn(otherOrg);
 
         assertThatThrownBy(() -> service.signup(req))
                 .isInstanceOf(AccessDeniedException.class)
-                .hasMessageContaining("ORG_OWNERSHIP_REQUIRED");
+                .hasMessageContaining("EXISTING_ORGANIZATION_SIGNUP_FORBIDDEN");
 
+        verify(orgApp, never()).create(any(), any());
         verify(accountApp, never()).createAccountInOrg(any(), any(), any());
         verify(spaceApp, never()).createSpace(any());
         verify(founderProvisioning, never()).provisionFounder(any());
