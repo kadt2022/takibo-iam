@@ -176,6 +176,20 @@ jobs:
           group: security-context
           tasks: ':takibo-security-context:test :takibo-security-context-spring:test :takibo-security-management:test'
 
+  test-iam-boot:
+    name: Takibo Tests - iam-boot
+    needs: assemble
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/takibo-test-group
+        with:
+          group: iam-boot
+          tasks: ':takibo-iam-boot:test'
+
   test-adp:
     name: Takibo Tests - adp
     needs: assemble
@@ -229,6 +243,7 @@ jobs:
       - test-adp
       - test-authorization
       - test-messaging-audit
+      - test-iam-boot
       - database-check
     runs-on: ubuntu-latest
     permissions:
@@ -696,6 +711,7 @@ jobs:
       - test-adp
       - test-authorization
       - test-messaging-audit
+      - test-iam-boot
       - iam-boot-bvt
       - sonar
       - quality-gate
@@ -742,6 +758,7 @@ jobs:
           check_result test-adp              "${{ needs.test-adp.result }}"
           check_result test-authorization    "${{ needs.test-authorization.result }}"
           check_result test-messaging-audit  "${{ needs.test-messaging-audit.result }}"
+          check_result test-iam-boot         "${{ needs.test-iam-boot.result }}"
           check_result iam-boot-bvt          "${{ needs.iam-boot-bvt.result }}"
           check_result sonar                 "${{ needs.sonar.result }}"
           check_result quality-gate          "${{ needs.quality-gate.result }}"

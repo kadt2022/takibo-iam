@@ -43,3 +43,11 @@ dependencies {
     testRuntimeOnly 'com.h2database:h2'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
+
+// Security integration tests live in this executable module but exercise the
+// filter chain implemented by takibo-security-management. Include those
+// dependency classes in this module's report so Sonar can credit that coverage.
+tasks.named('jacocoTestReport', JacocoReport) {
+    additionalClassDirs.from(project(':takibo-security-management').sourceSets.main.output)
+    additionalSourceDirs.from(project(':takibo-security-management').sourceSets.main.allSource.srcDirs)
+}
