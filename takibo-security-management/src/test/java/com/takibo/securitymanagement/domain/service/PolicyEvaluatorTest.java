@@ -68,8 +68,12 @@ class PolicyEvaluatorTest {
 
     @Test
     void dashboard_orgOwnerAndOrgAdmin_allowed() {
-        assertThat(evaluateDashboard(orgHuman(Set.of("R_ORG_OWNER"))).isDeny()).isFalse();
-        assertThat(evaluateDashboard(orgHuman(Set.of("R_ORG_ADMIN"))).isDeny()).isFalse();
+        for (String role : new String[]{"R_ORG_OWNER", "R_ORG_ADMIN"}) {
+            PolicyDecision decision = evaluateDashboard(orgHuman(Set.of(role)));
+            assertThat(decision.isPermit()).as(role).isTrue();
+            assertThat(decision.getPolicyId()).as(role)
+                    .isEqualTo("POL_ORG_DASHBOARD_ADMIN_REQUIRED");
+        }
     }
 
     @Test
@@ -253,10 +257,20 @@ class PolicyEvaluatorTest {
     }
 
     @Test
-    void signupRoute_isNotCaughtByUsersRule() {
+    void signupRoute_createIsExplicitlyGoverned() {
         PolicyDecision decision = evaluateUsersRoute(Set.of(), "/api/v1/orgs/signup", Action.CREATE);
 
-        assertThat(decision.isDeny()).isFalse();
+        assertThat(decision.isPermit()).isTrue();
+        assertThat(decision.getPolicyId()).isEqualTo("POL_ORG_SIGNUP_AUTHENTICATED_CREATE");
+    }
+
+    @Test
+    void signupRoute_unsupportedActionsFailClosed() {
+        for (Action action : new Action[]{Action.READ, Action.UPDATE, Action.DELETE, Action.OTHER}) {
+            PolicyDecision decision = evaluateUsersRoute(Set.of(), "/api/v1/orgs/signup", action);
+
+            assertDeniedBy(decision, "POL_ORG_SIGNUP_ACTION_NOT_SUPPORTED", action.name());
+        }
     }
 
     @Test
@@ -354,8 +368,12 @@ class PolicyEvaluatorTest {
 
     @Test
     void tmsSpaceList_requiresOrgAuthority() {
-        assertThat(evaluateTmsRoute(subject(Set.of("R_ORG_OWNER")), TMS_SPACES_PATH, Action.READ).isDeny()).isFalse();
-        assertThat(evaluateTmsRoute(subject(Set.of("R_ORG_ADMIN")), TMS_SPACES_PATH, Action.READ).isDeny()).isFalse();
+        for (String role : new String[]{"R_ORG_OWNER", "R_ORG_ADMIN"}) {
+            PolicyDecision decision = evaluateTmsRoute(subject(Set.of(role)), TMS_SPACES_PATH, Action.READ);
+            assertThat(decision.isPermit()).as(role).isTrue();
+            assertThat(decision.getPolicyId()).as(role)
+                    .isEqualTo("POL_SPACE_LIST_ORG_AUTHORITY_REQUIRED");
+        }
 
         for (Set<String> roles : java.util.List.of(Set.of("R_SPACE_ADMIN"), Set.<String>of())) {
             PolicyDecision decision = evaluateTmsRoute(subject(roles), TMS_SPACES_PATH, Action.READ);
@@ -366,8 +384,12 @@ class PolicyEvaluatorTest {
 
     @Test
     void tmsSpaceCreate_requiresOrgAuthority() {
-        assertThat(evaluateTmsRoute(subject(Set.of("R_ORG_OWNER")), TMS_SPACES_PATH, Action.CREATE).isDeny()).isFalse();
-        assertThat(evaluateTmsRoute(subject(Set.of("R_ORG_ADMIN")), TMS_SPACES_PATH, Action.CREATE).isDeny()).isFalse();
+        for (String role : new String[]{"R_ORG_OWNER", "R_ORG_ADMIN"}) {
+            PolicyDecision decision = evaluateTmsRoute(subject(Set.of(role)), TMS_SPACES_PATH, Action.CREATE);
+            assertThat(decision.isPermit()).as(role).isTrue();
+            assertThat(decision.getPolicyId()).as(role)
+                    .isEqualTo("POL_SPACE_CREATE_ORG_AUTHORITY_REQUIRED");
+        }
 
         // R_SPACE_ADMIN ne crée pas de nouvelle frontière dans l'org.
         for (Set<String> roles : java.util.List.of(Set.of("R_SPACE_ADMIN"), Set.<String>of())) {
@@ -379,12 +401,16 @@ class PolicyEvaluatorTest {
 
     @Test
     void tmsSpaceDetail_allowedForOrgAuthorityOrLocalSpaceAdmin() {
-        assertThat(evaluateTmsRoute(subject(Set.of("R_ORG_ADMIN")),
-                TMS_SPACES_PATH + "/" + OTHER_SPACE, Action.READ).isDeny()).isFalse();
+        PolicyDecision orgAdmin = evaluateTmsRoute(subject(Set.of("R_ORG_ADMIN")),
+                TMS_SPACES_PATH + "/" + OTHER_SPACE, Action.READ);
+        assertThat(orgAdmin.isPermit()).isTrue();
+        assertThat(orgAdmin.getPolicyId()).isEqualTo("POL_SPACE_READ_ORG_OR_LOCAL_ADMIN_REQUIRED");
 
         // Un space admin lit le space que son token désigne déjà (pas de 403 absurde).
-        assertThat(evaluateTmsRoute(subject(Set.of("R_SPACE_ADMIN")),
-                TMS_SPACES_PATH + "/" + SPACE, Action.READ).isDeny()).isFalse();
+        PolicyDecision localAdmin = evaluateTmsRoute(subject(Set.of("R_SPACE_ADMIN")),
+                TMS_SPACES_PATH + "/" + SPACE, Action.READ);
+        assertThat(localAdmin.isPermit()).isTrue();
+        assertThat(localAdmin.getPolicyId()).isEqualTo("POL_SPACE_READ_ORG_OR_LOCAL_ADMIN_REQUIRED");
     }
 
     @Test
@@ -475,7 +501,42 @@ class PolicyEvaluatorTest {
         PolicyDecision decision = evaluateTmsRoute(subject(Set.of("R_SPACE_ADMIN")),
                 "/api/v1/orgs/takibo-iam/spaces", Action.READ);
 
-        assertThat(decision.isDeny()).isFalse();
+        assertThat(decision.isPermit()).isTrue();
+        assertThat(decision.getPolicyId()).isEqualTo("POL_DEFAULT_ALLOW");
+    }
+
+    @Test
+    void ungovernedTmsUuidRoutes_failClosedForEveryAction_evenForOrgOwner() {
+        String tmsOrgRoot = "/api/v1/orgs/" + ORG;
+
+        for (String path : new String[]{tmsOrgRoot, tmsOrgRoot + "/future-resource",
+                tmsOrgRoot + "/future-resource/child"}) {
+            for (Action action : Action.values()) {
+                PolicyDecision decision = evaluateTmsRoute(subject(Set.of("R_ORG_OWNER")), path, action);
+
+                assertDeniedBy(decision, "POL_TMS_ROUTE_NOT_GOVERNED", path + " " + action);
+            }
+        }
+    }
+
+    @Test
+    void governedTmsRoutes_neverDependOnDefaultAllow() {
+        record Case(Subject subject, String path, Action action) {}
+
+        for (Case testCase : java.util.List.of(
+                new Case(orgHuman(Set.of("R_ORG_OWNER")), DASHBOARD_PATH, Action.READ),
+                new Case(subject(Set.of("R_ORG_OWNER")), TMS_SPACES_PATH, Action.READ),
+                new Case(subject(Set.of("R_ORG_ADMIN")), TMS_SPACES_PATH, Action.CREATE),
+                new Case(subject(Set.of("R_SPACE_ADMIN")), TMS_SPACES_PATH + "/" + SPACE, Action.READ),
+                new Case(subject(Set.of("R_SPACE_ADMIN")), CLIENTS_PATH, Action.CREATE),
+                new Case(subject(Set.of("R_SPACE_ADMIN")), ROTATE_PATH, Action.CREATE))) {
+            PolicyDecision decision = evaluateTmsRoute(
+                    testCase.subject(), testCase.path(), testCase.action());
+
+            assertThat(decision.isPermit()).as(testCase.path()).isTrue();
+            assertThat(decision.getPolicyId()).as(testCase.path())
+                    .isNotIn("POL_DEFAULT_ALLOW", "POL_RESOURCE_ALLOW");
+        }
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -492,10 +553,12 @@ class PolicyEvaluatorTest {
         // token SPACE du space cible : le rôle autorise, la frontière reste le token.
         for (String role : new String[]{"R_SPACE_ADMIN", "R_ORG_ADMIN", "R_ORG_OWNER",
                 "SPACE_ADMIN", "ORG_ADMIN", "ORG_OWNER"}) {
-            assertThat(evaluateTmsRoute(subject(Set.of(role)), CLIENTS_PATH, Action.CREATE).isDeny())
-                    .as(role).isFalse();
-            assertThat(evaluateTmsRoute(subject(Set.of(role)), ROTATE_PATH, Action.CREATE).isDeny())
-                    .as(role + " rotate").isFalse();
+            for (String path : new String[]{CLIENTS_PATH, ROTATE_PATH}) {
+                PolicyDecision decision = evaluateTmsRoute(subject(Set.of(role)), path, Action.CREATE);
+                assertThat(decision.isPermit()).as(role + " " + path).isTrue();
+                assertThat(decision.getPolicyId()).as(role + " " + path)
+                        .isEqualTo("POL_OAUTH_CLIENT_ADMIN_REQUIRED");
+            }
         }
     }
 

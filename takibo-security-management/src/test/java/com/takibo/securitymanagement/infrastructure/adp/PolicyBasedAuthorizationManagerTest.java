@@ -81,6 +81,55 @@ class PolicyBasedAuthorizationManagerTest {
     }
 
     @Test
+    void unknownTmsRoute_deniedByPolicy_beforeAdp_evenForOrgOwner() {
+        givenAuthenticatedHuman(Set.of("R_ORG_OWNER"));
+        String path = "/api/v1/orgs/" + ORG + "/future-resource";
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", path);
+        request.setRequestURI(path);
+
+        AuthorizationDecision decision = manager().authorize(
+                () -> authentication, new RequestAuthorizationContext(request));
+
+        assertThat(decision.isGranted()).isFalse();
+        verify(adaptiveDecisionPort, never()).evaluate(any());
+    }
+
+    @Test
+    void encodedOrParameterizedTmsUuid_cannotBypassPolicy() {
+        givenAuthenticatedHuman(Set.of("R_SPACE_ADMIN"));
+        String encodedOrg = ORG.replace("-", "%2D");
+
+        for (String path : new String[]{
+                "/api/v1/orgs/" + encodedOrg + "/spaces",
+                "/api/v1/orgs/" + ORG + ";source=review/spaces"}) {
+            MockHttpServletRequest request = new MockHttpServletRequest("GET", path);
+            request.setRequestURI(path);
+
+            AuthorizationDecision decision = manager().authorize(
+                    () -> authentication, new RequestAuthorizationContext(request));
+
+            assertThat(decision.isGranted()).as(path).isFalse();
+        }
+
+        verify(adaptiveDecisionPort, never()).evaluate(any());
+    }
+
+    @Test
+    void malformedRequestPath_failsClosedBeforePolicyAndAdp() {
+        when(authentication.isAuthenticated()).thenReturn(true);
+        when(contextProvider.current()).thenReturn(humanContext(Set.of("R_ORG_OWNER")));
+        String path = "/api/v1/orgs/%ZZ/spaces";
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", path);
+        request.setRequestURI(path);
+
+        AuthorizationDecision decision = manager().authorize(
+                () -> authentication, new RequestAuthorizationContext(request));
+
+        assertThat(decision.isGranted()).isFalse();
+        verify(adaptiveDecisionPort, never()).evaluate(any());
+    }
+
+    @Test
     void createUser_withRealFounderRoles_passesPolicy_thenConsultsAdp() {
         givenAuthenticatedHuman(Set.of("R_ORG_OWNER", "R_SPACE_ADMIN"));
         when(velocityTracker.getVelocity("user-1"))

@@ -80,6 +80,7 @@ public class PolicyEvaluator {
         // TmsSpaceRoute.parse classe .../spaces/{uuid}/clients comme sous-route et la
         // refuserait pour tous (POL_SPACE_ROUTE_NOT_GOVERNED), admins légitimes compris.
         return denyLegacyUserCreation(path, action, tenantAdmin)
+                .or(() -> organizationSignupPolicy(path, action))
                 .or(() -> currentUserSpacesPolicy(subject, path, action))
                 .or(() -> denyOrgDashboardSurface(subject, path, action))
                 .or(() -> denyUserRbacGovernanceSurface(path, tenantAdmin))
@@ -87,6 +88,7 @@ public class PolicyEvaluator {
                 .or(() -> denyReadableRbacCatalogSurface(path, tenantAdmin))
                 .or(() -> denyOAuthClientSurface(subject, path, action))
                 .or(() -> denyTmsSpaceSurface(subject, path, action))
+                .or(() -> denyUngovernedTmsSurface(path))
                 .or(() -> denyLegacyClientCreation(path, action, tenantAdmin))
                 .or(() -> denyGenericUsersSurface(subject, path, action, tenantAdmin))
                 .orElseGet(() -> PolicyDecision.builder()
@@ -120,6 +122,21 @@ public class PolicyEvaluator {
             }
         }
         return false;
+    }
+
+    // POST /api/v1/orgs/signup: the bootstrap remains authenticated as before this
+    // story, but its authorization is now explicit. Every other action is denied
+    // instead of falling through to POL_DEFAULT_ALLOW.
+    private static Optional<PolicyDecision> organizationSignupPolicy(String path, Action action) {
+        if (!"/api/v1/orgs/signup".equals(path)) {
+            return Optional.empty();
+        }
+        if (action != Action.CREATE) {
+            return deny("POL_ORG_SIGNUP_ACTION_NOT_SUPPORTED",
+                    "Only CREATE is governed on the organization signup route");
+        }
+        return permit("POL_ORG_SIGNUP_AUTHENTICATED_CREATE",
+                "An authenticated caller may bootstrap a new organization");
     }
 
     // /api/v1/me/spaces (IAM 32) : surface personnelle, sans rôle, mais strictement
@@ -179,7 +196,8 @@ public class PolicyEvaluator {
             return deny("POL_ORG_DASHBOARD_ACTION_NOT_SUPPORTED",
                     "Only READ is governed on the organization dashboard summary");
         }
-        return Optional.empty();
+        return permit("POL_ORG_DASHBOARD_ADMIN_REQUIRED",
+                "Organization owner or administrator may read the dashboard summary");
     }
 
     /**
@@ -298,7 +316,8 @@ public class PolicyEvaluator {
             return deny("POL_OAUTH_CLIENT_ADMIN_REQUIRED",
                     "R_ORG_OWNER, R_ORG_ADMIN or R_SPACE_ADMIN required to manage OAuth clients");
         }
-        return Optional.empty();
+        return permit("POL_OAUTH_CLIENT_ADMIN_REQUIRED",
+                "Tenant administrator bound to the target space may manage OAuth clients");
     }
 
     /**
@@ -378,7 +397,10 @@ public class PolicyEvaluator {
                         "Only READ and CREATE are governed on the spaces collection");
             }
             if (orgAuthority) {
-                return Optional.empty();
+                return permit(action == Action.READ
+                                ? "POL_SPACE_LIST_ORG_AUTHORITY_REQUIRED"
+                                : "POL_SPACE_CREATE_ORG_AUTHORITY_REQUIRED",
+                        "Organization owner or administrator may access the spaces collection");
             }
             return action == Action.READ
                     ? deny("POL_SPACE_LIST_ORG_AUTHORITY_REQUIRED",
@@ -394,14 +416,16 @@ public class PolicyEvaluator {
                     "Only READ is governed on a space detail route");
         }
         if (orgAuthority) {
-            return Optional.empty();
+            return permit("POL_SPACE_READ_ORG_OR_LOCAL_ADMIN_REQUIRED",
+                    "Organization owner or administrator may read the space detail");
         }
         // Exception locale, strictement READ : un R_SPACE_ADMIN lit le space que
         // son token désigne déjà (org ET space du chemin == org ET space du token).
         boolean localSpaceAdmin = hasAnyRole(subject, "R_SPACE_ADMIN", "SPACE_ADMIN")
                 && route.spaceId().equalsIgnoreCase(subject.spaceId());
         if (localSpaceAdmin) {
-            return Optional.empty();
+            return permit("POL_SPACE_READ_ORG_OR_LOCAL_ADMIN_REQUIRED",
+                    "Local space administrator may read the target space detail");
         }
         return deny("POL_SPACE_READ_ORG_OR_LOCAL_ADMIN_REQUIRED",
                 "R_ORG_OWNER/R_ORG_ADMIN required, or R_SPACE_ADMIN of this space for read");
@@ -448,6 +472,27 @@ public class PolicyEvaluator {
         }
     }
 
+    /**
+     * Terminal lock for the TMS surface. After the explicit signup, dashboard,
+     * spaces and clients policies, any other route using TMS UUID identification is
+     * denied. TIS-CORE routes using readable organization codes remain out of scope.
+     */
+    private static Optional<PolicyDecision> denyUngovernedTmsSurface(String path) {
+        String[] segments = path.split("/");
+        boolean tmsOrganizationRoute = segments.length >= 5
+                && segments[0].isEmpty()
+                && "api".equals(segments[1])
+                && "v1".equals(segments[2])
+                && "orgs".equals(segments[3])
+                && isUuid(segments[4]);
+
+        if (!tmsOrganizationRoute) {
+            return Optional.empty();
+        }
+        return deny("POL_TMS_ROUTE_NOT_GOVERNED",
+                "No explicit policy governs this TMS route - denied by default");
+    }
+
     private static boolean isUuid(String value) {
         try {
             java.util.UUID.fromString(value);
@@ -486,6 +531,14 @@ public class PolicyEvaluator {
     private static Optional<PolicyDecision> deny(String policyId, String reason) {
         return Optional.of(PolicyDecision.builder()
                 .effect(Effect.DENY)
+                .policyId(policyId)
+                .reason(reason)
+                .build());
+    }
+
+    private static Optional<PolicyDecision> permit(String policyId, String reason) {
+        return Optional.of(PolicyDecision.builder()
+                .effect(Effect.PERMIT)
                 .policyId(policyId)
                 .reason(reason)
                 .build());

@@ -16,6 +16,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
+import java.net.URI;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
@@ -25,6 +26,8 @@ import java.util.UUID;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -94,6 +97,24 @@ class SpaceSurfaceSecurityIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"Busa\",\"code\":\"busa\"}"))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void encodedOrParameterizedOrgUuid_cannotBypassSpaceListPolicy() throws Exception {
+        when(spaceQueryCase.listSpaces(eq(ORG_ID), any(), any(), anyInt(), anyInt(), any()))
+                .thenReturn(new SpacePageResult(List.of(), 0, 20, 0, 0));
+        String encodedOrg = ORG_ID.toString().replace("-", "%2D");
+
+        mockMvc.perform(get(URI.create("/api/v1/orgs/" + encodedOrg + "/spaces"))
+                        .header("Authorization", "Bearer space-admin-token"))
+                .andExpect(status().isForbidden());
+
+        // StrictHttpFirewall rejects raw matrix parameters before authorization.
+        mockMvc.perform(get(URI.create("/api/v1/orgs/" + ORG_ID + ";source=review/spaces"))
+                        .header("Authorization", "Bearer space-admin-token"))
+                .andExpect(status().isBadRequest());
+
+        verify(spaceQueryCase, never()).listSpaces(any(), any(), any(), anyInt(), anyInt(), any());
     }
 
     @Test
