@@ -81,6 +81,20 @@ class PolicyBasedAuthorizationManagerTest {
     }
 
     @Test
+    void unknownTmsRoute_deniedByPolicy_beforeAdp_evenForOrgOwner() {
+        givenAuthenticatedHuman(Set.of("R_ORG_OWNER"));
+        String path = "/api/v1/orgs/" + ORG + "/future-resource";
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", path);
+        request.setRequestURI(path);
+
+        AuthorizationDecision decision = manager().authorize(
+                () -> authentication, new RequestAuthorizationContext(request));
+
+        assertThat(decision.isGranted()).isFalse();
+        verify(adaptiveDecisionPort, never()).evaluate(any());
+    }
+
+    @Test
     void createUser_withRealFounderRoles_passesPolicy_thenConsultsAdp() {
         givenAuthenticatedHuman(Set.of("R_ORG_OWNER", "R_SPACE_ADMIN"));
         when(velocityTracker.getVelocity("user-1"))
