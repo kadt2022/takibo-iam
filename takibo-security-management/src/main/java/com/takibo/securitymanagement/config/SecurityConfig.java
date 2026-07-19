@@ -22,6 +22,12 @@ import org.springframework.security.web.authentication.AnonymousAuthenticationFi
 @RequiredArgsConstructor
 public class SecurityConfig {
 
+    private static final String[] PLATFORM_ADMIN_AUTHORITIES = {
+            "ROLE_R_TAKIBO_PLATFORM_ADMIN",
+            "ROLE_R_PLATFORM_ADMIN",
+            "ROLE_PLATFORM_ADMIN"
+    };
+
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final OrgBoundaryFilter orgBoundaryFilter;
     private final PolicyBasedAuthorizationManager policyBasedAuthorizationManager;
@@ -49,10 +55,19 @@ public class SecurityConfig {
                                 "/favicon.ico",
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**",
-                                "/actuator/**",
                                 "/api/public/**",
                                 "/api/auth/**"
                         ).permitAll()
+
+                        // Public probes expose only the aggregate status. Every other
+                        // Actuator endpoint is reserved for platform administration.
+                        .requestMatchers(HttpMethod.GET,
+                                "/actuator/health",
+                                "/actuator/health/liveness",
+                                "/actuator/health/readiness"
+                        ).permitAll()
+                        .requestMatchers("/actuator/**")
+                        .hasAnyAuthority(PLATFORM_ADMIN_AUTHORITIES)
 
                         // Login humain : public par nature (l'appelant n'a pas encore de token).
                         // Volontairement limité à cette route exacte — pas tout /api/v1/auth/**.
