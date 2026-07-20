@@ -75,8 +75,9 @@ class TakiboJwtClientAssertionDecoderFactoryTest {
     @Test
     void rejects_malformed_embedded_jwk_set_as_invalid_client() {
         RegisteredClient client = registeredClient("not-json");
+        TakiboJwtClientAssertionDecoderFactory factory = new TakiboJwtClientAssertionDecoderFactory();
 
-        assertThatThrownBy(() -> new TakiboJwtClientAssertionDecoderFactory().createDecoder(client))
+        assertThatThrownBy(() -> factory.createDecoder(client))
                 .isInstanceOf(OAuth2AuthenticationException.class)
                 .satisfies(ex -> assertThat(((OAuth2AuthenticationException) ex).getError().getErrorCode())
                         .isEqualTo("invalid_client"));

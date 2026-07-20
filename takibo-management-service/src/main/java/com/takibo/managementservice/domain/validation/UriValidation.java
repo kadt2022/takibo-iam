@@ -8,6 +8,8 @@ import java.util.Locale;
 
 public final class UriValidation {
 
+  private static final String HTTPS_SCHEME = "https";
+
   private UriValidation() {}
 
   /** URL http(s) complète : schema+host (+port) + chemin/query/fragment autorisés */
@@ -15,7 +17,7 @@ public final class UriValidation {
     Assert.hasText(rawValue, "URI value is blank");
     URI parsed = URI.create(rawValue.trim());
     String scheme = parsed.getScheme();
-    Assert.state(scheme != null && (scheme.equalsIgnoreCase("http") || scheme.equalsIgnoreCase("https")),
+    Assert.state(scheme != null && (scheme.equalsIgnoreCase("http") || scheme.equalsIgnoreCase(HTTPS_SCHEME)),
         "Only http/https scheme is allowed");
     Assert.state(hasText(parsed.getHost()), "Host is required");
     return parsed;
@@ -31,7 +33,7 @@ public final class UriValidation {
 
   public static URI requireHttpsEndpoint(String rawValue) {
     URI parsed = requireHttpHttpsUrl(rawValue);
-    Assert.state("https".equalsIgnoreCase(parsed.getScheme()), "HTTPS is required");
+    Assert.state(HTTPS_SCHEME.equalsIgnoreCase(parsed.getScheme()), "HTTPS is required");
     Assert.state(parsed.getUserInfo() == null, "Endpoint must not include user-info");
     Assert.state(parsed.getFragment() == null, "Endpoint must not include a fragment");
     return parsed;
@@ -54,7 +56,7 @@ public final class UriValidation {
   }
 
   private static void requireSecureTransport(URI parsed) {
-    if ("https".equalsIgnoreCase(parsed.getScheme())) {
+    if (HTTPS_SCHEME.equalsIgnoreCase(parsed.getScheme())) {
       return;
     }
     Assert.state(isLoopbackHost(parsed.getHost()), "HTTP is only allowed for loopback hosts");

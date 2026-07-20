@@ -24,7 +24,7 @@ public class TakiboAuthorizationServerConfiguration {
     @Order(1)
     public SecurityFilterChain authorizationServerSecurityFilterChain(
             HttpSecurity http,
-            TakiboJwtClientAssertionDecoderFactory jwtDecoderFactory) throws Exception {
+            TakiboJwtClientAssertionDecoderFactory jwtDecoderFactory) {
         OAuth2AuthorizationServerConfigurer authorizationServerConfigurer = new OAuth2AuthorizationServerConfigurer();
         RequestMatcher endpointsMatcher = authorizationServerConfigurer.getEndpointsMatcher();
 

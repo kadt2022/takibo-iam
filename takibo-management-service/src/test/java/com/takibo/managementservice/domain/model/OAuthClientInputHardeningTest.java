@@ -15,12 +15,9 @@ class OAuthClientInputHardeningTest {
 
     @Test
     void grant_types_use_an_explicit_allowlist() {
-        assertThatThrownBy(() -> ClientGrantType.ofAll(Set.of("password")))
-                .isInstanceOf(InvalidGrantTypeException.class);
-        assertThatThrownBy(() -> ClientGrantType.ofAll(Set.of("urn:example:custom-grant")))
-                .isInstanceOf(InvalidGrantTypeException.class);
-        assertThatThrownBy(() -> ClientGrantType.ofAll(Set.of(" ")))
-                .isInstanceOf(InvalidGrantTypeException.class);
+        assertInvalidGrantType("password");
+        assertInvalidGrantType("urn:example:custom-grant");
+        assertInvalidGrantType(" ");
 
         assertThat(ClientGrantType.ofAll(Set.of("urn:ietf:params:oauth:grant-type:device_code")))
                 .singleElement()
@@ -48,24 +45,18 @@ class OAuthClientInputHardeningTest {
 
     @Test
     void post_logout_redirects_apply_the_same_transport_policy() {
-        assertThatThrownBy(() -> ClientPostLogoutRedirectUri.ofAll(Set.of("http://app.example/logout")))
-                .isInstanceOf(InvalidPostLogoutRedirectUriException.class);
+        assertInvalidPostLogoutRedirect("http://app.example/logout");
         assertThat(ClientPostLogoutRedirectUri.ofAll(Set.of("https://app.example/logout")))
                 .singleElement();
     }
 
     @Test
     void cors_origins_require_https_outside_loopback() {
-        assertThatThrownBy(() -> ClientCorsOrigin.ofAll(Set.of("http://app.example")))
-                .isInstanceOf(InvalidCorsOriginException.class);
-        assertThatThrownBy(() -> ClientCorsOrigin.ofAll(Set.of("https://user@app.example")))
-                .isInstanceOf(InvalidCorsOriginException.class);
-        assertThatThrownBy(() -> ClientCorsOrigin.ofAll(Set.of("https://app.example/path")))
-                .isInstanceOf(InvalidCorsOriginException.class);
-        assertThatThrownBy(() -> ClientCorsOrigin.ofAll(Set.of("https://app.example?query=true")))
-                .isInstanceOf(InvalidCorsOriginException.class);
-        assertThatThrownBy(() -> ClientCorsOrigin.ofAll(Set.of("https://app.example#fragment")))
-                .isInstanceOf(InvalidCorsOriginException.class);
+        assertInvalidCorsOrigin("http://app.example");
+        assertInvalidCorsOrigin("https://user@app.example");
+        assertInvalidCorsOrigin("https://app.example/path");
+        assertInvalidCorsOrigin("https://app.example?query=true");
+        assertInvalidCorsOrigin("https://app.example#fragment");
 
         assertThat(ClientCorsOrigin.ofAll(Set.of("http://localhost:3000")))
                 .singleElement()
@@ -78,7 +69,26 @@ class OAuthClientInputHardeningTest {
     }
 
     private static void assertInvalidRedirect(String uri) {
-        assertThatThrownBy(() -> ClientRedirectUri.ofAll(Set.of(uri)))
+        Set<String> values = Set.of(uri);
+        assertThatThrownBy(() -> ClientRedirectUri.ofAll(values))
                 .isInstanceOf(InvalidRedirectUriException.class);
+    }
+
+    private static void assertInvalidGrantType(String grantType) {
+        Set<String> values = Set.of(grantType);
+        assertThatThrownBy(() -> ClientGrantType.ofAll(values))
+                .isInstanceOf(InvalidGrantTypeException.class);
+    }
+
+    private static void assertInvalidPostLogoutRedirect(String uri) {
+        Set<String> values = Set.of(uri);
+        assertThatThrownBy(() -> ClientPostLogoutRedirectUri.ofAll(values))
+                .isInstanceOf(InvalidPostLogoutRedirectUriException.class);
+    }
+
+    private static void assertInvalidCorsOrigin(String origin) {
+        Set<String> values = Set.of(origin);
+        assertThatThrownBy(() -> ClientCorsOrigin.ofAll(values))
+                .isInstanceOf(InvalidCorsOriginException.class);
     }
 }
