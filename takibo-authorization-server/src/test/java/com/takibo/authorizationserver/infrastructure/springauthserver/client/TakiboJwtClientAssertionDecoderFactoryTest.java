@@ -63,12 +63,13 @@ class TakiboJwtClientAssertionDecoderFactoryTest {
                         .build());
         assertion.sign(new RSASSASigner((RSAPrivateKey) keyPair.getPrivate()));
 
-        Jwt decoded = new TakiboJwtClientAssertionDecoderFactory()
-                .createDecoder(client)
-                .decode(assertion.serialize());
+        TakiboJwtClientAssertionDecoderFactory factory = new TakiboJwtClientAssertionDecoderFactory();
+        var decoder = factory.createDecoder(client);
+        Jwt decoded = decoder.decode(assertion.serialize());
 
         assertThat(decoded.getSubject()).isEqualTo(client.getClientId());
         assertThat(decoded.getAudience()).contains(ISSUER + "/oauth2/token");
+        assertThat(factory.createDecoder(client)).isSameAs(decoder);
     }
 
     @Test
@@ -79,6 +80,52 @@ class TakiboJwtClientAssertionDecoderFactoryTest {
                 .isInstanceOf(OAuth2AuthenticationException.class)
                 .satisfies(ex -> assertThat(((OAuth2AuthenticationException) ex).getError().getErrorCode())
                         .isEqualTo("invalid_client"));
+    }
+
+    @Test
+    void delegates_remote_jwk_set_url_to_standard_factory() {
+        RegisteredClient client = RegisteredClient.withId("remote-client-id")
+                .clientId("remote-client")
+                .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
+                .clientSettings(ClientSettings.builder()
+                        .jwkSetUrl("https://keys.example/jwks.json")
+                        .tokenEndpointAuthenticationSigningAlgorithm(SignatureAlgorithm.RS256)
+                        .build())
+                .build();
+
+        assertThat(new TakiboJwtClientAssertionDecoderFactory().createDecoder(client)).isNotNull();
+    }
+
+    @Test
+    void rejects_ambiguous_or_incomplete_embedded_key_settings() {
+        RegisteredClient bothSources = RegisteredClient.withId("both-sources")
+                .clientId("both-sources")
+                .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
+                .clientSettings(ClientSettings.builder()
+                        .jwkSetUrl("https://keys.example/jwks.json")
+                        .tokenEndpointAuthenticationSigningAlgorithm(SignatureAlgorithm.RS256)
+                        .setting(TakiboJwtClientAssertionDecoderFactory.JWK_SET_JSON_SETTING, "{\"keys\":[]}")
+                        .build())
+                .build();
+        RegisteredClient missingAlgorithm = RegisteredClient.withId("missing-algorithm")
+                .clientId("missing-algorithm")
+                .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
+                .clientSettings(ClientSettings.builder()
+                        .setting(TakiboJwtClientAssertionDecoderFactory.JWK_SET_JSON_SETTING, "{\"keys\":[]}")
+                        .build())
+                .build();
+        RegisteredClient emptyKeySet = registeredClient("{\"keys\":[]}");
+        TakiboJwtClientAssertionDecoderFactory factory = new TakiboJwtClientAssertionDecoderFactory();
+
+        assertThatThrownBy(() -> factory.createDecoder(bothSources))
+                .isInstanceOf(OAuth2AuthenticationException.class)
+                .hasMessageContaining("Both an embedded JWK Set");
+        assertThatThrownBy(() -> factory.createDecoder(missingAlgorithm))
+                .isInstanceOf(OAuth2AuthenticationException.class)
+                .hasMessageContaining("signature algorithm is required");
+        assertThatThrownBy(() -> factory.createDecoder(emptyKeySet))
+                .isInstanceOf(OAuth2AuthenticationException.class)
+                .hasMessageContaining("JWK Set is empty");
     }
 
     private static RegisteredClient registeredClient(String jwkSetJson) {

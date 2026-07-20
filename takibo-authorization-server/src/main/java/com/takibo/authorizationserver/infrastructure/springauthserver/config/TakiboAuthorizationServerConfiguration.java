@@ -8,10 +8,13 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.oauth2.server.authorization.OAuth2AuthorizationServerConfigurer;
+import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
 import org.springframework.security.oauth2.server.authorization.authentication.JwtClientAssertionAuthenticationProvider;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.util.matcher.RequestMatcher;
+
+import java.util.List;
 
 @Configuration
 @EnableConfigurationProperties(TasAuthorizationServerProperties.class)
@@ -29,14 +32,21 @@ public class TakiboAuthorizationServerConfiguration {
                 .securityMatcher(endpointsMatcher)
                 .with(authorizationServerConfigurer, authorizationServer -> authorizationServer
                         .clientAuthentication(clientAuthentication -> clientAuthentication
-                                .authenticationProviders(providers -> providers.stream()
-                                        .filter(JwtClientAssertionAuthenticationProvider.class::isInstance)
-                                        .map(JwtClientAssertionAuthenticationProvider.class::cast)
-                                        .forEach(provider -> provider.setJwtDecoderFactory(jwtDecoderFactory)))))
+                                .authenticationProviders(providers -> configureJwtDecoderFactory(
+                                        providers, jwtDecoderFactory))))
                 .authorizeHttpRequests(authorize -> authorize.anyRequest().authenticated())
                 .csrf(csrf -> csrf.ignoringRequestMatchers(endpointsMatcher));
 
         return http.build();
+    }
+
+    static void configureJwtDecoderFactory(
+            List<AuthenticationProvider> providers,
+            TakiboJwtClientAssertionDecoderFactory jwtDecoderFactory) {
+        providers.stream()
+                .filter(JwtClientAssertionAuthenticationProvider.class::isInstance)
+                .map(JwtClientAssertionAuthenticationProvider.class::cast)
+                .forEach(provider -> provider.setJwtDecoderFactory(jwtDecoderFactory));
     }
 
     @Bean
