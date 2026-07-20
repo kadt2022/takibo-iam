@@ -1,12 +1,18 @@
 package com.takibo.managementservice.interfaces.rest.request;
 
 import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import com.takibo.audit.infrastructure.service.MaskingLogger;
 
 public record AccountInput(
-  @Email String email,
-  @Size(min=8, max=200) String password
+        @NotBlank(message = "account.email is required")
+        @Email
+        String email,
+
+        @NotBlank(message = "account.password is required")
+        @Size(min = 8, max = 200)
+        String password
 ) {
 
     @Override

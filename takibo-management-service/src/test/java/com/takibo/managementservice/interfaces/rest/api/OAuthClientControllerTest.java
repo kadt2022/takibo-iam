@@ -36,6 +36,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -125,7 +126,13 @@ class OAuthClientControllerTest {
                                   "clientType": "CONFIDENTIAL"
                                 }
                                 """))
-                .andExpect(status().isOk())
+                .andExpect(status().isCreated())
+                .andExpect(header().string("Location",
+                        "http://localhost/api/v1/orgs/%s/spaces/%s/clients/33333333-3333-3333-3333-333333333333"
+                                .formatted(ORG_ID, SPACE_ID)))
+                .andExpect(header().string("Cache-Control", "no-store, no-cache"))
+                .andExpect(header().string("Pragma", "no-cache"))
+                .andExpect(header().string("X-Content-Type-Options", "nosniff"))
                 .andExpect(jsonPath("$.oneTimePlainSecret").value("one-time-secret"))
                 .andExpect(jsonPath("$.client.clientSecretExpiresAt").exists())
                 .andExpect(jsonPath("$.clientSecretExpiresAt").doesNotExist());
@@ -168,9 +175,47 @@ class OAuthClientControllerTest {
                                   "clientType": "PUBLIC"
                                 }
                                 """))
-                .andExpect(status().isOk())
+                .andExpect(status().isCreated())
+                .andExpect(header().string("Location",
+                        "http://localhost/api/v1/orgs/%s/spaces/%s/clients/44444444-4444-4444-4444-444444444444"
+                                .formatted(ORG_ID, SPACE_ID)))
                 .andExpect(jsonPath("$.oneTimePlainSecret").isEmpty())
                 .andExpect(jsonPath("$.clientSecretExpiresAt").doesNotExist());
+    }
+
+    @Test
+    void rotateSecret_keeps_ok_status_and_secret_protection_headers() throws Exception {
+        UUID clientId = UUID.fromString("55555555-5555-5555-5555-555555555555");
+        OAuthClient domainClient = OAuthClient.create(
+                ORG_ID,
+                SpaceId.of(SPACE_ID),
+                "conf-client",
+                "Conf Client",
+                ClientType.CONFIDENTIAL
+        );
+
+        when(currentOrganizationContext.requireCurrentOrganizationId()).thenReturn(ORG_ID);
+        when(currentSpaceContext.requireCurrentSpaceId()).thenReturn(SPACE_ID);
+        when(service.rotateSecret(ORG_ID, SpaceId.of(SPACE_ID), clientId, null))
+                .thenReturn(new RegisteredClientResult(domainClient, "rotated-secret"));
+
+        mockMvc.perform(post(
+                        "/api/v1/orgs/{orgId}/spaces/{spaceId}/clients/{id}/rotate-secret",
+                        ORG_ID,
+                        SPACE_ID,
+                        clientId
+                )
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(header().doesNotExist("Location"))
+                .andExpect(header().string("Cache-Control", "no-store, no-cache"))
+                .andExpect(header().string("Pragma", "no-cache"))
+                .andExpect(header().string("X-Content-Type-Options", "nosniff"))
+                .andExpect(jsonPath("$.clientId").value("conf-client"))
+                .andExpect(jsonPath("$.oneTimePlainSecret").value("rotated-secret"));
+
+        verify(spaceOwnershipGuard).assertSpaceBelongsToOrg(SPACE_ID, ORG_ID);
     }
 
     @Test
