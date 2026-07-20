@@ -1,26 +1,18 @@
 package com.takibo.managementservice.application.service;
 
 import com.takibo.managementservice.application.command.CreateSpaceCommand;
-import com.takibo.managementservice.application.command.CreateSpaceResult;
-import com.takibo.managementservice.application.security.ActorSource;
 import com.takibo.managementservice.domain.mapper.SpaceMapper;
-import com.takibo.managementservice.domain.model.Space;
 import com.takibo.managementservice.domain.model.SpaceRegistrationResult;
-import com.takibo.managementservice.domain.repository.SpaceRepository;
 import com.takibo.managementservice.interfaces.rest.response.SpaceResponse;
 import lombok.RequiredArgsConstructor;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.Assert;
-
-import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 public class SpaceApplicationService {
 
-    private final SpaceRepository spaceRepository;
     // DDD mode (Controller -> Command -> Response)
     private final SpaceRegistrationOrchestrator spaceRegistrationOrchestrator;
 
@@ -49,19 +41,5 @@ public class SpaceApplicationService {
 
         SpaceRegistrationResult result = spaceRegistrationOrchestrator.registerSpace(cmd);
         return spaceMapper.toSpaceResponse(result.space());
-    }
-
-
-    private String ensureUniqueCode(UUID orgId, String base) {
-        String candidate = (base == null || base.isBlank()) ? "port" : base;
-        int i = 1;
-
-        while (spaceRepository.existsByOrgIdAndCode(orgId, candidate)) {
-            candidate = base + "-" + (++i);
-            if (i > 200) {
-                throw new DataIntegrityViolationException("Too many similar port codes in org");
-            }
-        }
-        return candidate;
     }
 }

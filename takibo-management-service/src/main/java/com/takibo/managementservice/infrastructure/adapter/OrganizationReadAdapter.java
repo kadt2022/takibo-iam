@@ -31,9 +31,22 @@ public class OrganizationReadAdapter implements OrganizationReadPort {
         var org = organizationRepository.findById(orgId)
                 .orElseThrow(() -> new IllegalArgumentException("Organization not found: " + orgId));
 
+        return toContext(orgId, org.getStatus());
+    }
+
+    @Override
+    public OrganizationContext getOrganizationContextForSpaceCreation(UUID orgId) {
+        var org = organizationRepository.findByIdForUpdate(orgId)
+                .orElseThrow(() -> new IllegalArgumentException("Organization not found: " + orgId));
+
+        return toContext(orgId, org.getStatus());
+    }
+
+    private OrganizationContext toContext(UUID orgId, OrganizationStatus status) {
+
         int currentSpaces = spaceRepository.countByOrgId(orgId);
 
-        boolean enabled = org.getStatus() == OrganizationStatus.ACTIVE;
+        boolean enabled = status == OrganizationStatus.ACTIVE;
 
         return new OrganizationContext(
                 orgId,
