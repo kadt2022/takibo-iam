@@ -1,23 +1,28 @@
 package com.takibo.managementservice.application.validation;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nimbusds.jose.JOSEException;
+import com.nimbusds.jose.jwk.Curve;
+import com.nimbusds.jose.jwk.ECKey;
+import com.nimbusds.jose.jwk.JWK;
+import com.nimbusds.jose.jwk.JWKSet;
+import com.nimbusds.jose.jwk.KeyOperation;
+import com.nimbusds.jose.jwk.KeyUse;
+import com.nimbusds.jose.jwk.RSAKey;
 import com.takibo.managementservice.application.command.RegisterClientCommand;
 import com.takibo.managementservice.domain.exception.InvalidClientConfigurationException;
 import com.takibo.managementservice.domain.model.ClientType;
 import com.takibo.managementservice.domain.model.TokenEndpointAuthMethod;
 import com.takibo.managementservice.domain.validation.UriValidation;
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.text.ParseException;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.List;
 import java.util.Set;
 import java.util.regex.Pattern;
 
 @Component
-@RequiredArgsConstructor
 public class OAuthClientConfigurationValidator {
 
     private static final Pattern CLIENT_ID_PATTERN =
@@ -25,19 +30,18 @@ public class OAuthClientConfigurationValidator {
     private static final Set<String> SAFE_ID_TOKEN_ALGORITHMS = Set.of(
             "RS256", "RS384", "RS512",
             "PS256", "PS384", "PS512",
-            "ES256", "ES384", "ES512",
-            "EdDSA"
+            "ES256", "ES384", "ES512"
     );
-    private static final Set<String> PUBLIC_JWK_TYPES = Set.of("RSA", "EC", "OKP");
-    private static final Set<String> PRIVATE_JWK_MEMBERS = Set.of(
-            "d", "p", "q", "dp", "dq", "qi", "oth", "k"
-    );
+    private static final Set<Curve> SUPPORTED_EC_CURVES = Set.of(Curve.P_256, Curve.P_384, Curve.P_521);
     private static final int MAX_ACCESS_TOKEN_TTL_SECONDS = 86_400;
     private static final int MAX_REFRESH_TOKEN_TTL_SECONDS = 31_536_000;
     private static final int MAX_ID_TOKEN_TTL_SECONDS = 86_400;
 
-    private final ObjectMapper objectMapper;
     private final Clock clock;
+
+    public OAuthClientConfigurationValidator(Clock clock) {
+        this.clock = clock;
+    }
 
     public void validateRegistration(RegisterClientCommand command) {
         validateIdentity(command);
@@ -141,6 +145,10 @@ public class OAuthClientConfigurationValidator {
             fail("private_key_jwt requires jwksUri or jwksJson");
         }
         if (command.tokenEndpointAuthMethod() == TokenEndpointAuthMethod.private_key_jwt
+                && !hasText(command.idTokenSignedAlg())) {
+            fail("private_key_jwt requires idTokenSignedAlg");
+        }
+        if (command.tokenEndpointAuthMethod() == TokenEndpointAuthMethod.private_key_jwt
                 && Boolean.TRUE.equals(command.requireClientSecret())) {
             fail("private_key_jwt must not require a client secret");
         }
@@ -148,7 +156,7 @@ public class OAuthClientConfigurationValidator {
             validateJwksUri(command.jwksUri());
         }
         if (hasJson) {
-            validateJwksJson(command.jwksJson());
+            validateJwksJson(command.jwksJson(), command.idTokenSignedAlg());
         }
     }
 
@@ -163,49 +171,73 @@ public class OAuthClientConfigurationValidator {
         }
     }
 
-    private void validateJwksJson(String rawJson) {
+    private static void validateJwksJson(String rawJson, String configuredAlgorithm) {
         if (rawJson.length() > 32768) {
             fail("jwksJson exceeds 32768 characters");
         }
         try {
-            JsonNode root = objectMapper.readTree(rawJson);
-            JsonNode keys = root == null ? null : root.get("keys");
-            if (keys == null || !keys.isArray() || keys.isEmpty() || keys.size() > 10) {
+            List<JWK> keys = JWKSet.parse(rawJson).getKeys();
+            if (keys.isEmpty() || keys.size() > 10) {
                 fail("jwksJson must contain between 1 and 10 public keys");
             }
-            for (JsonNode key : keys) {
+            boolean compatibleKeyFound = false;
+            for (JWK key : keys) {
                 validatePublicJwk(key);
+                compatibleKeyFound |= isCompatibleWithAlgorithm(key, configuredAlgorithm);
             }
-        } catch (JsonProcessingException ex) {
+            if (hasText(configuredAlgorithm) && !compatibleKeyFound) {
+                fail("jwksJson does not contain a key compatible with idTokenSignedAlg");
+            }
+        } catch (ParseException | JOSEException | IllegalArgumentException ex) {
             fail("jwksJson must be a valid JWK Set");
         }
     }
 
-    private static void validatePublicJwk(JsonNode key) {
-        String keyType = key != null && key.hasNonNull("kty") ? key.get("kty").asText() : null;
-        if (!PUBLIC_JWK_TYPES.contains(keyType)) {
+    private static void validatePublicJwk(JWK key) throws JOSEException {
+        if (!(key instanceof RSAKey) && !(key instanceof ECKey)) {
             fail("jwksJson contains an unsupported key type");
         }
-        for (String member : PRIVATE_JWK_MEMBERS) {
-            if (key.has(member)) {
-                fail("jwksJson must contain public key material only");
+        if (key.isPrivate()) {
+            fail("jwksJson must contain public key material only");
+        }
+        if (key.getKeyUse() != null && !KeyUse.SIGNATURE.equals(key.getKeyUse())) {
+            fail("jwksJson keys must be usable for signatures");
+        }
+        if (key.getKeyOperations() != null && !key.getKeyOperations().isEmpty()
+                && !key.getKeyOperations().contains(KeyOperation.VERIFY)) {
+            fail("jwksJson keys must allow signature verification");
+        }
+        if (key instanceof RSAKey rsaKey) {
+            rsaKey.toRSAPublicKey();
+            if (rsaKey.size() < 2048) {
+                fail("jwksJson RSA keys must be at least 2048 bits");
             }
+            return;
         }
-        switch (keyType) {
-            case "RSA" -> requireTextMembers(key, "n", "e");
-            case "EC" -> requireTextMembers(key, "crv", "x", "y");
-            case "OKP" -> requireTextMembers(key, "crv", "x");
-            default -> fail("jwksJson contains an unsupported key type");
+        if (key instanceof ECKey ecKey) {
+            if (!SUPPORTED_EC_CURVES.contains(ecKey.getCurve())) {
+                fail("jwksJson contains an unsupported EC curve");
+            }
+            ecKey.toECPublicKey();
+            return;
         }
+        fail("jwksJson contains an unsupported key type");
     }
 
-    private static void requireTextMembers(JsonNode key, String... memberNames) {
-        for (String memberName : memberNames) {
-            JsonNode member = key.get(memberName);
-            if (member == null || !member.isTextual() || member.asText().isBlank()) {
-                fail("jwksJson contains an incomplete public key");
-            }
+    private static boolean isCompatibleWithAlgorithm(JWK key, String configuredAlgorithm) {
+        if (!hasText(configuredAlgorithm)) {
+            return true;
         }
+        if (key.getAlgorithm() != null && !configuredAlgorithm.equals(key.getAlgorithm().getName())) {
+            return false;
+        }
+        return switch (configuredAlgorithm) {
+            case "RS256", "RS384", "RS512", "PS256", "PS384", "PS512" -> key instanceof RSAKey;
+            case "ES256" -> key instanceof ECKey ecKey && Curve.P_256.equals(ecKey.getCurve());
+            case "ES384" -> key instanceof ECKey ecKey && Curve.P_384.equals(ecKey.getCurve());
+            case "ES512" -> key instanceof ECKey ecKey && Curve.P_521.equals(ecKey.getCurve());
+            default -> false;
+        };
     }
 
     private static boolean hasText(String value) {

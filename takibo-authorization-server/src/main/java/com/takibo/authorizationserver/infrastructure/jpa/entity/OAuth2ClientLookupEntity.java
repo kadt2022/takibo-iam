@@ -42,6 +42,15 @@ public class OAuth2ClientLookupEntity {
     @Column(name = "token_endpoint_auth_method", nullable = false, length = 64)
     private String tokenEndpointAuthMethod;
 
+    @Column(name = "jwks_uri", length = 255)
+    private String jwksUri;
+
+    @Column(name = "jwks_json", columnDefinition = "TEXT")
+    private String jwksJson;
+
+    @Column(name = "id_token_signed_alg", length = 32)
+    private String idTokenSignedAlg;
+
     public UUID getId() {
         return id;
     }
@@ -76,6 +85,18 @@ public class OAuth2ClientLookupEntity {
 
     public String getTokenEndpointAuthMethod() {
         return tokenEndpointAuthMethod;
+    }
+
+    public String getJwksUri() {
+        return jwksUri;
+    }
+
+    public String getJwksJson() {
+        return jwksJson;
+    }
+
+    public String getIdTokenSignedAlg() {
+        return idTokenSignedAlg;
     }
 
     public enum ClientType {

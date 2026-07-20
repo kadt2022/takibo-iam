@@ -30,6 +30,10 @@ ambiguë ou dangereuse est refusée avec un statut `400` avant l'accès au repos
 - Refuser les algorithmes de signature faibles ou non signés.
 - Valider `jwksUri`/`jwksJson`, leur exclusivité et l'absence de clé privée ou
   symétrique dans le JSON persisté.
+- Analyser les JWK embarquées avec Nimbus JOSE, imposer RSA >= 2048 bits ou une
+  courbe EC supportée, et vérifier la compatibilité clé/algorithme.
+- Charger les paramètres JWK dans le serveur d'autorisation afin que les clients
+  `private_key_jwt` enregistrés puissent réellement être authentifiés.
 - Masquer `jwksJson` dans la représentation textuelle du DTO.
 
 ## Critères d'acceptation
@@ -54,7 +58,8 @@ peut pas porter d'expiration de secret.
 
 `jwksUri` exige HTTPS. `jwksJson` doit être un JWK Set valide de taille bornée,
 contenir uniquement des clés publiques asymétriques et ne peut pas être fourni avec
-`jwksUri`.
+`jwksUri`. Pour `private_key_jwt`, `idTokenSignedAlg` est obligatoire et doit être
+compatible avec au moins une clé du JWK Set.
 
 ### AC-05 — Frontière REST bornée
 

@@ -11,10 +11,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
+import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import java.util.List;
 import java.util.UUID;
@@ -73,16 +75,34 @@ public class TakiboRegisteredClientRepository implements RegisteredClientReposit
             return null;
         }
 
+        ClientSettings.Builder clientSettings = ClientSettings.builder()
+                .requireProofKey(Boolean.TRUE.equals(entity.getRequirePkce()))
+                .setting(TakiboTokenClaims.SCOPE_LEVEL, TakiboTokenClaims.SCOPE_SPACE)
+                .setting(TakiboTokenClaims.TENANT_SOURCE, TakiboTokenClaims.SOURCE_OAUTH2_CLIENT)
+                .setting(TakiboTokenClaims.ORG_ID, entity.getOrgId().toString())
+                .setting(TakiboTokenClaims.SPACE_ID, entity.getSpaceId().toString());
+
+        if (StringUtils.hasText(entity.getJwksUri())) {
+            clientSettings.jwkSetUrl(entity.getJwksUri());
+        }
+        if (StringUtils.hasText(entity.getJwksJson())) {
+            clientSettings.setting(TakiboJwtClientAssertionDecoderFactory.JWK_SET_JSON_SETTING,
+                    entity.getJwksJson());
+        }
+        if (StringUtils.hasText(entity.getIdTokenSignedAlg())) {
+            SignatureAlgorithm signingAlgorithm = SignatureAlgorithm.from(entity.getIdTokenSignedAlg());
+            if (signingAlgorithm != null) {
+                clientSettings.tokenEndpointAuthenticationSigningAlgorithm(signingAlgorithm);
+            } else {
+                log.warn("OAuth2 client {} ({}) has an unsupported signing algorithm: {}",
+                        entity.getClientId(), entity.getId(), entity.getIdTokenSignedAlg());
+            }
+        }
+
         RegisteredClient.Builder builder = RegisteredClient.withId(entity.getId().toString())
                 .clientId(entity.getClientId())
                 .clientAuthenticationMethod(new ClientAuthenticationMethod(entity.getTokenEndpointAuthMethod()))
-                .clientSettings(ClientSettings.builder()
-                        .requireProofKey(Boolean.TRUE.equals(entity.getRequirePkce()))
-                        .setting(TakiboTokenClaims.SCOPE_LEVEL, TakiboTokenClaims.SCOPE_SPACE)
-                        .setting(TakiboTokenClaims.TENANT_SOURCE, TakiboTokenClaims.SOURCE_OAUTH2_CLIENT)
-                        .setting(TakiboTokenClaims.ORG_ID, entity.getOrgId().toString())
-                        .setting(TakiboTokenClaims.SPACE_ID, entity.getSpaceId().toString())
-                        .build());
+                .clientSettings(clientSettings.build());
 
         grants.forEach(builder::authorizationGrantType);
         scopes.findByClientId(entity.getId()).forEach(s -> builder.scope(s.getScope()));

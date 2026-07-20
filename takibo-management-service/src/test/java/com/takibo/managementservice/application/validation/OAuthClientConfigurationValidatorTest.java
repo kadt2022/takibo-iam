@@ -1,17 +1,30 @@
 package com.takibo.managementservice.application.validation;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nimbusds.jose.JWSAlgorithm;
+import com.nimbusds.jose.jwk.Curve;
+import com.nimbusds.jose.jwk.ECKey;
+import com.nimbusds.jose.jwk.JWKSet;
+import com.nimbusds.jose.jwk.RSAKey;
+import com.nimbusds.jose.util.Base64URL;
 import com.takibo.managementservice.application.command.RegisterClientCommand;
 import com.takibo.managementservice.domain.exception.InvalidClientConfigurationException;
 import com.takibo.managementservice.domain.model.ClientType;
 import com.takibo.managementservice.domain.model.TokenEndpointAuthMethod;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.interfaces.ECPublicKey;
+import java.security.interfaces.RSAPrivateKey;
+import java.security.interfaces.RSAPublicKey;
+import java.security.spec.ECGenParameterSpec;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.LinkedHashSet;
+import java.util.HexFormat;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -20,13 +33,57 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class OAuthClientConfigurationValidatorTest {
 
     private static final Instant NOW = Instant.parse("2030-01-01T00:00:00Z");
+    private static String rsaPublicJwkSet;
+    private static String rsaPrivateJwkSet;
+    private static String weakRsaPublicJwkSet;
+    private static String ecPublicJwkSet;
+    private static String unsupportedEcJwkSet;
 
     private OAuthClientConfigurationValidator validator;
+
+    @BeforeAll
+    static void generateJwkSets() throws Exception {
+        KeyPair rsaKeyPair = generateRsaKeyPair(2048);
+        RSAKey rsaPublicKey = new RSAKey.Builder((RSAPublicKey) rsaKeyPair.getPublic())
+                .keyID("rsa-key-1")
+                .algorithm(JWSAlgorithm.RS256)
+                .build();
+        RSAKey rsaPrivateKey = new RSAKey.Builder((RSAPublicKey) rsaKeyPair.getPublic())
+                .privateKey((RSAPrivateKey) rsaKeyPair.getPrivate())
+                .keyID("rsa-key-1")
+                .algorithm(JWSAlgorithm.RS256)
+                .build();
+        KeyPair weakRsaKeyPair = generateRsaKeyPair(1024);
+        RSAKey weakRsaPublicKey = new RSAKey.Builder((RSAPublicKey) weakRsaKeyPair.getPublic())
+                .keyID("weak-rsa-key")
+                .algorithm(JWSAlgorithm.RS256)
+                .build();
+
+        KeyPairGenerator ecGenerator = KeyPairGenerator.getInstance("EC");
+        ecGenerator.initialize(new ECGenParameterSpec("secp256r1"));
+        KeyPair ecKeyPair = ecGenerator.generateKeyPair();
+        ECKey ecPublicKey = new ECKey.Builder(Curve.P_256, (ECPublicKey) ecKeyPair.getPublic())
+                .keyID("ec-key-1")
+                .algorithm(JWSAlgorithm.ES256)
+                .build();
+
+        rsaPublicJwkSet = new JWKSet(rsaPublicKey).toString();
+        rsaPrivateJwkSet = new JWKSet(rsaPrivateKey).toString(false);
+        weakRsaPublicJwkSet = new JWKSet(weakRsaPublicKey).toString();
+        ecPublicJwkSet = new JWKSet(ecPublicKey).toString();
+        unsupportedEcJwkSet = new JWKSet(new ECKey.Builder(
+                Curve.SECP256K1,
+                Base64URL.encode(HexFormat.of().parseHex(
+                        "79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798")),
+                Base64URL.encode(HexFormat.of().parseHex(
+                        "483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8")))
+                .keyID("unsupported-ec-key")
+                .build()).toString();
+    }
 
     @BeforeEach
     void setUp() {
         validator = new OAuthClientConfigurationValidator(
-                new ObjectMapper(),
                 Clock.fixed(NOW, ZoneOffset.UTC)
         );
     }
@@ -92,6 +149,7 @@ class OAuthClientConfigurationValidatorTest {
     @Test
     void rejects_unsafe_signing_algorithm_and_secret_expiration() {
         assertInvalid(command().withIdTokenSignedAlg("none").build(), "idTokenSignedAlg");
+        assertInvalid(command().withIdTokenSignedAlg("EdDSA").build(), "idTokenSignedAlg");
         assertInvalid(command().withSecretExpiration(NOW).build(), "must be in the future");
         assertInvalid(
                 command()
@@ -117,6 +175,10 @@ class OAuthClientConfigurationValidatorTest {
         assertInvalid(
                 command().asPrivateKeyJwt().withRequireClientSecret(true).build(),
                 "must not require a client secret"
+        );
+        assertInvalid(
+                command().asPrivateKeyJwt().withIdTokenSignedAlg(null).build(),
+                "requires idTokenSignedAlg"
         );
     }
 
@@ -144,30 +206,39 @@ class OAuthClientConfigurationValidatorTest {
                 command().withJwksJson("{\"keys\":[{\"kty\":\"oct\",\"k\":\"secret\"}]}").build(),
                 "unsupported key type"
         );
+        assertInvalid(command().withJwksJson(rsaPrivateJwkSet).build(), "public key material only");
+        assertInvalid(command().withJwksJson(weakRsaPublicJwkSet).build(), "at least 2048 bits");
         assertInvalid(
-                command().withJwksJson("{\"keys\":[{\"kty\":\"RSA\",\"n\":\"n\",\"e\":\"AQAB\",\"d\":\"private\"}]}").build(),
-                "public key material only"
+                command().withJwksJson(
+                        "{\"keys\":[{\"kty\":\"RSA\",\"n\":\"n\",\"e\":\"AQAB\"}]}"
+                ).build(),
+                "valid JWK Set"
         );
         assertInvalid(
                 command().withJwksJson("{\"keys\":[{\"kty\":\"RSA\",\"n\":\"n\"}]}").build(),
-                "incomplete public key"
+                "valid JWK Set"
         );
         assertInvalid(
                 command().withJwksJson("{\"keys\":[{\"kty\":\"RSA\",\"n\":\"n\",\"e\":1}]}").build(),
-                "incomplete public key"
+                "valid JWK Set"
         );
         assertInvalid(command().withJwksJson("x".repeat(32_769)).build(), "exceeds 32768");
     }
 
     @Test
-    void accepts_complete_ec_and_okp_public_keys() {
+    void accepts_supported_ec_key_and_rejects_key_algorithm_mismatch() {
         assertThatCode(() -> validator.validateRegistration(
-                command().withJwksJson(
-                        "{\"keys\":["
-                                + "{\"kty\":\"EC\",\"crv\":\"P-256\",\"x\":\"x\",\"y\":\"y\"},"
-                                + "{\"kty\":\"OKP\",\"crv\":\"Ed25519\",\"x\":\"x\"}]}"
-                ).build()
+                command().withIdTokenSignedAlg("ES256").withJwksJson(ecPublicJwkSet).build()
         )).doesNotThrowAnyException();
+
+        assertInvalid(
+                command().withIdTokenSignedAlg("ES256").withJwksJson(rsaPublicJwkSet).build(),
+                "compatible with idTokenSignedAlg"
+        );
+        assertInvalid(
+                command().withIdTokenSignedAlg("ES256").withJwksJson(unsupportedEcJwkSet).build(),
+                "unsupported EC curve"
+        );
     }
 
     private void assertInvalid(RegisterClientCommand command, String message) {
@@ -177,7 +248,13 @@ class OAuthClientConfigurationValidatorTest {
     }
 
     private static String publicJwkSet() {
-        return "{\"keys\":[{\"kty\":\"RSA\",\"kid\":\"key-1\",\"n\":\"n\",\"e\":\"AQAB\"}]}";
+        return rsaPublicJwkSet;
+    }
+
+    private static KeyPair generateRsaKeyPair(int keySize) throws Exception {
+        KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
+        generator.initialize(keySize);
+        return generator.generateKeyPair();
     }
 
     private static CommandBuilder command() {

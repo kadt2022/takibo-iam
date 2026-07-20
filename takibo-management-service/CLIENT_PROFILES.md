@@ -16,8 +16,12 @@ Validation is the source of truth; this document is guidance.
 - Client-secret expiration must be in the future and is forbidden for public or
   key-authenticated clients.
 - `jwksUri` and `jwksJson` are mutually exclusive. Remote JWKS endpoints require
-  HTTPS, and embedded JWK Sets may contain public asymmetric keys only.
-- ID-token signing algorithm `none` and symmetric algorithms are rejected.
+  HTTPS. Embedded JWK Sets are parsed cryptographically and may contain only public
+  RSA keys of at least 2048 bits or EC keys on P-256, P-384 or P-521.
+- `private_key_jwt` requires a JWK source and `idTokenSignedAlg`; the configured
+  algorithm must match at least one key and is loaded by the authorization server.
+- Supported signing algorithms are RS256/384/512, PS256/384/512 and ES256/384/512.
+  `none`, symmetric algorithms and unsupported algorithms are rejected.
 
 ## SPA (Public + auth code)
 
