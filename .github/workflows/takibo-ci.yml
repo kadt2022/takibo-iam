@@ -414,7 +414,10 @@ jobs:
             exit 1
           fi
 
-          mapfile -t jacoco_reports < <(find . -type f -path "*/build/reports/jacoco/test/jacocoTestReport.xml" | sort)
+          # Sonar analyzes each Gradle subproject from its own base directory.
+          # Absolute paths keep every report reachable from every module, which
+          # is required for cross-module integration coverage.
+          mapfile -t jacoco_reports < <(find "$GITHUB_WORKSPACE" -type f -path "*/build/reports/jacoco/test/jacocoTestReport.xml" | sort)
           if [ "${#jacoco_reports[@]}" -eq 0 ]; then
             echo "No JaCoCo XML reports found"
             exit 1
@@ -510,8 +513,10 @@ jobs:
 
           if [ -n "${SONAR_PR_NUMBER:-}" ]; then
             STATUS_URL="$SONAR_HOST_URL/api/qualitygates/project_status?projectKey=$SONAR_PROJECT_KEY&pullRequest=$SONAR_PR_NUMBER"
+            ANALYSIS_PARAM="pullRequest=$SONAR_PR_NUMBER"
           else
             STATUS_URL="$SONAR_HOST_URL/api/qualitygates/project_status?projectKey=$SONAR_PROJECT_KEY&branch=$SONAR_BRANCH"
+            ANALYSIS_PARAM="branch=$SONAR_BRANCH"
           fi
           project_status_json="$(get_json "$STATUS_URL")"
           quality_status="$(echo "$project_status_json" | jq -r '.projectStatus.status')"
@@ -520,7 +525,7 @@ jobs:
           metric_keys="$metric_keys,security_hotspots_reviewed,new_coverage,new_duplicated_lines_density"
           metric_keys="$metric_keys,duplicated_lines_density,coverage,code_smells"
           metric_keys="$metric_keys,security_rating,reliability_rating,sqale_rating"
-          measures_json="$(get_json "$SONAR_HOST_URL/api/measures/component?component=$SONAR_PROJECT_KEY&metricKeys=$metric_keys")"
+          measures_json="$(get_json "$SONAR_HOST_URL/api/measures/component?component=$SONAR_PROJECT_KEY&metricKeys=$metric_keys&$ANALYSIS_PARAM")"
 
           new_bugs="$(get_metric "$measures_json" "new_bugs" "0")"
           new_vulnerabilities="$(get_metric "$measures_json" "new_vulnerabilities" "0")"
