@@ -27,7 +27,7 @@ public final class ClientRedirectUri {
     for (String raw : rawValues) {
       String candidate = raw == null ? "" : raw.trim();
       try {
-        URI parsed = UriValidation.requireHttpHttpsUrl(candidate);
+        URI parsed = UriValidation.requireOAuthRedirectUrl(candidate);
         validatedValues.add(new ClientRedirectUri(parsed.toString()));
       } catch (Exception e) {
         invalidValues.add(raw);

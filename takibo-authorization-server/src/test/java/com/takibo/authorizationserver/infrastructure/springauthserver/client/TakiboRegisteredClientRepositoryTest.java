@@ -15,6 +15,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
+import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 
 import java.util.List;
@@ -89,6 +90,53 @@ class TakiboRegisteredClientRepositoryTest {
         assertThat(rc.getClientSecret()).isNull();
         assertThat(rc.getAuthorizationGrantTypes()).contains(AuthorizationGrantType.CLIENT_CREDENTIALS);
         assertThat(rc.getScopes()).contains("openid");
+    }
+
+    @Test
+    void given_private_key_jwt_client_when_find_then_maps_verification_key_settings() {
+        OAuth2ClientLookupEntity entity = mock(OAuth2ClientLookupEntity.class);
+        when(entity.getId()).thenReturn(ID);
+        when(entity.getClientId()).thenReturn("signed-client");
+        when(entity.getOrgId()).thenReturn(ORG);
+        when(entity.getSpaceId()).thenReturn(SPACE);
+        when(entity.getTokenEndpointAuthMethod()).thenReturn("private_key_jwt");
+        when(entity.getRequireClientSecret()).thenReturn(false);
+        when(entity.getJwksUri()).thenReturn("https://keys.example/jwks.json");
+        when(entity.getJwksJson()).thenReturn("{\"keys\":[]}");
+        when(entity.getIdTokenSignedAlg()).thenReturn("RS256");
+        when(clients.findByClientId("signed-client")).thenReturn(Optional.of(entity));
+        givenGrantTypes("client_credentials");
+        givenScopes("api.read");
+
+        RegisteredClient rc = repository.findByClientId("signed-client");
+
+        assertThat(rc).isNotNull();
+        assertThat(rc.getClientSettings().getJwkSetUrl())
+                .isEqualTo("https://keys.example/jwks.json");
+        assertThat((String) rc.getClientSettings().getSetting(
+                TakiboJwtClientAssertionDecoderFactory.JWK_SET_JSON_SETTING))
+                .isEqualTo("{\"keys\":[]}");
+        assertThat(rc.getClientSettings().getTokenEndpointAuthenticationSigningAlgorithm())
+                .isEqualTo(SignatureAlgorithm.RS256);
+    }
+
+    @Test
+    void given_legacy_unsupported_algorithm_when_find_then_does_not_expose_it_to_spring_security() {
+        OAuth2ClientLookupEntity entity = mock(OAuth2ClientLookupEntity.class);
+        when(entity.getId()).thenReturn(ID);
+        when(entity.getClientId()).thenReturn("legacy-client");
+        when(entity.getOrgId()).thenReturn(ORG);
+        when(entity.getSpaceId()).thenReturn(SPACE);
+        when(entity.getTokenEndpointAuthMethod()).thenReturn("private_key_jwt");
+        when(entity.getIdTokenSignedAlg()).thenReturn("EdDSA");
+        when(clients.findByClientId("legacy-client")).thenReturn(Optional.of(entity));
+        givenGrantTypes("client_credentials");
+        givenScopes("api.read");
+
+        RegisteredClient rc = repository.findByClientId("legacy-client");
+
+        assertThat(rc).isNotNull();
+        assertThat(rc.getClientSettings().getTokenEndpointAuthenticationSigningAlgorithm()).isNull();
     }
 
     @Test

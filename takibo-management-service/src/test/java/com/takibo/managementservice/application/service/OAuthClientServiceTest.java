@@ -1,6 +1,7 @@
 package com.takibo.managementservice.application.service;
 
 import com.takibo.managementservice.application.command.RegisterClientCommand;
+import com.takibo.managementservice.application.validation.OAuthClientConfigurationValidator;
 import com.takibo.managementservice.domain.exception.InvalidClientConfigurationException;
 import com.takibo.managementservice.domain.exception.OAuthClientSecretRotationConflictException;
 import com.takibo.managementservice.domain.model.ClientType;
@@ -38,6 +39,9 @@ class OAuthClientServiceTest {
 
     @Mock
     private PasswordEncoder passwordEncoder;
+
+    @Mock
+    private OAuthClientConfigurationValidator configurationValidator;
 
     @InjectMocks
     private OAuthClientService service;
@@ -85,8 +89,6 @@ class OAuthClientServiceTest {
                 .withRedirectUris(Set.of("http://localhost/callback"))
                 .build();
 
-        when(repository.existsByClientId(cmd.clientId())).thenReturn(false);
-
         assertThatThrownBy(() -> service.register(UUID.randomUUID(), SpaceId.of(UUID.randomUUID()), cmd))
                 .isInstanceOf(InvalidClientConfigurationException.class)
                 .hasMessageContaining("client_credentials cannot be combined");
@@ -100,11 +102,33 @@ class OAuthClientServiceTest {
                 .withRedirectUris(Set.of("http://localhost/callback"))
                 .build();
 
-        when(repository.existsByClientId(cmd.clientId())).thenReturn(false);
-
         assertThatThrownBy(() -> service.register(UUID.randomUUID(), SpaceId.of(UUID.randomUUID()), cmd))
                 .isInstanceOf(InvalidClientConfigurationException.class)
                 .hasMessageContaining("redirect/cors/post-logout");
+    }
+
+    @Test
+    void register_privateKeyJwt_doesNotGenerateOrPersistASecret() {
+        RegisterClientCommand cmd = baseCommand()
+                .withClientType(ClientType.CONFIDENTIAL)
+                .withTokenEndpointAuthMethod(TokenEndpointAuthMethod.private_key_jwt)
+                .withRequireClientSecret(false)
+                .build();
+
+        when(repository.existsByClientId(cmd.clientId())).thenReturn(false);
+        when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        RegisteredClientResult result = service.register(
+                UUID.randomUUID(),
+                SpaceId.of(UUID.randomUUID()),
+                cmd
+        );
+
+        verify(repository).save(clientCaptor.capture());
+        assertThat(clientCaptor.getValue().isRequireClientSecret()).isFalse();
+        assertThat(clientCaptor.getValue().getClientSecretHash()).isNull();
+        assertThat(result.oneTimePlainSecret()).isNull();
+        verifyNoInteractions(passwordEncoder);
     }
 
     @Test
