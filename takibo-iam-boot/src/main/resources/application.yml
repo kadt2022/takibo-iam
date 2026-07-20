@@ -42,7 +42,7 @@ server:
 springdoc:
   api-docs:
     enabled: true
-  show-actuator: true
+  show-actuator: false
 
 management:
   endpoints:
@@ -52,7 +52,13 @@ management:
         include: health,info,beans,conditions,metrics,env,loggers
   endpoint:
     health:
-      show-details: always
+      show-details: when-authorized
+      probes:
+        enabled: true
+      roles:
+        - R_TAKIBO_PLATFORM_ADMIN
+        - R_PLATFORM_ADMIN
+        - PLATFORM_ADMIN
 
 security:
   password-policy:
