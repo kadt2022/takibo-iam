@@ -38,7 +38,7 @@ class TakiboAuthorizationServerConfigurationTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void builds_authorization_server_filter_chain_with_decoder_customization() throws Exception {
+    void builds_authorization_server_filter_chain_with_decoder_customization() {
         HttpSecurity http = mock(HttpSecurity.class);
         DefaultSecurityFilterChain filterChain = mock(DefaultSecurityFilterChain.class);
         TakiboJwtClientAssertionDecoderFactory decoderFactory =
