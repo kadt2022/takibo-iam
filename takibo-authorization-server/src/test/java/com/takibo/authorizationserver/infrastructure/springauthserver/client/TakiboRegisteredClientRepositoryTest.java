@@ -121,6 +121,25 @@ class TakiboRegisteredClientRepositoryTest {
     }
 
     @Test
+    void given_legacy_unsupported_algorithm_when_find_then_does_not_expose_it_to_spring_security() {
+        OAuth2ClientLookupEntity entity = mock(OAuth2ClientLookupEntity.class);
+        when(entity.getId()).thenReturn(ID);
+        when(entity.getClientId()).thenReturn("legacy-client");
+        when(entity.getOrgId()).thenReturn(ORG);
+        when(entity.getSpaceId()).thenReturn(SPACE);
+        when(entity.getTokenEndpointAuthMethod()).thenReturn("private_key_jwt");
+        when(entity.getIdTokenSignedAlg()).thenReturn("EdDSA");
+        when(clients.findByClientId("legacy-client")).thenReturn(Optional.of(entity));
+        givenGrantTypes("client_credentials");
+        givenScopes("api.read");
+
+        RegisteredClient rc = repository.findByClientId("legacy-client");
+
+        assertThat(rc).isNotNull();
+        assertThat(rc.getClientSettings().getTokenEndpointAuthenticationSigningAlgorithm()).isNull();
+    }
+
+    @Test
     void given_authorization_code_client_with_redirect_uris_when_find_then_maps_redirect_uris() {
         OAuth2ClientLookupEntity entity = clientEntity("web-app", true, "$2a$12$hashvalue");
         when(clients.findByClientId("web-app")).thenReturn(Optional.of(entity));
