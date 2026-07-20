@@ -15,7 +15,9 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
+import java.net.URI;
 import java.util.UUID;
 
 @RestController
@@ -41,7 +43,11 @@ public class OAuthClientController {
                 mapper.toResponse(result.client()),
                 result.oneTimePlainSecret()
         );
-        return secretHeaders().body(response);
+        URI location = ServletUriComponentsBuilder.fromCurrentRequest()
+                .path("/{id}")
+                .buildAndExpand(response.client().id())
+                .toUri();
+        return secretHeaders(ResponseEntity.created(location)).body(response);
     }
 
     @PostMapping("/{id}/rotate-secret")
@@ -58,7 +64,7 @@ public class OAuthClientController {
                 result.oneTimePlainSecret(),
                 result.client().getClientSecretExpiresAt()
         );
-        return secretHeaders().body(response);
+        return secretHeaders(ResponseEntity.ok()).body(response);
     }
 
     /**
@@ -74,8 +80,8 @@ public class OAuthClientController {
         spaceOwnershipGuard.assertSpaceBelongsToOrg(spaceId, orgId);
     }
 
-    private static ResponseEntity.BodyBuilder secretHeaders() {
-        return ResponseEntity.ok()
+    private static ResponseEntity.BodyBuilder secretHeaders(ResponseEntity.BodyBuilder response) {
+        return response
                 .header("Cache-Control", "no-store, no-cache")
                 .header("Pragma", "no-cache")
                 .header("X-Content-Type-Options", "nosniff");

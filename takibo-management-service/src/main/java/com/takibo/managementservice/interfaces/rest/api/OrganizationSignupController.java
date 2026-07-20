@@ -24,7 +24,6 @@ public class OrganizationSignupController {
     private final OrganizationSignupService service;
 
     @LogAction("Registration of a new user")
-    @ResponseStatus(HttpStatus.CREATED)
     @Audit(
             type = AuditType.CREATE,
             entityType = "USER",
@@ -41,7 +40,7 @@ public class OrganizationSignupController {
         OrganizationSignupResponse signupResponse = service.signup(req);
         URI location = ServletUriComponentsBuilder.fromCurrentContextPath()
                 .path("/api/v1/orgs/{id}")
-                .buildAndExpand(signupResponse.spaceId())
+                .buildAndExpand(signupResponse.organizationId())
                 .toUri();
         return ResponseEntity.created(location).body(signupResponse);
     }

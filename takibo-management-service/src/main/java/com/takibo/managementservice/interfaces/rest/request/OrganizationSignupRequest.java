@@ -1,11 +1,12 @@
 package com.takibo.managementservice.interfaces.rest.request;
 
-import jakarta.validation.constraints.*;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 
 public record OrganizationSignupRequest(
-        @NotNull OrganizationInput organization,
-        @NotNull SpaceInput space,
-        @NotNull AccountInput account,
-        @NotNull ProfileInput profile
+        @NotNull @Valid OrganizationInput organization,
+        @NotNull @Valid SpaceInput space,
+        @NotNull @Valid AccountInput account,
+        @NotNull @Valid ProfileInput profile
 ) {
 }
