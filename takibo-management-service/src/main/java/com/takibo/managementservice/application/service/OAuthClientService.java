@@ -1,6 +1,7 @@
 package com.takibo.managementservice.application.service;
 
 import com.takibo.managementservice.application.command.RegisterClientCommand;
+import com.takibo.managementservice.application.validation.OAuthClientConfigurationValidator;
 import com.takibo.managementservice.domain.exception.*;
 import com.takibo.managementservice.domain.model.*;
 import com.takibo.managementservice.domain.repository.OAuthClientRepository;
@@ -25,13 +26,14 @@ public class OAuthClientService {
 
   private final OAuthClientRepository repository;
   private final PasswordEncoder passwordEncoder;
+  private final OAuthClientConfigurationValidator configurationValidator;
 
   public RegisteredClientResult register(UUID orgId, SpaceId spaceId, RegisterClientCommand cmd) {
     validateInputs(orgId, spaceId, cmd);
-    ensureClientIdIsFree(cmd.clientId());
     hardFailClientCredentialsPolicy(cmd);
 
     RegisterClientCommand normalized = normalizeForClientCredentials(cmd);
+    configurationValidator.validateRegistration(normalized);
 
     TokenEndpointAuthMethod authMethod = resolveAuthMethod(normalized, normalized.clientType());
     enforcePublicBasics(normalized.clientType(), authMethod, normalized.requireClientSecret());
@@ -43,6 +45,7 @@ public class OAuthClientService {
     enforceClientCredentialsRules(normalized, authMethod, sets);
     enforcePublicSpaRules(normalized, authMethod, sets, requirePkce);
     enforceConfidentialAuthCodeRules(normalized, authMethod, sets);
+    ensureClientIdIsFree(normalized.clientId());
 
     boolean requireSecret = resolveRequireSecret(normalized, normalized.clientType(), authMethod);
     Secrets secrets = generateSecretIfNeeded(requireSecret, normalized.clientSecretExpiresAt());
@@ -88,6 +91,7 @@ public class OAuthClientService {
     Assert.notNull(orgId, "orgId is required");
     Assert.notNull(spaceId, "spaceId is required");
     Assert.notNull(clientId, "clientId is required");
+    configurationValidator.validateSecretExpiration(expiresAt);
 
     OAuthClient existing = repository.findByIdAndOrgIdAndSpaceId(clientId, orgId, spaceId.value())
             .orElseThrow(() -> new InvalidClientConfigurationException(CLIENT_NOT_FOUND));
@@ -96,6 +100,7 @@ public class OAuthClientService {
     }
 
     Instant newExpiresAt = expiresAt != null ? expiresAt : existing.getClientSecretExpiresAt();
+    configurationValidator.validateSecretExpiration(newExpiresAt);
     Secrets secrets = generateSecretIfNeeded(true, newExpiresAt);
     boolean updated = repository.updateSecretByIdAndOrgIdAndSpaceId(
             clientId, orgId, spaceId.value(), existing.getVersion(), secrets.hash(), secrets.expiresAt());
@@ -144,7 +149,8 @@ public class OAuthClientService {
     if (method == TokenEndpointAuthMethod.none) {
       throw new InvalidClientConfigurationException("Confidential clients require clientSecret (token_endpoint_auth_method cannot be none)");
     }
-    if (Boolean.FALSE.equals(requireClientSecretFlag)) {
+    if (method != TokenEndpointAuthMethod.private_key_jwt
+            && Boolean.FALSE.equals(requireClientSecretFlag)) {
       throw new InvalidClientConfigurationException("Confidential clients require clientSecret (requireClientSecret=true)");
     }
   }
@@ -207,7 +213,8 @@ public class OAuthClientService {
     if (authMethod == TokenEndpointAuthMethod.none) {
       throw new InvalidClientConfigurationException("CONFIDENTIAL authorization_code requires client authentication");
     }
-    if (Boolean.FALSE.equals(cmd.requireClientSecret())) {
+    if (authMethod != TokenEndpointAuthMethod.private_key_jwt
+            && Boolean.FALSE.equals(cmd.requireClientSecret())) {
       throw new InvalidClientConfigurationException("CONFIDENTIAL clients require clientSecret");
     }
     if (sets.redirectUris().isEmpty()) {

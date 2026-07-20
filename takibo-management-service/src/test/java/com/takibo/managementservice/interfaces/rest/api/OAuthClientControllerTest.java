@@ -13,6 +13,9 @@ import com.takibo.managementservice.domain.model.OAuthClient;
 import com.takibo.managementservice.domain.model.RegisteredClientResult;
 import com.takibo.managementservice.domain.vo.SpaceId;
 import com.takibo.managementservice.interfaces.rest.response.ClientRegistrationResponse;
+import jakarta.validation.Validation;
+import jakarta.validation.ValidatorFactory;
+import org.junit.jupiter.api.AfterEach;
 import org.springframework.security.access.AccessDeniedException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,6 +25,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.validation.beanvalidation.SpringValidatorAdapter;
 
 import java.time.Instant;
 import java.util.Set;
@@ -63,6 +67,7 @@ class OAuthClientControllerTest {
 
     private OAuthClientController controller;
     private MockMvc mockMvc;
+    private ValidatorFactory validatorFactory;
 
     @BeforeEach
     void setUp() {
@@ -71,7 +76,15 @@ class OAuthClientControllerTest {
         SpaceBoundaryGuard spaceBoundaryGuard =
                 new SpaceBoundaryGuard(currentOrganizationContext, currentSpaceContext);
         controller = new OAuthClientController(service, mapper, spaceBoundaryGuard, spaceOwnershipGuard);
-        mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
+        validatorFactory = Validation.buildDefaultValidatorFactory();
+        mockMvc = MockMvcBuilders.standaloneSetup(controller)
+                .setValidator(new SpringValidatorAdapter(validatorFactory.getValidator()))
+                .build();
+    }
+
+    @AfterEach
+    void tearDown() {
+        validatorFactory.close();
     }
 
     @Test
@@ -88,6 +101,40 @@ class OAuthClientControllerTest {
         // Non-régression : la création dans un space suspendu reste refusée par
         // @RequireActiveSpace (SpaceActiveAspect) — la garde ne doit pas disparaître.
         assertThat(OAuthClientController.class.getAnnotation(RequireActiveSpace.class)).isNotNull();
+    }
+
+    @Test
+    void register_rejects_unsafe_client_identifier_before_calling_the_service() throws Exception {
+        mockMvc.perform(post("/api/v1/orgs/{orgId}/spaces/{spaceId}/clients", ORG_ID, SPACE_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "clientId": "unsafe client id",
+                                  "clientName": "Unsafe Client",
+                                  "clientType": "CONFIDENTIAL",
+                                  "grantTypes": ["client_credentials"]
+                                }
+                                """))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void rotateSecret_rejects_expired_expiration_before_calling_the_service() throws Exception {
+        UUID clientId = UUID.fromString("55555555-5555-5555-5555-555555555555");
+
+        mockMvc.perform(post(
+                        "/api/v1/orgs/{orgId}/spaces/{spaceId}/clients/{id}/rotate-secret",
+                        ORG_ID,
+                        SPACE_ID,
+                        clientId
+                )
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"clientSecretExpiresAt\":\"2020-01-01T00:00:00Z\"}"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(service);
     }
 
     @Test

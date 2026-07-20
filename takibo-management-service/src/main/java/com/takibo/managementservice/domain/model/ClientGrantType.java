@@ -3,7 +3,6 @@ package com.takibo.managementservice.domain.model;// package com.takibo.manageme
 import com.takibo.managementservice.domain.exception.InvalidGrantTypeException;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
-import org.springframework.util.Assert;
 
 import java.util.*;
 
@@ -12,8 +11,10 @@ import java.util.*;
 public final class ClientGrantType {
 
   private static final Set<String> ALLOWED = Set.of(
-      "authorization_code", "refresh_token", "client_credentials",
-      "password", "urn:ietf:params:oauth:grant-type:device_code"
+      "authorization_code",
+      "refresh_token",
+      "client_credentials",
+      "urn:ietf:params:oauth:grant-type:device_code"
   );
 
   @EqualsAndHashCode.Include
@@ -29,9 +30,7 @@ public final class ClientGrantType {
 
     for (String raw : rawValues) {
       String candidate = raw == null ? "" : raw.trim().toLowerCase();
-      Assert.hasText(candidate, "grant_type is blank");
-      boolean supported = candidate.startsWith("urn:") || ALLOWED.contains(candidate);
-      if (!supported) invalidValues.add(raw);
+      if (!ALLOWED.contains(candidate)) invalidValues.add(raw);
       else validatedValues.add(new ClientGrantType(candidate));
     }
 
