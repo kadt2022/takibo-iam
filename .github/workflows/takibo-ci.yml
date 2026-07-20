@@ -414,9 +414,6 @@ jobs:
             exit 1
           fi
 
-          # Sonar analyzes each Gradle subproject from its own base directory.
-          # Absolute paths keep every report reachable from every module, which
-          # is required for cross-module integration coverage.
           mapfile -t jacoco_reports < <(find "$GITHUB_WORKSPACE" -type f -path "*/build/reports/jacoco/test/jacocoTestReport.xml" | sort)
           if [ "${#jacoco_reports[@]}" -eq 0 ]; then
             echo "No JaCoCo XML reports found"
@@ -426,14 +423,13 @@ jobs:
           printf "JaCoCo reports:\n"
           printf " - %s\n" "${jacoco_reports[@]}"
 
-          jacoco_paths="$(IFS=,; echo "${jacoco_reports[*]}")"
-
           args=(
             sonar
             --no-daemon
             "-Dsonar.projectKey=${SONAR_PROJECT_KEY}"
             "-Dsonar.host.url=${SONAR_HOST_URL}"
-            "-Dsonar.coverage.jacoco.xmlReportPaths=${jacoco_paths}"
+            "-Dsonar.qualitygate.wait=true"
+            "-Dsonar.qualitygate.timeout=300"
           )
 
           if [ -n "${SONAR_ORGANIZATION:-}" ]; then
