@@ -17,7 +17,7 @@ public class OrganizationDomainService {
     private final OrganizationReadPort organizationReadPort;
 
     public OrganizationContext assertOrganizationAllowsSpaceCreation(UUID orgId) {
-        OrganizationContext ctx = organizationReadPort.getOrganizationContext(orgId);
+        OrganizationContext ctx = organizationReadPort.getOrganizationContextForSpaceCreation(orgId);
 
         if (!ctx.enabled()) {
             throw new OrganizationDisabledException(orgId);

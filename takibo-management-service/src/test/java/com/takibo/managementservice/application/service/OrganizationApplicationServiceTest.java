@@ -10,6 +10,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -52,5 +53,30 @@ class OrganizationApplicationServiceTest {
                 .hasMessageContaining("takibo-iam");
 
         verify(organizations, never()).saveAndFlush(org.mockito.Mockito.any());
+    }
+
+    @Test
+    void given_concurrent_unique_constraint_when_create_then_translates_to_domain_conflict() {
+        when(organizations.existsByCode("takibo-iam")).thenReturn(false);
+        DataIntegrityViolationException databaseConflict = new DataIntegrityViolationException(
+                "duplicate organization code",
+                new IllegalStateException("unique constraint uk_organizations_code_ci"));
+        when(organizations.saveAndFlush(org.mockito.Mockito.any())).thenThrow(databaseConflict);
+
+        assertThatThrownBy(() -> service.create("Takibo IAM", "Takibo"))
+                .isInstanceOf(OrganizationCodeAlreadyExistsException.class)
+                .hasMessageContaining("takibo-iam")
+                .hasCause(databaseConflict);
+    }
+
+    @Test
+    void given_unrelated_integrity_violation_when_create_then_preserves_database_failure() {
+        when(organizations.existsByCode("takibo-iam")).thenReturn(false);
+        DataIntegrityViolationException databaseFailure = new DataIntegrityViolationException(
+                "check constraint ck_organizations_status");
+        when(organizations.saveAndFlush(org.mockito.Mockito.any())).thenThrow(databaseFailure);
+
+        assertThatThrownBy(() -> service.create("Takibo IAM", "Takibo"))
+                .isSameAs(databaseFailure);
     }
 }

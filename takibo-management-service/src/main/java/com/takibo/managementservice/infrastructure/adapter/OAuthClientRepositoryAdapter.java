@@ -1,15 +1,18 @@
 package com.takibo.managementservice.infrastructure.adapter;
 
 import com.takibo.managementservice.domain.model.OAuthClient;
+import com.takibo.managementservice.domain.exception.ClientAlreadyExistsException;
 import com.takibo.managementservice.domain.repository.OAuthClientRepository;
 import com.takibo.managementservice.infrastructure.entity.OAuth2ClientEntity;
 import com.takibo.managementservice.infrastructure.entity.SpaceEntity;
 import com.takibo.managementservice.infrastructure.jpa.mapper.OAuthClientJpaMapper;
 import com.takibo.managementservice.infrastructure.jpa.mapper.SpaceRef;
 import com.takibo.managementservice.infrastructure.jpa.repository.OAuth2ClientJpaRepository;
+import com.takibo.managementservice.infrastructure.jpa.support.DatabaseConstraintViolation;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
@@ -19,6 +22,9 @@ import java.util.UUID;
 @Repository
 @RequiredArgsConstructor
 public class OAuthClientRepositoryAdapter implements OAuthClientRepository {
+
+    private static final String GLOBAL_CLIENT_ID_UNIQUE_INDEX = "uq_oauth2_clients_client_id_global";
+    private static final String SCOPED_CLIENT_ID_UNIQUE_CONSTRAINT = "uq_oauth2_clients_scope_client_id";
 
     private final OAuth2ClientJpaRepository jpa;
     private final OAuthClientJpaMapper mapper;
@@ -44,8 +50,18 @@ public class OAuthClientRepositoryAdapter implements OAuthClientRepository {
         }
 
         OAuth2ClientEntity entity = mapper.toEntity(client, spaceRef());
-        OAuth2ClientEntity saved  = jpa.save(entity);
-        return mapper.toDomain(saved);
+        try {
+            OAuth2ClientEntity saved = jpa.saveAndFlush(entity);
+            return mapper.toDomain(saved);
+        } catch (DataIntegrityViolationException failure) {
+            if (DatabaseConstraintViolation.mentions(
+                    failure,
+                    GLOBAL_CLIENT_ID_UNIQUE_INDEX,
+                    SCOPED_CLIENT_ID_UNIQUE_CONSTRAINT)) {
+                throw new ClientAlreadyExistsException(client.getClientId(), failure);
+            }
+            throw failure;
+        }
     }
 
     @Override public Optional<OAuthClient> findById(UUID id) {

@@ -27,6 +27,7 @@ public enum SentinelErrorCode {
 
     // ORGANIZATIONS
     ORGANIZATION_NOT_FOUND,
+    ORGANIZATION_ALREADY_EXISTS,
 
     // RBAC CATALOG
     ROLE_NOT_FOUND,
@@ -46,6 +47,7 @@ public enum SentinelErrorCode {
     SPACE_STATUS_UNKNOWN,
     SPACE_NOT_FOUND,
     SPACE_NOT_ACTIVE,
+    SPACE_ALREADY_EXISTS,
 
     // VALIDATION
     BAD_REQUEST,
