@@ -1,7 +1,5 @@
 package com.takibo.managementservice.domain.validation;
 
-import org.springframework.util.Assert;
-
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Locale;
@@ -14,28 +12,27 @@ public final class UriValidation {
 
   /** URL http(s) complète : schema+host (+port) + chemin/query/fragment autorisés */
   public static URI requireHttpHttpsUrl(String rawValue) {
-    Assert.hasText(rawValue, "URI value is blank");
-    URI parsed = URI.create(rawValue.trim());
+    URI parsed = URI.create(requireText(rawValue, "URI value is blank").trim());
     String scheme = parsed.getScheme();
-    Assert.state(scheme != null && (scheme.equalsIgnoreCase("http") || scheme.equalsIgnoreCase(HTTPS_SCHEME)),
+    requireState(scheme != null && (scheme.equalsIgnoreCase("http") || scheme.equalsIgnoreCase(HTTPS_SCHEME)),
         "Only http/https scheme is allowed");
-    Assert.state(hasText(parsed.getHost()), "Host is required");
+    requireState(hasText(parsed.getHost()), "Host is required");
     return parsed;
   }
 
   public static URI requireOAuthRedirectUrl(String rawValue) {
     URI parsed = requireHttpHttpsUrl(rawValue);
-    Assert.state(parsed.getUserInfo() == null, "Redirect URI must not include user-info");
-    Assert.state(parsed.getFragment() == null, "Redirect URI must not include a fragment");
+    requireState(parsed.getUserInfo() == null, "Redirect URI must not include user-info");
+    requireState(parsed.getFragment() == null, "Redirect URI must not include a fragment");
     requireSecureTransport(parsed);
     return parsed;
   }
 
   public static URI requireHttpsEndpoint(String rawValue) {
     URI parsed = requireHttpHttpsUrl(rawValue);
-    Assert.state(HTTPS_SCHEME.equalsIgnoreCase(parsed.getScheme()), "HTTPS is required");
-    Assert.state(parsed.getUserInfo() == null, "Endpoint must not include user-info");
-    Assert.state(parsed.getFragment() == null, "Endpoint must not include a fragment");
+    requireState(HTTPS_SCHEME.equalsIgnoreCase(parsed.getScheme()), "HTTPS is required");
+    requireState(parsed.getUserInfo() == null, "Endpoint must not include user-info");
+    requireState(parsed.getFragment() == null, "Endpoint must not include a fragment");
     return parsed;
   }
 
@@ -43,14 +40,14 @@ public final class UriValidation {
   public static URI requireHttpHttpsOrigin(String rawValue) {
     URI parsed = requireHttpHttpsUrl(rawValue);
 
-    Assert.state(parsed.getUserInfo() == null, "Origin must not include user-info");
+    requireState(parsed.getUserInfo() == null, "Origin must not include user-info");
     requireSecureTransport(parsed);
 
     String path = parsed.getPath();
-    Assert.state(path == null || path.isEmpty() || "/".equals(path), "Origin must not include a path");
+    requireState(path == null || path.isEmpty() || "/".equals(path), "Origin must not include a path");
 
-    Assert.state(parsed.getQuery() == null, "Origin must not include a query");
-    Assert.state(parsed.getFragment() == null, "Origin must not include a fragment");
+    requireState(parsed.getQuery() == null, "Origin must not include a query");
+    requireState(parsed.getFragment() == null, "Origin must not include a fragment");
 
     return normalizeOrigin(parsed);
   }
@@ -59,7 +56,7 @@ public final class UriValidation {
     if (HTTPS_SCHEME.equalsIgnoreCase(parsed.getScheme())) {
       return;
     }
-    Assert.state(isLoopbackHost(parsed.getHost()), "HTTP is only allowed for loopback hosts");
+    requireState(isLoopbackHost(parsed.getHost()), "HTTP is only allowed for loopback hosts");
   }
 
   private static boolean isLoopbackHost(String host) {
@@ -102,4 +99,17 @@ public final class UriValidation {
   }
 
   private static boolean hasText(String s) { return s != null && !s.isBlank(); }
+
+  private static String requireText(String value, String message) {
+    if (!hasText(value)) {
+      throw new IllegalArgumentException(message);
+    }
+    return value;
+  }
+
+  private static void requireState(boolean condition, String message) {
+    if (!condition) {
+      throw new IllegalStateException(message);
+    }
+  }
 }

@@ -1,20 +1,13 @@
 package com.takibo.managementservice.application.service;
 
-import com.takibo.identitycore.application.identity.command.ProvisionFounderUserCommand;
-import com.takibo.identitycore.application.identity.port.AccountApplicationCase;
-import com.takibo.identitycore.application.identity.port.FounderUserProvisioningCase;
-import com.takibo.identitycore.interfaces.rest.response.AccountResponse;
-import com.takibo.identitycore.interfaces.rest.response.UserResponse;
-import com.takibo.managementservice.application.command.CreateOrganizationCommand;
 import com.takibo.managementservice.application.command.CreateSpaceCommand;
+import com.takibo.managementservice.application.command.CreateSpaceResult;
+import com.takibo.managementservice.application.command.OrganizationSignupCommand;
+import com.takibo.managementservice.application.port.FounderProvisioningPort;
+import com.takibo.managementservice.application.port.OrganizationAccountProvisioningPort;
 import com.takibo.managementservice.application.provisioning.TechnicalRbacProvision;
+import com.takibo.managementservice.application.result.OrganizationResult;
 import com.takibo.managementservice.domain.model.SpaceStatus;
-import com.takibo.managementservice.interfaces.rest.request.AccountInput;
-import com.takibo.managementservice.interfaces.rest.request.OrganizationInput;
-import com.takibo.managementservice.interfaces.rest.request.OrganizationSignupRequest;
-import com.takibo.managementservice.interfaces.rest.request.ProfileInput;
-import com.takibo.managementservice.interfaces.rest.request.SpaceInput;
-import com.takibo.managementservice.interfaces.rest.response.SpaceResponse;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -42,23 +35,25 @@ class OrganizationSignupServiceTest {
 
     @Mock private OrganizationApplicationService orgApp;
     @Mock private SpaceApplicationService spaceApp;
-    @Mock private AccountApplicationCase accountApp;
-    @Mock private FounderUserProvisioningCase founderProvisioning;
+    @Mock private OrganizationAccountProvisioningPort accountProvisioning;
+    @Mock private FounderProvisioningPort founderProvisioning;
     @Mock private TechnicalRbacProvision technicalRbacProvision;
 
     @InjectMocks private OrganizationSignupService service;
 
     @Test
     void given_missing_organization_id_when_signup_then_creates_organization_account_space_founder_and_rbac() {
-        OrganizationSignupRequest req = request(new OrganizationInput(null, "Takibo IAM", "Takibo"));
+        OrganizationSignupCommand command = command(null);
         when(orgApp.create("Takibo IAM", "Takibo"))
-                .thenReturn(new CreateOrganizationCommand(ORG_ID, "takibo-iam", "Takibo"));
-        when(accountApp.createAccountInOrg(ORG_ID, "founder@takibo.io", "Str0ng!Passw0rd"))
-                .thenReturn(new AccountResponse(ACCOUNT_ID, "founder@takibo.io"));
-        when(spaceApp.createSpace(any(CreateSpaceCommand.class))).thenReturn(spaceResponse());
-        when(founderProvisioning.provisionFounder(any(ProvisionFounderUserCommand.class))).thenReturn(userResponse());
+                .thenReturn(new OrganizationResult(ORG_ID, "takibo-iam", "Takibo"));
+        when(accountProvisioning.createAccount(ORG_ID, "founder@takibo.io", "Str0ng!Passw0rd"))
+                .thenReturn(ACCOUNT_ID);
+        when(spaceApp.createSpace(any(CreateSpaceCommand.class))).thenReturn(spaceResult());
+        when(founderProvisioning.provisionFounder(
+                ORG_ID, SPACE_ID, ACCOUNT_ID, "founder", "Tresor", "Kadima"))
+                .thenReturn(USER_ID);
 
-        var response = service.signup(req);
+        var response = service.signup(command);
 
         assertThat(response.organizationId()).isEqualTo(ORG_ID);
         assertThat(response.spaceId()).isEqualTo(SPACE_ID);
@@ -71,53 +66,40 @@ class OrganizationSignupServiceTest {
         assertThat(spaceCaptor.getValue().ownerAccountId()).isEqualTo(ACCOUNT_ID);
         assertThat(spaceCaptor.getValue().code()).isEqualTo("Finance Space");
 
-        ArgumentCaptor<ProvisionFounderUserCommand> founderCaptor =
-                ArgumentCaptor.forClass(ProvisionFounderUserCommand.class);
-        verify(founderProvisioning).provisionFounder(founderCaptor.capture());
-        assertThat(founderCaptor.getValue().organizationId()).isEqualTo(ORG_ID);
-        assertThat(founderCaptor.getValue().spaceId()).isEqualTo(SPACE_ID);
-        assertThat(founderCaptor.getValue().accountId()).isEqualTo(ACCOUNT_ID);
-        assertThat(founderCaptor.getValue().username()).isEqualTo("founder");
+        verify(founderProvisioning).provisionFounder(
+                ORG_ID, SPACE_ID, ACCOUNT_ID, "founder", "Tresor", "Kadima");
 
         verify(technicalRbacProvision).provisionFounder(ORG_ID, SPACE_ID, ACCOUNT_ID, "SYSTEM");
     }
 
     @Test
     void given_existing_organization_when_signup_then_denies_before_any_side_effect() {
-        OrganizationSignupRequest req = request(new OrganizationInput(ORG_ID, "Takibo IAM", "Takibo"));
+        OrganizationSignupCommand command = command(ORG_ID);
 
-        assertThatThrownBy(() -> service.signup(req))
+        assertThatThrownBy(() -> service.signup(command))
                 .isInstanceOf(AccessDeniedException.class)
                 .hasMessageContaining("EXISTING_ORGANIZATION_SIGNUP_FORBIDDEN");
 
         verify(orgApp, never()).create(any(), any());
-        verify(accountApp, never()).createAccountInOrg(any(), any(), any());
+        verify(accountProvisioning, never()).createAccount(any(), any(), any());
         verify(spaceApp, never()).createSpace(any());
-        verify(founderProvisioning, never()).provisionFounder(any());
+        verify(founderProvisioning, never()).provisionFounder(any(), any(), any(), any(), any(), any());
         verify(technicalRbacProvision, never()).provisionFounder(any(), any(), any(), any());
     }
 
-    private OrganizationSignupRequest request(OrganizationInput organization) {
-        return new OrganizationSignupRequest(
-                organization,
-                new SpaceInput("Finance Space", "Finance", "Finance workspace"),
-                new AccountInput("founder@takibo.io", "Str0ng!Passw0rd"),
-                new ProfileInput("founder", "Tresor", "Kadima")
+    private OrganizationSignupCommand command(UUID organizationId) {
+        return new OrganizationSignupCommand(
+                new OrganizationSignupCommand.Organization(organizationId, "Takibo IAM", "Takibo"),
+                new OrganizationSignupCommand.Space("Finance Space", "Finance", "Finance workspace"),
+                new OrganizationSignupCommand.Account("founder@takibo.io", "Str0ng!Passw0rd"),
+                new OrganizationSignupCommand.Profile("founder", "Tresor", "Kadima")
         );
     }
 
-    private SpaceResponse spaceResponse() {
-        return new SpaceResponse(
+    private CreateSpaceResult spaceResult() {
+        return new CreateSpaceResult(
                 SPACE_ID, ORG_ID, "finance", "Finance", "Finance workspace",
                 SpaceStatus.ACTIVE, null, null, ACCOUNT_ID, null, null, 0L
-        );
-    }
-
-    private UserResponse userResponse() {
-        return new UserResponse(
-                USER_ID, SPACE_ID, "founder", "founder@takibo.io",
-                "Tresor", "Kadima", null, null,
-                false, false, null, null, null, 0L
         );
     }
 }

@@ -2,9 +2,10 @@ package com.takibo.managementservice.interfaces.rest.api;
 
 
 import com.takibo.managementservice.application.command.CreateSpaceCommand;
+import com.takibo.managementservice.application.command.CreateSpaceResult;
 import com.takibo.managementservice.application.port.CurrentActorProvider;
 import com.takibo.managementservice.application.query.port.SpaceQueryCase;
-import com.takibo.managementservice.application.security.ActorSource;
+import com.takibo.managementservice.domain.model.ActorSource;
 import com.takibo.managementservice.application.service.SpaceApplicationService;
 import com.takibo.managementservice.domain.model.SpaceStatus;
 import com.takibo.managementservice.interfaces.rest.mapper.SpaceRestMapper;
@@ -53,9 +54,17 @@ public class SpaceController {
         log.info("Create space request orgId={} ownerAccountId={} source={} payload={}",
             orgId, ownerAccountId, source, req);
 
-        CreateSpaceCommand cmd = CreateSpaceCommand.from(orgId, ownerAccountId, source, req);
+        CreateSpaceCommand cmd = new CreateSpaceCommand(
+                orgId,
+                ownerAccountId,
+                source,
+                req.name(),
+                req.code(),
+                req.description()
+        );
 
-        SpaceResponse created = service.createSpace(cmd);
+        CreateSpaceResult result = service.createSpace(cmd);
+        SpaceResponse created = restMapper.toSpaceResponse(result);
 
         log.info("Space created spaceId={} orgId={} code={} createdByUserId={}",
             created.id(), created.orgId(), created.code(), created.ownerAccountId());

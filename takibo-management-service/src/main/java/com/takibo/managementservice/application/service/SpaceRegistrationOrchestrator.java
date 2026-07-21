@@ -3,10 +3,10 @@ package com.takibo.managementservice.application.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.takibo.managementservice.application.command.CreateSpaceCommand;
-import com.takibo.managementservice.application.security.ActorSource;
 import com.takibo.managementservice.domain.event.SpaceCreatedEvent;
 import com.takibo.managementservice.domain.exception.SpaceCodeAlreadyExistsException;
 import com.takibo.managementservice.domain.model.OrganizationContext;
+import com.takibo.managementservice.domain.model.ActorSource;
 import com.takibo.managementservice.domain.model.Space;
 import com.takibo.managementservice.domain.model.SpaceRegistrationResult;
 import com.takibo.managementservice.domain.repository.SpaceRepository;
@@ -31,6 +31,7 @@ public class SpaceRegistrationOrchestrator {
 
     private final OrganizationDomainService organizationDomainService;
     private final SpaceCreationDomainService spaceCreationDomainService;
+    private final SpaceCodeGenerator spaceCodeGenerator;
     private final SpaceRepository spaceRepository;
 
     private final OutboxPublisher outboxPublisher;
@@ -45,17 +46,25 @@ public class SpaceRegistrationOrchestrator {
         OrganizationContext orgCtx =
                 organizationDomainService.assertOrganizationAllowsSpaceCreation(command.orgId());
 
-        String candidate = spaceCreationDomainService.initialCode(command);
+        String candidate = spaceCodeGenerator.normalizeOrGenerate(command.code(), command.name());
 
         for (int attempt = 1; attempt <= MAX_CODE_ATTEMPTS; attempt++) {
 
             if (spaceRepository.existsByOrgIdAndCode(orgCtx.orgId(), candidate)) {
-                candidate = spaceCreationDomainService.nextCodeCandidate(candidate);
+                candidate = spaceCodeGenerator.nextCandidate(candidate);
                 continue;
             }
 
             SpaceId spaceId = SpaceId.of(UUID.randomUUID());
-            Space space = spaceCreationDomainService.createSpace(command, orgCtx, candidate, spaceId);
+            Space space = spaceCreationDomainService.createSpace(
+                    orgCtx,
+                    command.ownerAccountId(),
+                    candidate,
+                    command.name(),
+                    command.description(),
+                    spaceId,
+                    clock.instant()
+            );
 
             Space saved = spaceRepository.save(space);
 

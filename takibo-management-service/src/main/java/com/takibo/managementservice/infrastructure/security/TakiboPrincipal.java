@@ -1,4 +1,4 @@
-package com.takibo.managementservice.application.security;
+package com.takibo.managementservice.infrastructure.security;
 
 import java.io.Serializable;
 import java.util.List;
@@ -23,23 +23,15 @@ public record TakiboPrincipal(
                         claims.getOrDefault("username", "anonymous"))
         );
 
-        UUID userId = toUuidOrNull(claims.get("userId"));
-        UUID accountId = toUuidOrNull(claims.get("accountId"));
-        UUID orgId = toUuidOrNull(claims.get("orgId"));
-        UUID spaceId = toUuidOrNull(claims.get("spaceId"));
-
-        List<String> roles = toStringList(claims.get("roles"));
-        List<String> permissions = toStringList(claims.get("permissions"));
-
         return new TakiboPrincipal(
                 subject,
                 username,
-                userId,
-                accountId,
-                orgId,
-                spaceId,
-                roles,
-                permissions
+                toUuidOrNull(claims.get("userId")),
+                toUuidOrNull(claims.get("accountId")),
+                toUuidOrNull(claims.get("orgId")),
+                toUuidOrNull(claims.get("spaceId")),
+                toStringList(claims.get("roles")),
+                toStringList(claims.get("permissions"))
         );
     }
 
@@ -47,29 +39,23 @@ public record TakiboPrincipal(
         return value == null ? null : value.toString();
     }
 
-    @SuppressWarnings("unchecked")
     private static List<String> toStringList(Object value) {
         if (value == null) {
             return List.of();
         }
         if (value instanceof List<?> list) {
-            return list.stream()
-                    .map(TakiboPrincipal::asString)
-                    .toList();
+            return list.stream().map(TakiboPrincipal::asString).toList();
         }
         return List.of(asString(value));
     }
 
     private static UUID toUuidOrNull(Object value) {
-        if (value == null) {
-            return null;
-        }
         if (value instanceof UUID uuid) {
             return uuid;
         }
         try {
-            return UUID.fromString(value.toString());
-        } catch (Exception e) {
+            return value == null ? null : UUID.fromString(value.toString());
+        } catch (IllegalArgumentException ignored) {
             return null;
         }
     }

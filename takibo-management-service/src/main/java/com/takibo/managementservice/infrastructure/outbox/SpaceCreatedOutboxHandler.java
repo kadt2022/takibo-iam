@@ -1,7 +1,7 @@
 package com.takibo.managementservice.infrastructure.outbox;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.takibo.managementservice.application.security.ActorSource;
+import com.takibo.managementservice.domain.model.ActorSource;
 import com.takibo.managementservice.domain.event.SpaceCreatedEvent;
 import com.takibo.outbox.core.model.OutboxEnvelope;
 import com.takibo.outbox.core.port.OutboxHandler;

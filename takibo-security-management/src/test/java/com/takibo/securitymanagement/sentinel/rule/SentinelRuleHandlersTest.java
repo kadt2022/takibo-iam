@@ -89,6 +89,18 @@ class SentinelRuleHandlersTest {
     }
 
     @Test
+    void oauthClientSecretRotationConflict_mapsToConflict409() {
+        SentinelResponse response = SentinelRuleHandlers.ruleOAuthClientSecretRotationConflict(
+                new RuntimeException("OAuth client secret was rotated concurrently"),
+                PATH,
+                TRACE_ID
+        );
+
+        assertResponse(response, 409, SentinelErrorCode.OAUTH_CLIENT_SECRET_ROTATION_CONFLICT,
+                "OAuth client secret was rotated concurrently");
+    }
+
+    @Test
     void spaceAlreadyExists_mapsToConflict409() {
         SentinelResponse response = SentinelRuleHandlers.ruleSpaceAlreadyExists(
                 new RuntimeException("Space code already exists: finance"),

@@ -6,6 +6,7 @@ import com.takibo.audit.annotations.TriggerAlertOnFailure;
 import com.takibo.audit.domain.AuditType;
 import com.takibo.identitycore.domain.exception.UserNotFoundException;
 import com.takibo.managementservice.application.service.OrganizationSignupService;
+import com.takibo.managementservice.interfaces.rest.mapper.OrganizationSignupRestMapper;
 import com.takibo.managementservice.interfaces.rest.request.OrganizationSignupRequest;
 import com.takibo.managementservice.interfaces.rest.response.OrganizationSignupResponse;
 import jakarta.validation.Valid;
@@ -22,6 +23,7 @@ import java.net.URI;
 public class OrganizationSignupController {
 
     private final OrganizationSignupService service;
+    private final OrganizationSignupRestMapper mapper;
 
     @LogAction("Registration of a new user")
     @Audit(
@@ -37,7 +39,7 @@ public class OrganizationSignupController {
     )
     @PostMapping("/signup")
     public ResponseEntity<OrganizationSignupResponse> signup(@Valid @RequestBody OrganizationSignupRequest req) {
-        OrganizationSignupResponse signupResponse = service.signup(req);
+        OrganizationSignupResponse signupResponse = mapper.toResponse(service.signup(mapper.toCommand(req)));
         URI location = ServletUriComponentsBuilder.fromCurrentContextPath()
                 .path("/api/v1/orgs/{id}")
                 .buildAndExpand(signupResponse.organizationId())

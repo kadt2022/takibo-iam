@@ -4,11 +4,11 @@ import com.takibo.identitycore.integration.security.SpaceBoundaryGuard;
 import com.takibo.identitycore.integration.space.annotations.RequireActiveSpace;
 import com.takibo.identitycore.integration.space.port.ResolvedSpaceKey;
 import com.takibo.identitycore.integration.space.port.SpaceOwnershipGuardCase;
-import com.takibo.managementservice.application.mapper.ClientRegistrationMapper;
 import com.takibo.managementservice.application.service.OAuthClientService;
 import com.takibo.managementservice.domain.vo.SpaceId;
 import com.takibo.managementservice.interfaces.rest.request.ClientRegistrationRequest;
 import com.takibo.managementservice.interfaces.rest.request.RotateClientSecretRequest;
+import com.takibo.managementservice.interfaces.rest.mapper.ClientRegistrationRestMapper;
 import com.takibo.managementservice.interfaces.rest.response.ClientRegistrationResultResponse;
 import com.takibo.managementservice.interfaces.rest.response.ClientSecretResponse;
 import jakarta.validation.Valid;
@@ -27,7 +27,7 @@ import java.util.UUID;
 public class OAuthClientController {
 
     private final OAuthClientService service;
-    private final ClientRegistrationMapper mapper;
+    private final ClientRegistrationRestMapper mapper;
     private final SpaceBoundaryGuard spaceBoundaryGuard;
     private final SpaceOwnershipGuardCase spaceOwnershipGuard;
 

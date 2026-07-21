@@ -1,7 +1,7 @@
 package com.takibo.managementservice.application.provisioning;
 
 import com.takibo.managementservice.application.port.SpaceRbacProvisioningPort;
-import com.takibo.managementservice.application.security.ActorSource;
+import com.takibo.managementservice.domain.model.ActorSource;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;

@@ -1,43 +1,29 @@
 package com.takibo.managementservice.domain.service;
 
-import com.takibo.managementservice.application.command.CreateSpaceCommand;
-import com.takibo.managementservice.application.service.SpaceCodeGenerator;
 import com.takibo.managementservice.domain.model.OrganizationContext;
 import com.takibo.managementservice.domain.model.Space;
 import com.takibo.managementservice.domain.vo.SpaceId;
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Service;
 
-import java.time.Clock;
+import java.time.Instant;
+import java.util.UUID;
 
-@Service
-@RequiredArgsConstructor
-public class SpaceCreationDomainService {
+public final class SpaceCreationDomainService {
 
-    private final Clock clock;
-    private final SpaceCodeGenerator codeGenerator;
-
-    public String initialCode(CreateSpaceCommand cmd) {
-        return codeGenerator.normalizeOrGenerate(cmd.code(), cmd.name());
-    }
-
-    public String nextCodeCandidate(String current) {
-        return codeGenerator.nextCandidate(current);
-    }
-
-    public Space createSpace(CreateSpaceCommand cmd,
-                             OrganizationContext ctx,
-                             String finalCode,
-                             SpaceId spaceId) {
-
+    public Space createSpace(OrganizationContext organization,
+                             UUID ownerAccountId,
+                             String code,
+                             String name,
+                             String description,
+                             SpaceId spaceId,
+                             Instant now) {
         return Space.createNew(
                 spaceId,
-                ctx.orgId(),
-                cmd.ownerAccountId(),   // nouveau champ
-                finalCode,
-                cmd.name(),
-                cmd.description(),
-                clock.instant()
+                organization.orgId(),
+                ownerAccountId,
+                code,
+                name,
+                description,
+                now
         );
     }
 }

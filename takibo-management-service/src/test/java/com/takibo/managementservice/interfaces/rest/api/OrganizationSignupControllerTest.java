@@ -1,7 +1,8 @@
 package com.takibo.managementservice.interfaces.rest.api;
 
 import com.takibo.managementservice.application.service.OrganizationSignupService;
-import com.takibo.managementservice.interfaces.rest.response.OrganizationSignupResponse;
+import com.takibo.managementservice.application.result.OrganizationSignupResult;
+import com.takibo.managementservice.interfaces.rest.mapper.OrganizationSignupRestMapper;
 import jakarta.validation.Validation;
 import jakarta.validation.ValidatorFactory;
 import org.junit.jupiter.api.AfterEach;
@@ -49,7 +50,7 @@ class OrganizationSignupControllerTest {
     void setUp() {
         validatorFactory = Validation.buildDefaultValidatorFactory();
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new OrganizationSignupController(service))
+                .standaloneSetup(new OrganizationSignupController(service, new OrganizationSignupRestMapper()))
                 .setValidator(new SpringValidatorAdapter(validatorFactory.getValidator()))
                 .build();
     }
@@ -97,7 +98,7 @@ class OrganizationSignupControllerTest {
 
     @Test
     void signup_returns_created_with_the_organization_location() throws Exception {
-        when(service.signup(any())).thenReturn(new OrganizationSignupResponse(
+        when(service.signup(any())).thenReturn(new OrganizationSignupResult(
                 ORGANIZATION_ID,
                 SPACE_ID,
                 ACCOUNT_ID,
