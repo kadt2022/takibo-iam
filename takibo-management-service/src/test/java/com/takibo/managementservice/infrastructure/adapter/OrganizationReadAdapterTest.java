@@ -28,6 +28,25 @@ class OrganizationReadAdapterTest {
     @Mock private JpaSpaceRepository spaces;
 
     @Test
+    void getOrganizationContext_reportsDisabledOrganizationWithoutLocking() {
+        UUID orgId = UUID.randomUUID();
+        OrganizationEntity organization = OrganizationEntity.builder()
+                .id(orgId)
+                .code("takibo")
+                .name("Takibo")
+                .status(OrganizationStatus.DISABLED)
+                .build();
+        when(organizations.findById(orgId)).thenReturn(Optional.of(organization));
+        when(spaces.countByOrgId(orgId)).thenReturn(3);
+        OrganizationReadAdapter adapter = new OrganizationReadAdapter(organizations, spaces);
+
+        OrganizationContext result = adapter.getOrganizationContext(orgId);
+
+        assertThat(result).isEqualTo(new OrganizationContext(orgId, false, 3));
+        verify(organizations, never()).findByIdForUpdate(orgId);
+    }
+
+    @Test
     void getOrganizationContextForSpaceCreation_locksOrganizationBeforeCountingSpaces() {
         UUID orgId = UUID.randomUUID();
         OrganizationEntity organization = OrganizationEntity.builder()
