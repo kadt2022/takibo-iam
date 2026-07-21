@@ -1,4 +1,4 @@
-package com.takibo.managementservice.application.provisioning;
+package com.takibo.managementservice.integration;
 
 import com.takibo.identitycore.application.rbac.governance.port.in.GroupAssignmentCase;
 import com.takibo.identitycore.application.rbac.governance.port.in.RoleAssignmentCase;
@@ -19,7 +19,7 @@ import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
-class TechnicalRbacProvisionTest {
+class IdentityTechnicalRbacProvisioningAdapterTest {
 
     private static final UUID ORG_ID = UUID.fromString("aaaaaaaa-0000-0000-0000-000000000001");
     private static final UUID SPACE_ID = UUID.fromString("bbbbbbbb-0000-0000-0000-000000000002");
@@ -29,7 +29,7 @@ class TechnicalRbacProvisionTest {
     @Mock private RoleAssignmentCase roleAssignmentCase;
     @Mock private GroupAssignmentCase groupAssignmentCase;
 
-    @InjectMocks private TechnicalRbacProvision provision;
+    @InjectMocks private IdentityTechnicalRbacProvisioningAdapter provision;
 
     @Test
     void provisionFounder_assignsOrgAuthorityAtOrgLevelAndSpaceAuthorityAtSpaceLevel() {

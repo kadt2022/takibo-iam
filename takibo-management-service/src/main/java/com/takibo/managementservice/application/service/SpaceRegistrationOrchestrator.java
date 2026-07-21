@@ -1,8 +1,7 @@
 package com.takibo.managementservice.application.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.takibo.managementservice.application.command.CreateSpaceCommand;
+import com.takibo.managementservice.application.port.SpaceEventPublisherPort;
 import com.takibo.managementservice.domain.event.SpaceCreatedEvent;
 import com.takibo.managementservice.domain.exception.SpaceCodeAlreadyExistsException;
 import com.takibo.managementservice.domain.model.OrganizationContext;
@@ -12,8 +11,6 @@ import com.takibo.managementservice.domain.model.SpaceRegistrationResult;
 import com.takibo.managementservice.domain.repository.SpaceRepository;
 import com.takibo.managementservice.domain.service.SpaceCreationDomainService;
 import com.takibo.managementservice.domain.vo.SpaceId;
-import com.takibo.outbox.core.model.OutboxEnvelope;
-import com.takibo.outbox.core.port.OutboxPublisher;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,8 +31,7 @@ public class SpaceRegistrationOrchestrator {
     private final SpaceCodeGenerator spaceCodeGenerator;
     private final SpaceRepository spaceRepository;
 
-    private final OutboxPublisher outboxPublisher;
-    private final ObjectMapper objectMapper;
+    private final SpaceEventPublisherPort spaceEventPublisher;
     private final Clock clock;
 
     private static final Logger log = LoggerFactory.getLogger(SpaceRegistrationOrchestrator.class);
@@ -80,35 +76,11 @@ public class SpaceRegistrationOrchestrator {
                     clock.instant()
             );
 
-            publishSpaceCreated(event, saved.getOrgId(), saved.getId().value());
+            spaceEventPublisher.publish(event);
 
             return new SpaceRegistrationResult(saved);
         }
 
         throw new SpaceCodeAlreadyExistsException(command.code());
-    }
-
-    private void publishSpaceCreated(SpaceCreatedEvent event, UUID orgId, UUID spaceId) {
-        String payloadJson = toJson(event);
-
-        outboxPublisher.publish(
-                OutboxEnvelope.of(
-                        "SPACE_CREATED",
-                        "SPACE",
-                        spaceId.toString(),
-                        orgId,
-                        spaceId,
-                        payloadJson,
-                        "SPACE:CREATED:" + spaceId
-                )
-        );
-    }
-
-    private String toJson(Object value) {
-        try {
-            return objectMapper.writeValueAsString(value);
-        } catch (JsonProcessingException e) {
-            throw new IllegalStateException("Unable to serialize outbox payload", e);
-        }
     }
 }

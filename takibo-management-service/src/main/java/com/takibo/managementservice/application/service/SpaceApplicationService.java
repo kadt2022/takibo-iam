@@ -1,7 +1,7 @@
 package com.takibo.managementservice.application.service;
 
 import com.takibo.managementservice.application.command.CreateSpaceCommand;
-import com.takibo.managementservice.application.command.CreateSpaceResult;
+import com.takibo.managementservice.application.result.CreateSpaceResult;
 import com.takibo.managementservice.domain.model.SpaceRegistrationResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;

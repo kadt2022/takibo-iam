@@ -1,11 +1,11 @@
 package com.takibo.managementservice.application.service;
 
 import com.takibo.managementservice.application.command.CreateSpaceCommand;
-import com.takibo.managementservice.application.command.CreateSpaceResult;
+import com.takibo.managementservice.application.result.CreateSpaceResult;
 import com.takibo.managementservice.application.command.OrganizationSignupCommand;
 import com.takibo.managementservice.application.port.FounderProvisioningPort;
 import com.takibo.managementservice.application.port.OrganizationAccountProvisioningPort;
-import com.takibo.managementservice.application.provisioning.TechnicalRbacProvision;
+import com.takibo.managementservice.application.port.TechnicalRbacProvisioningPort;
 import com.takibo.managementservice.application.result.OrganizationResult;
 import com.takibo.managementservice.domain.model.SpaceStatus;
 import org.junit.jupiter.api.Test;
@@ -37,7 +37,7 @@ class OrganizationSignupServiceTest {
     @Mock private SpaceApplicationService spaceApp;
     @Mock private OrganizationAccountProvisioningPort accountProvisioning;
     @Mock private FounderProvisioningPort founderProvisioning;
-    @Mock private TechnicalRbacProvision technicalRbacProvision;
+    @Mock private TechnicalRbacProvisioningPort technicalRbacProvisioning;
 
     @InjectMocks private OrganizationSignupService service;
 
@@ -69,7 +69,7 @@ class OrganizationSignupServiceTest {
         verify(founderProvisioning).provisionFounder(
                 ORG_ID, SPACE_ID, ACCOUNT_ID, "founder", "Tresor", "Kadima");
 
-        verify(technicalRbacProvision).provisionFounder(ORG_ID, SPACE_ID, ACCOUNT_ID, "SYSTEM");
+        verify(technicalRbacProvisioning).provisionFounder(ORG_ID, SPACE_ID, ACCOUNT_ID, "SYSTEM");
     }
 
     @Test
@@ -84,7 +84,7 @@ class OrganizationSignupServiceTest {
         verify(accountProvisioning, never()).createAccount(any(), any(), any());
         verify(spaceApp, never()).createSpace(any());
         verify(founderProvisioning, never()).provisionFounder(any(), any(), any(), any(), any(), any());
-        verify(technicalRbacProvision, never()).provisionFounder(any(), any(), any(), any());
+        verify(technicalRbacProvisioning, never()).provisionFounder(any(), any(), any(), any());
     }
 
     private OrganizationSignupCommand command(UUID organizationId) {

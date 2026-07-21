@@ -1,7 +1,7 @@
 package com.takibo.managementservice.interfaces.rest.api;
 
 import com.takibo.managementservice.application.command.CreateSpaceCommand;
-import com.takibo.managementservice.application.command.CreateSpaceResult;
+import com.takibo.managementservice.application.result.CreateSpaceResult;
 import com.takibo.managementservice.application.port.CurrentActorProvider;
 import com.takibo.managementservice.application.query.port.SpaceQueryCase;
 import com.takibo.managementservice.application.query.result.SpaceDetailsResult;

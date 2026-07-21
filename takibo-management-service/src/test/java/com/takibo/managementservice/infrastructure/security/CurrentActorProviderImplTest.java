@@ -85,8 +85,53 @@ class CurrentActorProviderImplTest {
     }
 
     @Test
-    void source_isSystem() {
+    void source_withoutAuthentication_isSystem() {
         assertThat(provider().source()).isEqualTo(ActorSource.SYSTEM);
+    }
+
+    @Test
+    void source_withAnonymousAuthentication_isSystem() {
+        SecurityContextHolder.getContext().setAuthentication(
+                new org.springframework.security.authentication.AnonymousAuthenticationToken(
+                        "key", "anonymous",
+                        java.util.List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_ANONYMOUS"))));
+
+        assertThat(provider().source()).isEqualTo(ActorSource.SYSTEM);
+    }
+
+    @Test
+    void source_withHumanPrincipalCarryingAccount_isHuman() {
+        TakiboPrincipal principal = new TakiboPrincipal(
+                "sub", "jdoe", USER_ID, ACCOUNT_ID, null, null, List.of(), List.of());
+        authenticate(principal);
+
+        assertThat(provider().source()).isEqualTo(ActorSource.HUMAN);
+    }
+
+    @Test
+    void source_withJwtCarryingAccountClaim_isHuman() {
+        Jwt jwt = new Jwt(
+                "token",
+                Instant.parse("2026-07-20T00:00:00Z"),
+                Instant.parse("2026-07-20T01:00:00Z"),
+                java.util.Map.of("alg", "none"),
+                java.util.Map.of("account_id", ACCOUNT_ID.toString(), "sub", "founder"));
+        authenticate(jwt);
+
+        assertThat(provider().source()).isEqualTo(ActorSource.HUMAN);
+    }
+
+    @Test
+    void source_withMachineJwtWithoutAccount_isServiceAccount() {
+        Jwt jwt = new Jwt(
+                "token",
+                Instant.parse("2026-07-20T00:00:00Z"),
+                Instant.parse("2026-07-20T01:00:00Z"),
+                java.util.Map.of("alg", "none"),
+                java.util.Map.of("client_id", "tms-cli", "sub", "service-tms"));
+        authenticate(jwt);
+
+        assertThat(provider().source()).isEqualTo(ActorSource.SERVICE_ACCOUNT);
     }
 
     private CurrentActorProviderImpl provider() {

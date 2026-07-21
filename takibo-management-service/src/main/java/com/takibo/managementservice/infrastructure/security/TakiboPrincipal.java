@@ -26,13 +26,22 @@ public record TakiboPrincipal(
         return new TakiboPrincipal(
                 subject,
                 username,
-                toUuidOrNull(claims.get("userId")),
-                toUuidOrNull(claims.get("accountId")),
-                toUuidOrNull(claims.get("orgId")),
-                toUuidOrNull(claims.get("spaceId")),
+                toUuidOrNull(claim(claims, "user_id", "userId")),
+                toUuidOrNull(claim(claims, "account_id", "accountId")),
+                toUuidOrNull(claim(claims, "org_id", "orgId")),
+                toUuidOrNull(claim(claims, "space_id", "spaceId")),
                 toStringList(claims.get("roles")),
                 toStringList(claims.get("permissions"))
         );
+    }
+
+    /**
+     * Lit un claim en acceptant les deux formes pendant la transition, avec priorité
+     * au contrat canonique TAKIBO en snake_case (user_id) sur la forme camelCase (userId).
+     */
+    private static Object claim(Map<String, Object> claims, String canonical, String legacy) {
+        Object value = claims.get(canonical);
+        return value != null ? value : claims.get(legacy);
     }
 
     private static String asString(Object value) {

@@ -3,6 +3,7 @@ package com.takibo.managementservice.infrastructure.security;
 import com.takibo.identitycore.integration.security.port.CurrentAccountContextCase;
 import com.takibo.managementservice.application.port.CurrentActorProvider;
 import com.takibo.managementservice.domain.model.ActorSource;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -40,7 +41,33 @@ public class CurrentActorProviderImpl implements CurrentActorProvider {
 
     @Override
     public ActorSource source() {
-        return ActorSource.SYSTEM;
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+        // Aucun acteur situé : traitement interne / bootstrap. C'est le seul cas
+        // légitime de SYSTEM — jamais un fallback silencieux d'un contexte invalide.
+        if (authentication == null
+                || !authentication.isAuthenticated()
+                || authentication instanceof AnonymousAuthenticationToken) {
+            return ActorSource.SYSTEM;
+        }
+
+        // Un token humain porte un account (IAM 31) ; un token machine
+        // (client_credentials) n'en porte pas et agit comme SERVICE_ACCOUNT.
+        return carriesAccount(authentication.getPrincipal())
+                ? ActorSource.HUMAN
+                : ActorSource.SERVICE_ACCOUNT;
+    }
+
+    private boolean carriesAccount(Object principal) {
+        if (principal instanceof TakiboPrincipal takiboPrincipal) {
+            return takiboPrincipal.accountId() != null;
+        }
+        if (principal instanceof Jwt jwt) {
+            return Stream.of("account_id", "accountId")
+                    .map(jwt.getClaims()::get)
+                    .anyMatch(Objects::nonNull);
+        }
+        return false;
     }
 
     private Optional<UUID> resolveUserId(Object principal) {

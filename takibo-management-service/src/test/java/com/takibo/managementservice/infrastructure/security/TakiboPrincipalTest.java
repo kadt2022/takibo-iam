@@ -35,6 +35,36 @@ class TakiboPrincipalTest {
     }
 
     @Test
+    void fromClaims_reads_canonical_snake_case_identifiers() {
+        UUID orgId = UUID.fromString("cccccccc-0000-0000-0000-000000000003");
+        UUID spaceId = UUID.fromString("dddddddd-0000-0000-0000-000000000004");
+
+        TakiboPrincipal principal = TakiboPrincipal.fromClaims(Map.of(
+                "sub", "subject",
+                "user_id", USER_ID.toString(),
+                "account_id", ACCOUNT_ID.toString(),
+                "org_id", orgId.toString(),
+                "space_id", spaceId.toString()));
+
+        assertThat(principal.userId()).isEqualTo(USER_ID);
+        assertThat(principal.accountId()).isEqualTo(ACCOUNT_ID);
+        assertThat(principal.orgId()).isEqualTo(orgId);
+        assertThat(principal.spaceId()).isEqualTo(spaceId);
+    }
+
+    @Test
+    void fromClaims_prefers_canonical_snake_case_over_legacy_camel_case() {
+        UUID canonical = UUID.fromString("eeeeeeee-0000-0000-0000-000000000005");
+        UUID legacy = UUID.fromString("ffffffff-0000-0000-0000-000000000006");
+
+        TakiboPrincipal principal = TakiboPrincipal.fromClaims(Map.of(
+                "user_id", canonical.toString(),
+                "userId", legacy.toString()));
+
+        assertThat(principal.userId()).isEqualTo(canonical);
+    }
+
+    @Test
     void fromClaims_supplies_safe_defaults_for_missing_optional_claims() {
         TakiboPrincipal principal = TakiboPrincipal.fromClaims(Map.of());
 

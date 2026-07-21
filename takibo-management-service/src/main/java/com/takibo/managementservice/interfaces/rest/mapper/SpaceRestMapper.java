@@ -1,6 +1,6 @@
 package com.takibo.managementservice.interfaces.rest.mapper;
 
-import com.takibo.managementservice.application.command.CreateSpaceResult;
+import com.takibo.managementservice.application.result.CreateSpaceResult;
 import com.takibo.managementservice.application.query.result.SpaceDetailsResult;
 import com.takibo.managementservice.application.query.result.SpacePageResult;
 import com.takibo.managementservice.application.query.result.SpaceSummaryResult;

@@ -1,11 +1,11 @@
 package com.takibo.managementservice.application.service;
 
 import com.takibo.managementservice.application.command.CreateSpaceCommand;
-import com.takibo.managementservice.application.command.CreateSpaceResult;
+import com.takibo.managementservice.application.result.CreateSpaceResult;
 import com.takibo.managementservice.application.command.OrganizationSignupCommand;
 import com.takibo.managementservice.application.port.FounderProvisioningPort;
 import com.takibo.managementservice.application.port.OrganizationAccountProvisioningPort;
-import com.takibo.managementservice.application.provisioning.TechnicalRbacProvision;
+import com.takibo.managementservice.application.port.TechnicalRbacProvisioningPort;
 import com.takibo.managementservice.application.result.OrganizationSignupResult;
 import com.takibo.managementservice.domain.model.ActorSource;
 import lombok.RequiredArgsConstructor;
@@ -26,7 +26,7 @@ public class OrganizationSignupService {
     private final SpaceApplicationService spaceApp;
     private final OrganizationAccountProvisioningPort accountProvisioning;
     private final FounderProvisioningPort founderProvisioning;
-    private final TechnicalRbacProvision technicalRbacProvision;
+    private final TechnicalRbacProvisioningPort technicalRbacProvisioning;
 
     @Transactional
     public OrganizationSignupResult signup(OrganizationSignupCommand command) {
@@ -68,7 +68,7 @@ public class OrganizationSignupService {
         );
         log.info("User created - userId={}", founderId);
 
-        technicalRbacProvision.provisionFounder(
+        technicalRbacProvisioning.provisionFounder(
                 orgId,
                 space.id(),
                 accountId,

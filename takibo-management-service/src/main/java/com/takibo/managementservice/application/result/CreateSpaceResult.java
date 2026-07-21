@@ -1,4 +1,4 @@
-package com.takibo.managementservice.application.command;
+package com.takibo.managementservice.application.result;
 
 import com.takibo.managementservice.domain.model.Space;
 import com.takibo.managementservice.domain.model.SpaceStatus;
