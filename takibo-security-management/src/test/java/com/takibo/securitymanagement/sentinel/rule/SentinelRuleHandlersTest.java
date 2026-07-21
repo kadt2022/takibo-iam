@@ -77,6 +77,30 @@ class SentinelRuleHandlersTest {
     }
 
     @Test
+    void organizationAlreadyExists_mapsToConflict409() {
+        SentinelResponse response = SentinelRuleHandlers.ruleOrganizationAlreadyExists(
+                new RuntimeException("Organization code already exists: takibo"),
+                PATH,
+                TRACE_ID
+        );
+
+        assertResponse(response, 409, SentinelErrorCode.ORGANIZATION_ALREADY_EXISTS,
+                "Organization code already exists: takibo");
+    }
+
+    @Test
+    void spaceAlreadyExists_mapsToConflict409() {
+        SentinelResponse response = SentinelRuleHandlers.ruleSpaceAlreadyExists(
+                new RuntimeException("Space code already exists: finance"),
+                PATH,
+                TRACE_ID
+        );
+
+        assertResponse(response, 409, SentinelErrorCode.SPACE_ALREADY_EXISTS,
+                "Space code already exists: finance");
+    }
+
+    @Test
     void userNotActive_mapsToForbidden403() {
         SentinelResponse response = SentinelRuleHandlers.ruleUserNotActive(
                 new UserNotActiveException(USER_ID, UserStatus.SUSPENDED),

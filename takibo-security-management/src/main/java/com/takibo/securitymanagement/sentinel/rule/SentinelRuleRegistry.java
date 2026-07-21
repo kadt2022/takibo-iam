@@ -73,4 +73,8 @@ public class SentinelRuleRegistry {
 
         return fallback;
     }
+
+    public boolean hasRule(Throwable ex) {
+        return resolve(ex) != fallback;
+    }
 }

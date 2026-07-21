@@ -237,6 +237,14 @@ public final class SentinelRuleHandlers {
         return response(HttpStatus.CONFLICT, SentinelErrorCode.OAUTH_CLIENT_ALREADY_EXISTS, ex.getMessage(), path, traceId);
     }
 
+    static SentinelResponse ruleOrganizationAlreadyExists(Throwable ex, String path, String traceId) {
+        return response(HttpStatus.CONFLICT, SentinelErrorCode.ORGANIZATION_ALREADY_EXISTS, ex.getMessage(), path, traceId);
+    }
+
+    static SentinelResponse ruleSpaceAlreadyExists(Throwable ex, String path, String traceId) {
+        return response(HttpStatus.CONFLICT, SentinelErrorCode.SPACE_ALREADY_EXISTS, ex.getMessage(), path, traceId);
+    }
+
     // Exception TMS (soft dependency) : même contrat 404 que le SpaceNotFound de
     // TIS-CORE, message générique — jamais d'oracle sur l'existence dans une autre org.
     static SentinelResponse ruleTmsSpaceNotFound(Throwable ex, String path, String traceId) {
