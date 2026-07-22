@@ -22,6 +22,7 @@ dependencies {
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 
     implementation project(':takibo-identity-core')
+    implementation project(':takibo-security-context')
     implementation project(':takibo-audit')
     implementation project(':takibo-outbox-spring-starter')
     implementation project(':takibo-outbox-jpa')
