@@ -40,10 +40,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * la VRAIE chaîne Spring Security (JwtAuthenticationFilter -> PolicyBasedAuthorizationManager
  * -> PolicyEvaluator) jusqu'au SpaceController. Seules la validation cryptographique du
  * token (TokenValidatorAdapter) et la lecture JPA (SpaceQueryCase) sont doublées —
- * la décision d'autorisation, elle, est réelle. La saga BVT post-merge complète cette
- * preuve mais ne la remplace pas.
+ * la politique d'autorisation déterministe, elle, est réelle. Le risque adaptatif est
+ * neutralisé afin que l'heure du runner CI ne transforme pas un ALLOW en CHALLENGE.
+ * La saga BVT post-merge complète cette preuve mais ne la remplace pas.
  */
-@SpringBootTest
+@SpringBootTest(properties = "takibo.adp.enabled=false")
 @ActiveProfiles("test")
 class SpaceSurfaceSecurityIntegrationTest {
 
