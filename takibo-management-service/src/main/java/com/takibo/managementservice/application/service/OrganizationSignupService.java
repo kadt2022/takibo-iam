@@ -1,18 +1,13 @@
 package com.takibo.managementservice.application.service;
 
-import com.takibo.identitycore.application.identity.command.ProvisionFounderUserCommand;
-import com.takibo.identitycore.application.identity.port.AccountApplicationCase;
-import com.takibo.identitycore.application.identity.port.FounderUserProvisioningCase;
-import com.takibo.identitycore.interfaces.rest.response.AccountResponse;
-import com.takibo.identitycore.interfaces.rest.response.UserResponse;
 import com.takibo.managementservice.application.command.CreateSpaceCommand;
-import com.takibo.managementservice.application.command.CreateSpaceResult;
-import com.takibo.managementservice.application.provisioning.TechnicalRbacProvision;
-import com.takibo.managementservice.application.security.ActorSource;
-import com.takibo.managementservice.interfaces.rest.request.OrganizationInput;
-import com.takibo.managementservice.interfaces.rest.request.OrganizationSignupRequest;
-import com.takibo.managementservice.interfaces.rest.response.OrganizationSignupResponse;
-import com.takibo.managementservice.interfaces.rest.response.SpaceResponse;
+import com.takibo.managementservice.application.result.CreateSpaceResult;
+import com.takibo.managementservice.application.command.OrganizationSignupCommand;
+import com.takibo.managementservice.application.port.FounderProvisioningPort;
+import com.takibo.managementservice.application.port.OrganizationAccountProvisioningPort;
+import com.takibo.managementservice.application.port.TechnicalRbacProvisioningPort;
+import com.takibo.managementservice.application.result.OrganizationSignupResult;
+import com.takibo.managementservice.domain.model.ActorSource;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.AccessDeniedException;
@@ -29,72 +24,70 @@ public class OrganizationSignupService {
 
     private final OrganizationApplicationService orgApp;
     private final SpaceApplicationService spaceApp;
-    private final AccountApplicationCase accountApp;
-    private final FounderUserProvisioningCase founderProvisioning;
-    private final TechnicalRbacProvision technicalRbacProvision;
+    private final OrganizationAccountProvisioningPort accountProvisioning;
+    private final FounderProvisioningPort founderProvisioning;
+    private final TechnicalRbacProvisioningPort technicalRbacProvisioning;
 
     @Transactional
-    public OrganizationSignupResponse signup(OrganizationSignupRequest req) {
+    public OrganizationSignupResult signup(OrganizationSignupCommand command) {
         log.info("Starting organization signup - email={}, username={}",
-                req.account().email(),
-                req.profile().username());
+                command.account().email(),
+                command.profile().username());
 
-        UUID orgId = resolveOrganization(req.organization());
+        UUID orgId = resolveOrganization(command.organization());
 
-        AccountResponse account = accountApp.createAccountInOrg(
+        UUID accountId = accountProvisioning.createAccount(
                 orgId,
-                req.account().email(),
-                req.account().password()
+                command.account().email(),
+                command.account().password()
         );
-        log.info("Account created - accountId={}", account.id());
+        log.info("Account created - accountId={}", accountId);
 
         CreateSpaceCommand spaceCommand = CreateSpaceCommand.builder()
                 .orgId(orgId)
-                .ownerAccountId(account.id())
+                .ownerAccountId(accountId)
                 .source(ActorSource.HUMAN)
-                .name(req.space().name())
-                .code(req.space().code())
-                .description(req.space().description())
+                .name(command.space().name())
+                .code(command.space().code())
+                .description(command.space().description())
                 .build();
 
-        SpaceResponse space = spaceApp.createSpace(spaceCommand);
+        CreateSpaceResult space = spaceApp.createSpace(spaceCommand);
 
         log.info("Space created - spaceId={}", space.id());
 
 
         // Provisioning fondateur : acte de bootstrap, indépendant du contexte d'org du token.
-        ProvisionFounderUserCommand founderCommand = new ProvisionFounderUserCommand(
+        UUID founderId = founderProvisioning.provisionFounder(
                 orgId,
                 space.id(),
-                account.id(),
-                req.profile().username(),
-                req.profile().firstName(),
-                req.profile().lastName()
+                accountId,
+                command.profile().username(),
+                command.profile().firstName(),
+                command.profile().lastName()
         );
+        log.info("User created - userId={}", founderId);
 
-        UserResponse founder = founderProvisioning.provisionFounder(founderCommand);
-        log.info("User created - userId={}", founder.id());
-
-        technicalRbacProvision.provisionFounder(
+        technicalRbacProvisioning.provisionFounder(
                 orgId,
                 space.id(),
-                account.id(),
+                accountId,
                 "SYSTEM"
         );
-        log.info("RBAC provisioned for accountId={}", account.id());
+        log.info("RBAC provisioned for accountId={}", accountId);
 
         log.info("Organization signup completed - orgId={}, spaceId={}, accountId={}, userId={}",
-                orgId, space.id(), account.id(), founder.id());
+                orgId, space.id(), accountId, founderId);
 
-        return new OrganizationSignupResponse(
+        return new OrganizationSignupResult(
                 orgId,
                 space.id(),
-                account.id(),
-                founder.id()
+                accountId,
+                founderId
         );
     }
 
-    private UUID resolveOrganization(OrganizationInput org) {
+    private UUID resolveOrganization(OrganizationSignupCommand.Organization org) {
         Assert.notNull(org, "organization is required");
 
         // Cette route crée la frontière d'organisation et son unique fondateur initial.

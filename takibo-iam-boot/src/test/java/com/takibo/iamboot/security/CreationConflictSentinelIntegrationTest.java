@@ -2,6 +2,7 @@ package com.takibo.iamboot.security;
 
 import com.takibo.managementservice.domain.exception.ClientAlreadyExistsException;
 import com.takibo.managementservice.domain.exception.OrganizationCodeAlreadyExistsException;
+import com.takibo.managementservice.domain.exception.OAuthClientSecretRotationConflictException;
 import com.takibo.managementservice.domain.exception.SpaceCodeAlreadyExistsException;
 import com.takibo.securitymanagement.sentinel.advice.SentinelAdvice;
 import com.takibo.securitymanagement.sentinel.advice.SentinelErrorCode;
@@ -54,6 +55,14 @@ class CreationConflictSentinelIntegrationTest {
                 .andExpect(jsonPath("$.code").value(SentinelErrorCode.SPACE_ALREADY_EXISTS.name()));
     }
 
+    @Test
+    void concurrentOAuthClientSecretRotation_returns409ThroughSentinel() throws Exception {
+        mockMvc.perform(get("/test/concurrent/client-secret"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(
+                        SentinelErrorCode.OAUTH_CLIENT_SECRET_ROTATION_CONFLICT.name()));
+    }
+
     @RestController
     static class ConcurrentCreationController {
 
@@ -65,6 +74,11 @@ class CreationConflictSentinelIntegrationTest {
         @GetMapping("/test/concurrent/client")
         void client() {
             throw new ClientAlreadyExistsException("machine-client", databaseConflict());
+        }
+
+        @GetMapping("/test/concurrent/client-secret")
+        void clientSecret() {
+            throw new OAuthClientSecretRotationConflictException();
         }
 
         @GetMapping("/test/concurrent/space")

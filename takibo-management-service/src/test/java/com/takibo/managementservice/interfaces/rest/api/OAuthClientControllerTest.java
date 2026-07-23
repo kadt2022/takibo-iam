@@ -6,7 +6,7 @@ import com.takibo.identitycore.integration.security.port.CurrentSpaceContextCase
 import com.takibo.identitycore.integration.space.annotations.RequireActiveSpace;
 import com.takibo.identitycore.integration.space.port.SpaceOwnershipGuardCase;
 import com.takibo.managementservice.application.command.RegisterClientCommand;
-import com.takibo.managementservice.application.mapper.ClientRegistrationMapper;
+import com.takibo.managementservice.interfaces.rest.mapper.ClientRegistrationRestMapper;
 import com.takibo.managementservice.application.service.OAuthClientService;
 import com.takibo.managementservice.domain.model.ClientType;
 import com.takibo.managementservice.domain.model.OAuthClient;
@@ -54,7 +54,7 @@ class OAuthClientControllerTest {
     private OAuthClientService service;
 
     @Mock
-    private ClientRegistrationMapper mapper;
+    private ClientRegistrationRestMapper mapper;
 
     @Mock
     private CurrentOrganizationContextCase currentOrganizationContext;

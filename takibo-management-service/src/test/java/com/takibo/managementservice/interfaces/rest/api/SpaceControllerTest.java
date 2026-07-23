@@ -1,16 +1,16 @@
 package com.takibo.managementservice.interfaces.rest.api;
 
 import com.takibo.managementservice.application.command.CreateSpaceCommand;
+import com.takibo.managementservice.application.result.CreateSpaceResult;
 import com.takibo.managementservice.application.port.CurrentActorProvider;
 import com.takibo.managementservice.application.query.port.SpaceQueryCase;
 import com.takibo.managementservice.application.query.result.SpaceDetailsResult;
 import com.takibo.managementservice.application.query.result.SpacePageResult;
 import com.takibo.managementservice.application.query.result.SpaceSummaryResult;
-import com.takibo.managementservice.application.security.ActorSource;
+import com.takibo.managementservice.domain.model.ActorSource;
 import com.takibo.managementservice.application.service.SpaceApplicationService;
 import com.takibo.managementservice.domain.model.SpaceStatus;
 import com.takibo.managementservice.interfaces.rest.mapper.SpaceRestMapper;
-import com.takibo.managementservice.interfaces.rest.response.SpaceResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -71,7 +71,7 @@ class SpaceControllerTest {
         // IAM 31 : le propriétaire d'un space est un ACCOUNT, pas un user local.
         when(actorProvider.currentAccountId()).thenReturn(OWNER_ID);
         when(actorProvider.source()).thenReturn(ActorSource.HUMAN);
-        when(service.createSpace(any(CreateSpaceCommand.class))).thenReturn(new SpaceResponse(
+        when(service.createSpace(any(CreateSpaceCommand.class))).thenReturn(new CreateSpaceResult(
                 SPACE_ID, ORG_ID, "busa", "Busa", null,
                 SpaceStatus.ACTIVE, null, CREATED_AT, OWNER_ID, CREATED_AT, CREATED_AT, 0L));
 

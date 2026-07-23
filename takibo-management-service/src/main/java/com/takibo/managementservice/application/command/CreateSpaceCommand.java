@@ -1,7 +1,6 @@
 package com.takibo.managementservice.application.command;
 
-import com.takibo.managementservice.application.security.ActorSource;
-import com.takibo.managementservice.interfaces.rest.request.CreateSpaceRequest;
+import com.takibo.managementservice.domain.model.ActorSource;
 import lombok.Builder;
 
 import java.util.UUID;
@@ -23,13 +22,6 @@ public record CreateSpaceCommand(
     }
     public CreateSpaceCommand(UUID orgId, String code, String name) {
         this(orgId, null, null, name, code, null);
-    }
-
-    public static CreateSpaceCommand from(UUID orgId,
-                                          UUID ownerAccountId,
-                                          ActorSource source,
-                                          CreateSpaceRequest req) {
-        return new CreateSpaceCommand(orgId, ownerAccountId, source, req.name(), req.code(), req.description());
     }
 
     public static CreateSpaceCommand from(UUID orgId, String code, String name) {

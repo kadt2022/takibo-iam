@@ -1,25 +1,33 @@
-package com.takibo.managementservice.application.provisioning;
+package com.takibo.managementservice.integration;
 
 import com.takibo.identitycore.application.rbac.governance.port.in.GroupAssignmentCase;
 import com.takibo.identitycore.application.rbac.governance.port.in.RoleAssignmentCase;
 import com.takibo.identitycore.domain.model.Identity;
 import com.takibo.identitycore.domain.model.IdentityType;
+import com.takibo.managementservice.application.port.TechnicalRbacProvisioningPort;
 import org.springframework.stereotype.Component;
 
 import java.util.UUID;
 
+/**
+ * Adaptateur d'intégration TMS -> TIS-CORE : traduit l'intention de provisioning
+ * RBAC de la couche application en assignations techniques de rôles et de groupes.
+ * C'est le seul point où le domaine identité (Identity) et les cas d'usage RBAC
+ * de TIS-CORE sont connus — la couche application reste derrière le port.
+ */
 @Component
-public class TechnicalRbacProvision {
+public class IdentityTechnicalRbacProvisioningAdapter implements TechnicalRbacProvisioningPort {
 
     private final RoleAssignmentCase roleAssignmentCase;
     private final GroupAssignmentCase groupAssignmentCase;
 
-    public TechnicalRbacProvision(RoleAssignmentCase roleAssignmentCase,
-                                  GroupAssignmentCase groupAssignmentCase) {
+    public IdentityTechnicalRbacProvisioningAdapter(RoleAssignmentCase roleAssignmentCase,
+                                                    GroupAssignmentCase groupAssignmentCase) {
         this.roleAssignmentCase = roleAssignmentCase;
         this.groupAssignmentCase = groupAssignmentCase;
     }
 
+    @Override
     public void provisionFounder(UUID orgId,
                                  UUID initialSpaceId,
                                  UUID founderAccountId,
@@ -37,6 +45,7 @@ public class TechnicalRbacProvision {
         groupAssignmentCase.assignTechnicalGroup(orgId, initialSpaceId, founder, "G_SPACE_ADMINS", systemActor);
     }
 
+    @Override
     public void provisionSpaceCreator(UUID orgId,
                                       UUID spaceId,
                                       UUID creatorAccountId,

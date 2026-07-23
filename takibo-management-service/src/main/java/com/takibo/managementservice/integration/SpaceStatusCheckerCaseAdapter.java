@@ -3,7 +3,6 @@ package com.takibo.managementservice.integration;
 import com.takibo.identitycore.integration.space.port.SpaceStatusCheckerCase;
 import com.takibo.identitycore.domain.status.SpaceOperationalStatus;
 import com.takibo.managementservice.application.service.SpaceStatusService;
-import com.takibo.managementservice.domain.mapper.SpaceStatusMapper;
 import com.takibo.managementservice.domain.model.SpaceStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;

@@ -237,6 +237,12 @@ public final class SentinelRuleHandlers {
         return response(HttpStatus.CONFLICT, SentinelErrorCode.OAUTH_CLIENT_ALREADY_EXISTS, ex.getMessage(), path, traceId);
     }
 
+    static SentinelResponse ruleOAuthClientSecretRotationConflict(Throwable ex, String path, String traceId) {
+        return response(HttpStatus.CONFLICT,
+                SentinelErrorCode.OAUTH_CLIENT_SECRET_ROTATION_CONFLICT,
+                ex.getMessage(), path, traceId);
+    }
+
     static SentinelResponse ruleOrganizationAlreadyExists(Throwable ex, String path, String traceId) {
         return response(HttpStatus.CONFLICT, SentinelErrorCode.ORGANIZATION_ALREADY_EXISTS, ex.getMessage(), path, traceId);
     }

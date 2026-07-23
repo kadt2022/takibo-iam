@@ -1,6 +1,6 @@
 package com.takibo.managementservice.domain.event;
 
-import com.takibo.managementservice.application.security.ActorSource;
+import com.takibo.managementservice.domain.model.ActorSource;
 
 import java.time.Instant;
 import java.util.UUID;

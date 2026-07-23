@@ -2,7 +2,7 @@ package com.takibo.managementservice.application.port;
 
 
 
-import com.takibo.managementservice.application.security.ActorSource;
+import com.takibo.managementservice.domain.model.ActorSource;
 
 import java.util.UUID;
 

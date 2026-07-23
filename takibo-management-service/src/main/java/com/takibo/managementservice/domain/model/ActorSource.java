@@ -1,4 +1,4 @@
-package com.takibo.managementservice.application.security;
+package com.takibo.managementservice.domain.model;
 
 public enum ActorSource {
     HUMAN,
