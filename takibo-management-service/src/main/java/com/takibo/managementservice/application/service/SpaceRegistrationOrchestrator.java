@@ -1,6 +1,7 @@
 package com.takibo.managementservice.application.service;
 
 import com.takibo.managementservice.application.command.CreateSpaceCommand;
+import com.takibo.managementservice.application.port.OrganizationReadPort;
 import com.takibo.managementservice.application.port.SpaceEventPublisherPort;
 import com.takibo.managementservice.domain.event.SpaceCreatedEvent;
 import com.takibo.managementservice.domain.exception.SpaceCodeAlreadyExistsException;
@@ -26,7 +27,7 @@ public class SpaceRegistrationOrchestrator {
 
     private static final int MAX_CODE_ATTEMPTS = 5;
 
-    private final OrganizationDomainService organizationDomainService;
+    private final OrganizationReadPort organizationReadPort;
     private final SpaceCreationDomainService spaceCreationDomainService;
     private final SpaceCodeGenerator spaceCodeGenerator;
     private final SpaceRepository spaceRepository;
@@ -40,7 +41,7 @@ public class SpaceRegistrationOrchestrator {
     public SpaceRegistrationResult registerSpace(CreateSpaceCommand command) {
         log.info("registerSpace() reached | orgId={} code={}", command.orgId(), command.code());
         OrganizationContext orgCtx =
-                organizationDomainService.assertOrganizationAllowsSpaceCreation(command.orgId());
+                organizationReadPort.getOrganizationContextForSpaceCreation(command.orgId());
 
         String candidate = spaceCodeGenerator.normalizeOrGenerate(command.code(), command.name());
 

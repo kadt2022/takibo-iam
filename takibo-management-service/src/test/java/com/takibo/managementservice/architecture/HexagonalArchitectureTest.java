@@ -54,4 +54,10 @@ class HexagonalArchitectureTest {
             .that().haveSimpleNameEndingWith("Adapter")
             .should().resideInAPackage("..application..")
             .because("adapters are driven/driving/integration components and must live outside the application layer");
+
+    @ArchTest
+    static final ArchRule domain_services_do_not_reside_in_application = noClasses()
+            .that().haveSimpleNameEndingWith("DomainService")
+            .should().resideInAPackage("..application..")
+            .because("domain services must contain pure business rules and reside in the domain layer");
 }
