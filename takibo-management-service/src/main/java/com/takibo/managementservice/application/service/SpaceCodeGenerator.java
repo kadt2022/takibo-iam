@@ -1,6 +1,6 @@
 package com.takibo.managementservice.application.service;
 
-import com.takibo.managementservice.application.common.TakiboCodeNormalizer;
+import com.takibo.managementservice.domain.service.TakiboCodeNormalizer;
 import org.springframework.stereotype.Component;
 
 import java.util.concurrent.ThreadLocalRandom;

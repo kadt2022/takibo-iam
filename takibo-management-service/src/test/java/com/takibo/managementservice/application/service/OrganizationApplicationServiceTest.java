@@ -4,10 +4,11 @@ import com.takibo.managementservice.domain.exception.OrganizationCodeAlreadyExis
 import com.takibo.managementservice.domain.model.OrganizationStatus;
 import com.takibo.managementservice.application.port.OrganizationWritePort;
 import com.takibo.managementservice.application.result.OrganizationResult;
+import com.takibo.managementservice.domain.service.OrganizationCreationDomainService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -24,7 +25,15 @@ class OrganizationApplicationServiceTest {
 
     @Mock private OrganizationWritePort organizations;
 
-    @InjectMocks private OrganizationApplicationService service;
+    private OrganizationApplicationService service;
+
+    @BeforeEach
+    void setUp() {
+        service = new OrganizationApplicationService(
+                organizations,
+                new OrganizationCreationDomainService()
+        );
+    }
 
     @Test
     void given_new_organization_when_create_then_saves_normalized_active_organization() {

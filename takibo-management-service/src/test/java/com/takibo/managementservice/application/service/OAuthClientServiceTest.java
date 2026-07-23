@@ -1,7 +1,6 @@
 package com.takibo.managementservice.application.service;
 
 import com.takibo.managementservice.application.command.RegisterClientCommand;
-import com.takibo.managementservice.application.validation.OAuthClientConfigurationValidator;
 import com.takibo.managementservice.domain.exception.InvalidClientConfigurationException;
 import com.takibo.managementservice.domain.exception.OAuthClientSecretRotationConflictException;
 import com.takibo.managementservice.domain.model.ClientType;
@@ -9,13 +8,15 @@ import com.takibo.managementservice.domain.model.OAuthClient;
 import com.takibo.managementservice.domain.model.RegisteredClientResult;
 import com.takibo.managementservice.domain.model.TokenEndpointAuthMethod;
 import com.takibo.managementservice.domain.repository.OAuthClientRepository;
+import com.takibo.managementservice.domain.service.OAuthClientRegistrationDomainService;
+import com.takibo.managementservice.domain.validation.OAuthClientConfigurationValidator;
 import com.takibo.managementservice.domain.vo.OAuthClientId;
 import com.takibo.managementservice.domain.vo.SpaceId;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -43,11 +44,19 @@ class OAuthClientServiceTest {
     @Mock
     private OAuthClientConfigurationValidator configurationValidator;
 
-    @InjectMocks
     private OAuthClientService service;
 
     @Captor
     private ArgumentCaptor<OAuthClient> clientCaptor;
+
+    @BeforeEach
+    void setUp() {
+        service = new OAuthClientService(
+                repository,
+                passwordEncoder,
+                new OAuthClientRegistrationDomainService(configurationValidator)
+        );
+    }
 
     @Test
     void register_normalizes_clientCredentials_profile() {

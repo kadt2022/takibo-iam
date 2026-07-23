@@ -1,4 +1,4 @@
-package com.takibo.managementservice.application.common;
+package com.takibo.managementservice.domain.service;
 
 import java.text.Normalizer;
 import java.util.Locale;

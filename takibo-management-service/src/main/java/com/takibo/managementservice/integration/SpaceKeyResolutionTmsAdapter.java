@@ -7,7 +7,7 @@ import com.takibo.identitycore.integration.space.port.ResolvedOrgKey;
 import com.takibo.identitycore.integration.space.port.ResolvedSpaceKey;
 import com.takibo.identitycore.integration.space.port.SpaceKeyResolutionCase;
 import com.takibo.managementservice.domain.model.OrganizationStatus;
-import com.takibo.managementservice.application.common.TakiboCodeNormalizer;
+import com.takibo.managementservice.domain.service.TakiboCodeNormalizer;
 import com.takibo.managementservice.infrastructure.entity.OrganizationEntity;
 import com.takibo.managementservice.infrastructure.entity.SpaceEntity;
 import com.takibo.managementservice.infrastructure.jpa.repository.JpaOrganizationRepository;

@@ -1,4 +1,4 @@
-package com.takibo.managementservice.application.validation;
+package com.takibo.managementservice.domain.validation;
 
 import com.nimbusds.jose.JOSEException;
 import com.nimbusds.jose.jwk.Curve;
@@ -8,12 +8,11 @@ import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.KeyOperation;
 import com.nimbusds.jose.jwk.KeyUse;
 import com.nimbusds.jose.jwk.RSAKey;
-import com.takibo.managementservice.application.command.RegisterClientCommand;
 import com.takibo.managementservice.domain.exception.InvalidClientConfigurationException;
 import com.takibo.managementservice.domain.model.ClientType;
+import com.takibo.managementservice.domain.model.OAuthClientRegistration;
 import com.takibo.managementservice.domain.model.TokenEndpointAuthMethod;
 import com.takibo.managementservice.domain.validation.UriValidation;
-import org.springframework.stereotype.Component;
 
 import java.text.ParseException;
 import java.time.Clock;
@@ -22,7 +21,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.regex.Pattern;
 
-@Component
 public class OAuthClientConfigurationValidator {
 
     private static final Pattern CLIENT_ID_PATTERN =
@@ -43,14 +41,14 @@ public class OAuthClientConfigurationValidator {
         this.clock = clock;
     }
 
-    public void validateRegistration(RegisterClientCommand command) {
-        validateIdentity(command);
-        validateCollections(command);
-        validateTokenTtls(command);
-        validateSigningAlgorithm(command.idTokenSignedAlg());
-        validateSecretExpiration(command.clientSecretExpiresAt());
-        validateSecretConfiguration(command);
-        validateJwksConfiguration(command);
+    public void validateRegistration(OAuthClientRegistration registration) {
+        validateIdentity(registration);
+        validateCollections(registration);
+        validateTokenTtls(registration);
+        validateSigningAlgorithm(registration.idTokenSignedAlg());
+        validateSecretExpiration(registration.clientSecretExpiresAt());
+        validateSecretConfiguration(registration);
+        validateJwksConfiguration(registration);
     }
 
     public void validateSecretExpiration(Instant expiresAt) {
@@ -59,26 +57,26 @@ public class OAuthClientConfigurationValidator {
         }
     }
 
-    private static void validateIdentity(RegisterClientCommand command) {
-        String clientId = command.clientId();
+    private static void validateIdentity(OAuthClientRegistration registration) {
+        String clientId = registration.clientId();
         if (clientId.length() > 128 || !CLIENT_ID_PATTERN.matcher(clientId).matches()) {
             fail("clientId must contain 1 to 128 URL-safe characters");
         }
-        String clientName = command.clientName();
+        String clientName = registration.clientName();
         if (clientName.length() > 160 || clientName.chars().anyMatch(Character::isISOControl)) {
             fail("clientName must contain at most 160 characters and no control characters");
         }
     }
 
-    private static void validateCollections(RegisterClientCommand command) {
-        if (command.grantTypes() == null || command.grantTypes().isEmpty()) {
+    private static void validateCollections(OAuthClientRegistration registration) {
+        if (registration.grantTypes() == null || registration.grantTypes().isEmpty()) {
             fail("at least one grant type is required");
         }
-        validateSet("scopes", command.scopes(), 50, 128);
-        validateSet("grantTypes", command.grantTypes(), 10, 64);
-        validateSet("redirectUris", command.redirectUris(), 20, 255);
-        validateSet("postLogoutRedirectUris", command.postLogoutRedirectUris(), 20, 255);
-        validateSet("corsOrigins", command.corsOrigins(), 20, 255);
+        validateSet("scopes", registration.scopes(), 50, 128);
+        validateSet("grantTypes", registration.grantTypes(), 10, 64);
+        validateSet("redirectUris", registration.redirectUris(), 20, 255);
+        validateSet("postLogoutRedirectUris", registration.postLogoutRedirectUris(), 20, 255);
+        validateSet("corsOrigins", registration.corsOrigins(), 20, 255);
     }
 
     private static void validateSet(String name, Set<String> values, int maxItems, int maxLength) {
@@ -95,13 +93,13 @@ public class OAuthClientConfigurationValidator {
         }
     }
 
-    private static void validateTokenTtls(RegisterClientCommand command) {
-        validateTtl("accessTokenTtlSeconds", command.accessTokenTtlSeconds(), MAX_ACCESS_TOKEN_TTL_SECONDS);
-        validateTtl("refreshTokenTtlSeconds", command.refreshTokenTtlSeconds(), MAX_REFRESH_TOKEN_TTL_SECONDS);
-        validateTtl("idTokenTtlSeconds", command.idTokenTtlSeconds(), MAX_ID_TOKEN_TTL_SECONDS);
-        if (command.accessTokenTtlSeconds() != null
-                && command.refreshTokenTtlSeconds() != null
-                && command.refreshTokenTtlSeconds() <= command.accessTokenTtlSeconds()) {
+    private static void validateTokenTtls(OAuthClientRegistration registration) {
+        validateTtl("accessTokenTtlSeconds", registration.accessTokenTtlSeconds(), MAX_ACCESS_TOKEN_TTL_SECONDS);
+        validateTtl("refreshTokenTtlSeconds", registration.refreshTokenTtlSeconds(), MAX_REFRESH_TOKEN_TTL_SECONDS);
+        validateTtl("idTokenTtlSeconds", registration.idTokenTtlSeconds(), MAX_ID_TOKEN_TTL_SECONDS);
+        if (registration.accessTokenTtlSeconds() != null
+                && registration.refreshTokenTtlSeconds() != null
+                && registration.refreshTokenTtlSeconds() <= registration.accessTokenTtlSeconds()) {
             fail("refreshTokenTtlSeconds must be greater than accessTokenTtlSeconds");
         }
     }
@@ -121,42 +119,42 @@ public class OAuthClientConfigurationValidator {
         }
     }
 
-    private static void validateSecretConfiguration(RegisterClientCommand command) {
-        Instant expiresAt = command.clientSecretExpiresAt();
-        TokenEndpointAuthMethod method = command.tokenEndpointAuthMethod();
+    private static void validateSecretConfiguration(OAuthClientRegistration registration) {
+        Instant expiresAt = registration.clientSecretExpiresAt();
+        TokenEndpointAuthMethod method = registration.tokenEndpointAuthMethod();
         if (expiresAt == null) {
             return;
         }
-        if (command.clientType() == ClientType.PUBLIC
+        if (registration.clientType() == ClientType.PUBLIC
                 || method == TokenEndpointAuthMethod.none
                 || method == TokenEndpointAuthMethod.private_key_jwt) {
             fail("clientSecretExpiresAt is only valid for clients using a secret");
         }
     }
 
-    private void validateJwksConfiguration(RegisterClientCommand command) {
-        boolean hasUri = hasText(command.jwksUri());
-        boolean hasJson = hasText(command.jwksJson());
+    private void validateJwksConfiguration(OAuthClientRegistration registration) {
+        boolean hasUri = hasText(registration.jwksUri());
+        boolean hasJson = hasText(registration.jwksJson());
         if (hasUri && hasJson) {
             fail("jwksUri and jwksJson are mutually exclusive");
         }
-        if (command.tokenEndpointAuthMethod() == TokenEndpointAuthMethod.private_key_jwt
+        if (registration.tokenEndpointAuthMethod() == TokenEndpointAuthMethod.private_key_jwt
                 && !hasUri && !hasJson) {
             fail("private_key_jwt requires jwksUri or jwksJson");
         }
-        if (command.tokenEndpointAuthMethod() == TokenEndpointAuthMethod.private_key_jwt
-                && !hasText(command.idTokenSignedAlg())) {
+        if (registration.tokenEndpointAuthMethod() == TokenEndpointAuthMethod.private_key_jwt
+                && !hasText(registration.idTokenSignedAlg())) {
             fail("private_key_jwt requires idTokenSignedAlg");
         }
-        if (command.tokenEndpointAuthMethod() == TokenEndpointAuthMethod.private_key_jwt
-                && Boolean.TRUE.equals(command.requireClientSecret())) {
+        if (registration.tokenEndpointAuthMethod() == TokenEndpointAuthMethod.private_key_jwt
+                && Boolean.TRUE.equals(registration.requireClientSecret())) {
             fail("private_key_jwt must not require a client secret");
         }
         if (hasUri) {
-            validateJwksUri(command.jwksUri());
+            validateJwksUri(registration.jwksUri());
         }
         if (hasJson) {
-            validateJwksJson(command.jwksJson(), command.idTokenSignedAlg());
+            validateJwksJson(registration.jwksJson(), registration.idTokenSignedAlg());
         }
     }
 

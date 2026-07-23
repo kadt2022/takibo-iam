@@ -1,4 +1,4 @@
-package com.takibo.managementservice.application.common;
+package com.takibo.managementservice.domain.service;
 
 public final class TakiboCodeNormalizer {
 
