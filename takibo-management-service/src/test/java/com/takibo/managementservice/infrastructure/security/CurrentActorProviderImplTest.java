@@ -50,7 +50,9 @@ class CurrentActorProviderImplTest {
 
     @Test
     void currentUserId_withoutAuthentication_failsClosed() {
-        assertThatThrownBy(() -> provider().currentUserId())
+        CurrentActorProviderImpl provider = provider();
+
+        assertThatThrownBy(provider::currentUserId)
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("No authenticated actor");
     }
@@ -67,8 +69,9 @@ class CurrentActorProviderImplTest {
     @Test
     void currentUserId_withUnknownPrincipal_failsClosed() {
         authenticate("  " + USER_ID + "  ");
+        CurrentActorProviderImpl provider = provider();
 
-        assertThatThrownBy(() -> provider().currentUserId())
+        assertThatThrownBy(provider::currentUserId)
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("Unable to determine authenticated actor source");
     }
@@ -76,8 +79,9 @@ class CurrentActorProviderImplTest {
     @Test
     void currentUserId_withInvalidStringPrincipal_failsClosed() {
         authenticate("not-a-uuid");
+        CurrentActorProviderImpl provider = provider();
 
-        assertThatThrownBy(() -> provider().currentUserId())
+        assertThatThrownBy(provider::currentUserId)
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("Unable to determine authenticated actor source");
     }
@@ -109,14 +113,18 @@ class CurrentActorProviderImplTest {
 
     @Test
     void currentAccountId_withoutAuthentication_failsClosed() {
-        assertThatThrownBy(() -> provider().currentAccountId())
+        CurrentActorProviderImpl provider = provider();
+
+        assertThatThrownBy(provider::currentAccountId)
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("No authenticated actor");
     }
 
     @Test
     void source_withoutAuthentication_failsClosed() {
-        assertThatThrownBy(() -> provider().source())
+        CurrentActorProviderImpl provider = provider();
+
+        assertThatThrownBy(provider::source)
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("No authenticated actor");
     }
@@ -127,8 +135,9 @@ class CurrentActorProviderImplTest {
                 new org.springframework.security.authentication.AnonymousAuthenticationToken(
                         "key", "anonymous",
                         java.util.List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_ANONYMOUS"))));
+        CurrentActorProviderImpl provider = provider();
 
-        assertThatThrownBy(() -> provider().source())
+        assertThatThrownBy(provider::source)
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("No authenticated actor");
     }
@@ -199,8 +208,9 @@ class CurrentActorProviderImplTest {
     @Test
     void currentUserId_withServiceAccount_failsClosed() {
         authenticateWithApplicationToken(SubjectNature.SERVICE);
+        CurrentActorProviderImpl provider = provider();
 
-        assertThatThrownBy(() -> provider().currentUserId())
+        assertThatThrownBy(provider::currentUserId)
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("Current actor is not a human user");
     }
@@ -214,8 +224,9 @@ class CurrentActorProviderImplTest {
                 Map.of("alg", "none"),
                 Map.of("sub", "unknown"));
         authenticate(jwt);
+        CurrentActorProviderImpl provider = provider();
 
-        assertThatThrownBy(() -> provider().source())
+        assertThatThrownBy(provider::source)
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("Unable to determine authenticated actor source");
     }
@@ -223,8 +234,9 @@ class CurrentActorProviderImplTest {
     @Test
     void source_withAuthenticatedSystemContext_failsClosed() {
         authenticateWithApplicationToken(SubjectNature.SYSTEM);
+        CurrentActorProviderImpl provider = provider();
 
-        assertThatThrownBy(() -> provider().source())
+        assertThatThrownBy(provider::source)
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("SYSTEM actor is not allowed through an authenticated request");
     }

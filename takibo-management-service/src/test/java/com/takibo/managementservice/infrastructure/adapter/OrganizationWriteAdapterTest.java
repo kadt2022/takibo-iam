@@ -56,8 +56,9 @@ class OrganizationWriteAdapterTest {
                 "duplicate organization code",
                 new IllegalStateException("unique constraint uk_organizations_code_ci"));
         when(repository.saveAndFlush(any())).thenThrow(databaseConflict);
+        OrganizationWriteAdapter adapter = adapter();
 
-        assertThatThrownBy(() -> adapter().create(
+        assertThatThrownBy(() -> adapter.create(
                 ORGANIZATION_ID, "takibo-iam", "Takibo", OrganizationStatus.ACTIVE))
                 .isInstanceOf(OrganizationCodeAlreadyExistsException.class)
                 .hasMessageContaining("takibo-iam")
@@ -69,8 +70,9 @@ class OrganizationWriteAdapterTest {
         DataIntegrityViolationException databaseFailure = new DataIntegrityViolationException(
                 "check constraint ck_organizations_status");
         when(repository.saveAndFlush(any())).thenThrow(databaseFailure);
+        OrganizationWriteAdapter adapter = adapter();
 
-        assertThatThrownBy(() -> adapter().create(
+        assertThatThrownBy(() -> adapter.create(
                 ORGANIZATION_ID, "takibo-iam", "Takibo", OrganizationStatus.ACTIVE))
                 .isSameAs(databaseFailure);
     }
