@@ -25,7 +25,7 @@ class OrganizationCreationDomainServiceTest {
         assertThatThrownBy(() -> service.prepareCreation("ab", "Takibo"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage(
-                        "Organization code must be between 3 and 80 "
+                        "Organization code must contain at least three "
                                 + "characters after normalization"
                 );
     }

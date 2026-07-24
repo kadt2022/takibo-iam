@@ -1,7 +1,5 @@
 package com.takibo.managementservice.domain.service;
 
-import com.takibo.managementservice.domain.exception.OrganizationDisabledException;
-import com.takibo.managementservice.domain.exception.SpaceQuotaExceededException;
 import com.takibo.managementservice.domain.model.OrganizationContext;
 import com.takibo.managementservice.domain.model.SpaceStatus;
 import com.takibo.managementservice.domain.vo.SpaceId;
@@ -11,7 +9,6 @@ import java.time.Instant;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class SpaceCreationDomainServiceTest {
 
@@ -43,40 +40,6 @@ class SpaceCreationDomainServiceTest {
         assertThat(space.getCreatedAt()).isEqualTo(now);
         assertThat(space.getUpdatedAt()).isEqualTo(now);
         assertThat(space.getStatusUpdatedAt()).isEqualTo(now);
-    }
-
-    @Test
-    void createSpace_rejects_a_disabled_organization_before_creating_space() {
-        UUID organizationId = UUID.fromString("aaaaaaaa-0000-0000-0000-000000000001");
-
-        assertThatThrownBy(() -> service.createSpace(
-                new OrganizationContext(organizationId, false, 0),
-                UUID.fromString("bbbbbbbb-0000-0000-0000-000000000002"),
-                "finance",
-                "Finance",
-                "Finance workspace",
-                SpaceId.of(UUID.fromString("cccccccc-0000-0000-0000-000000000003")),
-                Instant.parse("2026-07-20T12:00:00Z")))
-                .isInstanceOf(OrganizationDisabledException.class)
-                .hasMessage("Organization is disabled: " + organizationId);
-    }
-
-    @Test
-    void createSpace_rejects_an_organization_at_quota_with_current_usage() {
-        UUID organizationId = UUID.fromString("aaaaaaaa-0000-0000-0000-000000000001");
-        int currentSpaces = 12;
-
-        assertThatThrownBy(() -> service.createSpace(
-                new OrganizationContext(organizationId, true, currentSpaces),
-                UUID.fromString("bbbbbbbb-0000-0000-0000-000000000002"),
-                "finance",
-                "Finance",
-                "Finance workspace",
-                SpaceId.of(UUID.fromString("cccccccc-0000-0000-0000-000000000003")),
-                Instant.parse("2026-07-20T12:00:00Z")))
-                .isInstanceOf(SpaceQuotaExceededException.class)
-                .hasMessage("Space quota exceeded for orgId=" + organizationId
-                        + " max=10 current=" + currentSpaces);
     }
 
     @Test

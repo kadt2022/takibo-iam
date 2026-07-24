@@ -8,27 +8,35 @@ import com.takibo.managementservice.domain.service.OrganizationCreationDomainSer
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 public class OrganizationApplicationService {
-  private final OrganizationWritePort organizations;
-  private final OrganizationCreationDomainService organizationCreationDomainService;
 
-  @Transactional
-  public OrganizationResult create(String code, String name) {
-    OrganizationCreationPlan plan =
-            organizationCreationDomainService.prepareCreation(code, name);
-    if (organizations.existsByCode(plan.code())) {
-      throw new OrganizationCodeAlreadyExistsException(plan.code());
+    private final OrganizationWritePort organizationWritePort;
+    private final OrganizationCreationDomainService
+            organizationCreationDomainService;
+
+    @Transactional
+    public OrganizationResult create(String code, String name) {
+        OrganizationCreationPlan creationPlan =
+                organizationCreationDomainService.prepareCreation(code, name);
+        Optional.of(creationPlan.code())
+                .filter(organizationWritePort::existsByCode)
+                .ifPresent(existingCode -> {
+                    throw new OrganizationCodeAlreadyExistsException(
+                            existingCode
+                    );
+                });
+
+        return organizationWritePort.create(
+                UUID.randomUUID(),
+                creationPlan.code(),
+                creationPlan.name(),
+                creationPlan.status()
+        );
     }
-
-    return organizations.create(
-            UUID.randomUUID(),
-            plan.code(),
-            plan.name(),
-            plan.status()
-    );
-  }
 }

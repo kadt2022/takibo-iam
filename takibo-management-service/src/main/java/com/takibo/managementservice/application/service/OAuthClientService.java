@@ -11,6 +11,7 @@ import com.takibo.managementservice.domain.model.RegisteredClientResult;
 import com.takibo.managementservice.domain.model.Secrets;
 import com.takibo.managementservice.domain.repository.OAuthClientRepository;
 import com.takibo.managementservice.domain.service.OAuthClientRegistrationDomainService;
+import com.takibo.managementservice.domain.service.OAuthClientSecretRotationDomainService;
 import com.takibo.managementservice.domain.vo.SpaceId;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -29,9 +30,12 @@ public class OAuthClientService {
     private static final int CLIENT_SECRET_LENGTH = 48;
     private static final String CLIENT_NOT_FOUND = "client not found";
 
-    private final OAuthClientRepository repository;
+    private final OAuthClientRepository oauthClientRepository;
     private final PasswordEncoder passwordEncoder;
-    private final OAuthClientRegistrationDomainService registrationDomainService;
+    private final OAuthClientRegistrationDomainService
+            oauthClientRegistrationDomainService;
+    private final OAuthClientSecretRotationDomainService
+            oauthClientSecretRotationDomainService;
 
     public RegisteredClientResult register(
             UUID orgId,
@@ -40,8 +44,10 @@ public class OAuthClientService {
     ) {
         validateInputs(orgId, spaceId, command);
 
-        OAuthClientRegistrationPlan plan = registrationDomainService
-                .prepareRegistration(toDomainRegistration(command));
+        OAuthClientRegistrationPlan plan =
+                oauthClientRegistrationDomainService.prepareRegistration(
+                        toDomainRegistration(command)
+                );
 
         ensureClientIdIsFree(plan.registration().clientId());
 
@@ -50,7 +56,7 @@ public class OAuthClientService {
                 plan.registration().clientSecretExpiresAt()
         );
         OAuthClient client = plan.createClient(orgId, spaceId, secrets);
-        OAuthClient saved = repository.save(client);
+        OAuthClient saved = oauthClientRepository.save(client);
 
         return new RegisteredClientResult(saved, secrets.plain());
     }
@@ -64,19 +70,21 @@ public class OAuthClientService {
         Assert.notNull(orgId, "orgId is required");
         Assert.notNull(spaceId, "spaceId is required");
         Assert.notNull(clientId, "clientId is required");
-        registrationDomainService.validateSecretExpiration(expiresAt);
+        oauthClientSecretRotationDomainService
+                .validateRequestedExpiration(expiresAt);
 
-        OAuthClient existing = repository
+        OAuthClient existing = oauthClientRepository
                 .findByIdAndOrgIdAndSpaceId(clientId, orgId, spaceId.value())
                 .orElseThrow(() ->
                         new InvalidClientConfigurationException(CLIENT_NOT_FOUND)
                 );
 
-        Instant newExpiresAt = registrationDomainService
-                .resolveSecretRotationExpiration(existing, expiresAt);
+        Instant newExpiresAt = oauthClientSecretRotationDomainService
+                .resolveExpiration(existing, expiresAt);
         Secrets secrets = generateSecretIfNeeded(true, newExpiresAt);
 
-        boolean updated = repository.updateSecretByIdAndOrgIdAndSpaceId(
+        boolean updated =
+                oauthClientRepository.updateSecretByIdAndOrgIdAndSpaceId(
                 clientId,
                 orgId,
                 spaceId.value(),
@@ -108,7 +116,7 @@ public class OAuthClientService {
     }
 
     private void ensureClientIdIsFree(String clientId) {
-        if (repository.existsByClientId(clientId)) {
+        if (oauthClientRepository.existsByClientId(clientId)) {
             throw new ClientAlreadyExistsException(clientId);
         }
     }

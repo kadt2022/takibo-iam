@@ -9,6 +9,7 @@ import com.takibo.managementservice.domain.model.RegisteredClientResult;
 import com.takibo.managementservice.domain.model.TokenEndpointAuthMethod;
 import com.takibo.managementservice.domain.repository.OAuthClientRepository;
 import com.takibo.managementservice.domain.service.OAuthClientRegistrationDomainService;
+import com.takibo.managementservice.domain.service.OAuthClientSecretRotationDomainService;
 import com.takibo.managementservice.domain.validation.OAuthClientConfigurationValidator;
 import com.takibo.managementservice.domain.vo.OAuthClientId;
 import com.takibo.managementservice.domain.vo.SpaceId;
@@ -54,7 +55,10 @@ class OAuthClientServiceTest {
         service = new OAuthClientService(
                 repository,
                 passwordEncoder,
-                new OAuthClientRegistrationDomainService(configurationValidator)
+                new OAuthClientRegistrationDomainService(configurationValidator),
+                new OAuthClientSecretRotationDomainService(
+                        configurationValidator
+                )
         );
     }
 

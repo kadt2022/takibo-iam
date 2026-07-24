@@ -4,6 +4,7 @@ import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
 
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
 @AnalyzeClasses(packages = "com.takibo.managementservice")
@@ -60,4 +61,16 @@ class HexagonalArchitectureTest {
             .that().haveSimpleNameEndingWith("DomainService")
             .should().resideInAPackage("..application..")
             .because("domain services must contain pure business rules and reside in the domain layer");
+
+    @ArchTest
+    static final ArchRule domain_service_package_contains_only_domain_services =
+            classes()
+                    .that().resideInAPackage("..domain.service..")
+                    .should().haveSimpleNameEndingWith("DomainService")
+                    .orShould()
+                    .haveSimpleNameEndingWith("DomainServiceTest")
+                    .because(
+                            "policies, normalizers, factories and validators "
+                                    + "must reside in their dedicated packages"
+                    );
 }

@@ -7,7 +7,7 @@ import com.takibo.identitycore.integration.space.port.ResolvedOrgKey;
 import com.takibo.identitycore.integration.space.port.ResolvedSpaceKey;
 import com.takibo.identitycore.integration.space.port.SpaceKeyResolutionCase;
 import com.takibo.managementservice.domain.model.OrganizationStatus;
-import com.takibo.managementservice.domain.service.TakiboCodeNormalizer;
+import com.takibo.managementservice.domain.normalization.TenantCodeNormalizer;
 import com.takibo.managementservice.infrastructure.entity.OrganizationEntity;
 import com.takibo.managementservice.infrastructure.entity.SpaceEntity;
 import com.takibo.managementservice.infrastructure.jpa.repository.JpaOrganizationRepository;
@@ -32,8 +32,8 @@ public class SpaceKeyResolutionTmsAdapter implements SpaceKeyResolutionCase {
 
     @Override
     public ResolvedSpaceKey resolve(String orgCode, String spaceCode) {
-        String normalizedOrgCode = TakiboCodeNormalizer.normalize(orgCode);
-        String normalizedSpaceCode = TakiboCodeNormalizer.normalize(spaceCode);
+        String normalizedOrgCode = TenantCodeNormalizer.normalize(orgCode);
+        String normalizedSpaceCode = TenantCodeNormalizer.normalize(spaceCode);
 
         OrganizationEntity org = organizations.findByCode(normalizedOrgCode)
                 .orElseThrow(() -> new OrganizationNotFoundException(
@@ -48,7 +48,7 @@ public class SpaceKeyResolutionTmsAdapter implements SpaceKeyResolutionCase {
 
     @Override
     public ResolvedOrgKey resolveActiveOrganization(String orgCode) {
-        String normalizedOrgCode = TakiboCodeNormalizer.normalize(orgCode);
+        String normalizedOrgCode = TenantCodeNormalizer.normalize(orgCode);
 
         OrganizationEntity org = organizations.findByCode(normalizedOrgCode)
                 .orElseThrow(() -> new OrganizationNotFoundException(

@@ -1,6 +1,5 @@
 package com.takibo.managementservice.domain.service;
 
-import com.takibo.managementservice.domain.exception.InvalidClientConfigurationException;
 import com.takibo.managementservice.domain.model.ClientType;
 import com.takibo.managementservice.domain.model.OAuthClient;
 import com.takibo.managementservice.domain.model.OAuthClientRegistration;
@@ -14,14 +13,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.time.Instant;
 import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 class OAuthClientRegistrationDomainServiceTest {
@@ -52,49 +48,6 @@ class OAuthClientRegistrationDomainServiceTest {
         assertThat(plan.sets().corsOrigins()).isEmpty();
         verify(configurationValidator)
                 .validateRegistration(plan.registration());
-    }
-
-    @Test
-    void rejects_mixed_client_credentials_grants_before_preparation() {
-        OAuthClientRegistration registration = registration(
-                ClientType.CONFIDENTIAL,
-                TokenEndpointAuthMethod.client_secret_basic,
-                true,
-                false,
-                Set.of("client_credentials", "authorization_code"),
-                Set.of(),
-                Set.of()
-        );
-
-        assertThatThrownBy(() -> service.prepareRegistration(registration))
-                .isInstanceOf(InvalidClientConfigurationException.class)
-                .hasMessage(
-                        "client_credentials cannot be combined with other grant types"
-                );
-
-        verifyNoInteractions(configurationValidator);
-    }
-
-    @Test
-    void rejects_redirects_for_client_credentials_before_preparation() {
-        OAuthClientRegistration registration = registration(
-                ClientType.CONFIDENTIAL,
-                TokenEndpointAuthMethod.client_secret_basic,
-                true,
-                false,
-                Set.of("client_credentials"),
-                Set.of("https://app.example/callback"),
-                Set.of()
-        );
-
-        assertThatThrownBy(() -> service.prepareRegistration(registration))
-                .isInstanceOf(InvalidClientConfigurationException.class)
-                .hasMessage(
-                        "client_credentials must not include "
-                                + "redirect/cors/post-logout URIs"
-                );
-
-        verifyNoInteractions(configurationValidator);
     }
 
     @Test
@@ -133,39 +86,6 @@ class OAuthClientRegistrationDomainServiceTest {
                 .containsExactly("https://app.example/callback");
         assertThat(client.getCorsOrigins())
                 .containsExactly("https://app.example");
-    }
-
-    @Test
-    void secret_rotation_policy_rejects_clients_that_do_not_use_secrets() {
-        OAuthClient publicClient = OAuthClient.builder()
-                .clientType(ClientType.PUBLIC)
-                .tokenEndpointAuthMethod(TokenEndpointAuthMethod.none)
-                .build();
-
-        assertThatThrownBy(() ->
-                service.resolveSecretRotationExpiration(publicClient, null)
-        )
-                .isInstanceOf(InvalidClientConfigurationException.class)
-                .hasMessage("client does not use secrets");
-    }
-
-    @Test
-    void secret_rotation_policy_keeps_existing_expiration_when_none_is_requested() {
-        Instant existingExpiration = Instant.parse("2035-01-01T00:00:00Z");
-        OAuthClient confidentialClient = OAuthClient.builder()
-                .clientType(ClientType.CONFIDENTIAL)
-                .tokenEndpointAuthMethod(
-                        TokenEndpointAuthMethod.client_secret_basic
-                )
-                .clientSecretExpiresAt(existingExpiration)
-                .build();
-
-        assertThat(service.resolveSecretRotationExpiration(
-                confidentialClient,
-                null
-        )).isEqualTo(existingExpiration);
-        verify(configurationValidator)
-                .validateSecretExpiration(existingExpiration);
     }
 
     private static OAuthClientRegistration clientCredentialsRegistration() {

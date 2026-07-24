@@ -1,6 +1,10 @@
 package com.takibo.managementservice.infrastructure.config;
 
+import com.takibo.managementservice.domain.policy.OrganizationSignupPolicy;
+import com.takibo.managementservice.domain.policy.SpaceCodePolicy;
+import com.takibo.managementservice.domain.policy.SpaceStatusTransitionPolicy;
 import com.takibo.managementservice.domain.service.OAuthClientRegistrationDomainService;
+import com.takibo.managementservice.domain.service.OAuthClientSecretRotationDomainService;
 import com.takibo.managementservice.domain.service.OrganizationCreationDomainService;
 import com.takibo.managementservice.domain.service.SpaceCreationDomainService;
 import com.takibo.managementservice.domain.validation.OAuthClientConfigurationValidator;
@@ -18,8 +22,23 @@ public class ManagementDomainConfiguration {
     }
 
     @Bean
+    SpaceCodePolicy spaceCodePolicy() {
+        return new SpaceCodePolicy();
+    }
+
+    @Bean
+    SpaceStatusTransitionPolicy spaceStatusTransitionPolicy() {
+        return new SpaceStatusTransitionPolicy();
+    }
+
+    @Bean
     OrganizationCreationDomainService organizationCreationDomainService() {
         return new OrganizationCreationDomainService();
+    }
+
+    @Bean
+    OrganizationSignupPolicy organizationSignupPolicy() {
+        return new OrganizationSignupPolicy();
     }
 
     @Bean
@@ -32,5 +51,14 @@ public class ManagementDomainConfiguration {
             OAuthClientConfigurationValidator configurationValidator
     ) {
         return new OAuthClientRegistrationDomainService(configurationValidator);
+    }
+
+    @Bean
+    OAuthClientSecretRotationDomainService oauthClientSecretRotationDomainService(
+            OAuthClientConfigurationValidator configurationValidator
+    ) {
+        return new OAuthClientSecretRotationDomainService(
+                configurationValidator
+        );
     }
 }
