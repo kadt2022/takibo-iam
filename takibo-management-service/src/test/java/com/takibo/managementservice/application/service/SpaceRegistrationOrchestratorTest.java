@@ -4,6 +4,7 @@ import com.takibo.managementservice.application.command.CreateSpaceCommand;
 import com.takibo.managementservice.application.port.OrganizationReadPort;
 import com.takibo.managementservice.application.port.SpaceEventPublisherPort;
 import com.takibo.managementservice.domain.event.SpaceCreatedEvent;
+import com.takibo.managementservice.domain.exception.OrganizationDisabledException;
 import com.takibo.managementservice.domain.model.ActorSource;
 import com.takibo.managementservice.domain.model.OrganizationContext;
 import com.takibo.managementservice.domain.repository.SpaceRepository;
@@ -16,8 +17,12 @@ import java.time.ZoneOffset;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -88,5 +93,56 @@ class SpaceRegistrationOrchestratorTest {
         assertThat(result.space().getCreatedAt()).isEqualTo(NOW);
         verify(spaceCodeGenerator).generateNextCandidate("finance");
         verify(eventPublisher).publish(any(SpaceCreatedEvent.class));
+    }
+
+    @Test
+    void rejects_a_disabled_organization_before_the_code_collision_loop() {
+        OrganizationReadPort organizationReadPort =
+                mock(OrganizationReadPort.class);
+        SpaceCodeGenerator spaceCodeGenerator =
+                mock(SpaceCodeGenerator.class);
+        SpaceRepository spaceRepository = mock(SpaceRepository.class);
+        SpaceEventPublisherPort eventPublisher =
+                mock(SpaceEventPublisherPort.class);
+
+        when(organizationReadPort
+                .getOrganizationContextForSpaceCreation(ORGANIZATION_ID))
+                .thenReturn(new OrganizationContext(
+                        ORGANIZATION_ID,
+                        false,
+                        0
+                ));
+        // Every candidate code collides: with the pre-fix ordering the loop
+        // would surface SpaceCodeAlreadyExistsException here instead of the
+        // real cause (the organization is disabled).
+        when(spaceCodeGenerator.generateInitialCode("Finance", "Finance"))
+                .thenReturn("finance");
+        when(spaceCodeGenerator.generateNextCandidate(anyString()))
+                .thenReturn("finance");
+        when(spaceRepository.existsByOrgIdAndCode(eq(ORGANIZATION_ID), any()))
+                .thenReturn(true);
+
+        SpaceRegistrationOrchestrator orchestrator =
+                new SpaceRegistrationOrchestrator(
+                        organizationReadPort,
+                        new SpaceCreationDomainService(),
+                        spaceCodeGenerator,
+                        spaceRepository,
+                        eventPublisher,
+                        Clock.fixed(NOW, ZoneOffset.UTC)
+                );
+
+        assertThatThrownBy(() -> orchestrator.registerSpace(
+                CreateSpaceCommand.builder()
+                        .orgId(ORGANIZATION_ID)
+                        .ownerAccountId(OWNER_ACCOUNT_ID)
+                        .source(ActorSource.HUMAN)
+                        .name("Finance")
+                        .code("Finance")
+                        .description("Financial operations")
+                        .build()))
+                .isInstanceOf(OrganizationDisabledException.class);
+
+        verify(eventPublisher, never()).publish(any());
     }
 }

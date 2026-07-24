@@ -53,6 +53,8 @@ public class SpaceRegistrationOrchestrator {
                         command.orgId()
                 );
 
+        spaceCreationDomainService.assertEligibleForCreation(organizationContext);
+
         String initialCode = spaceCodeGenerator.generateInitialCode(
                 command.code(),
                 command.name()

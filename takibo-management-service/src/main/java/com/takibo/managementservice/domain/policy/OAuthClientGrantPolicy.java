@@ -10,6 +10,11 @@ import com.takibo.managementservice.domain.model.ValidatedSets;
 
 public final class OAuthClientGrantPolicy {
 
+    private static final String AUTHORIZATION_CODE_GRANT =
+            "authorization_code";
+    private static final String CLIENT_CREDENTIALS_GRANT =
+            "client_credentials";
+
     public boolean resolvePkce(
             OAuthClientRegistration registration,
             ValidatedSets sets
@@ -18,7 +23,7 @@ public final class OAuthClientGrantPolicy {
             return registration.requirePkce();
         }
         return registration.clientType() == ClientType.PUBLIC
-                && sets.grantTypes().contains("authorization_code");
+                && sets.grantTypes().contains(AUTHORIZATION_CODE_GRANT);
     }
 
     public void validateGrantProfile(
@@ -51,7 +56,7 @@ public final class OAuthClientGrantPolicy {
             ValidatedSets sets,
             boolean requirePkce
     ) {
-        if (!sets.grantTypes().contains("authorization_code")) {
+        if (!sets.grantTypes().contains(AUTHORIZATION_CODE_GRANT)) {
             return;
         }
         if (sets.redirectUris().isEmpty()) {
@@ -67,7 +72,7 @@ public final class OAuthClientGrantPolicy {
             TokenEndpointAuthMethod authMethod,
             ValidatedSets sets
     ) {
-        if (!sets.grantTypes().contains("client_credentials")) {
+        if (!sets.grantTypes().contains(CLIENT_CREDENTIALS_GRANT)) {
             return;
         }
         if (sets.grantTypes().size() != 1) {
@@ -118,7 +123,7 @@ public final class OAuthClientGrantPolicy {
                     "PUBLIC clients must not require clientSecret"
             );
         }
-        if (!sets.grantTypes().contains("authorization_code")) {
+        if (!sets.grantTypes().contains(AUTHORIZATION_CODE_GRANT)) {
             return;
         }
         if (!requirePkce) {
@@ -144,7 +149,7 @@ public final class OAuthClientGrantPolicy {
             ValidatedSets sets
     ) {
         if (registration.clientType() != ClientType.CONFIDENTIAL
-                || !sets.grantTypes().contains("authorization_code")) {
+                || !sets.grantTypes().contains(AUTHORIZATION_CODE_GRANT)) {
             return;
         }
         if (authMethod == TokenEndpointAuthMethod.none) {

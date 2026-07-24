@@ -5,12 +5,17 @@ import com.takibo.managementservice.domain.model.OAuthClient;
 import com.takibo.managementservice.domain.model.OAuthClientRegistration;
 import com.takibo.managementservice.domain.model.Secrets;
 import com.takibo.managementservice.domain.model.TokenEndpointAuthMethod;
+import com.takibo.managementservice.domain.normalization.OAuthClientCollectionsNormalizer;
+import com.takibo.managementservice.domain.policy.OAuthClientAuthenticationPolicy;
+import com.takibo.managementservice.domain.policy.OAuthClientCredentialsProfilePolicy;
+import com.takibo.managementservice.domain.policy.OAuthClientGrantPolicy;
 import com.takibo.managementservice.domain.validation.OAuthClientConfigurationValidator;
 import com.takibo.managementservice.domain.vo.SpaceId;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Set;
@@ -25,12 +30,20 @@ class OAuthClientRegistrationDomainServiceTest {
     @Mock
     private OAuthClientConfigurationValidator configurationValidator;
 
-    private OAuthClientRegistrationDomainService service;
+    @Spy
+    private OAuthClientCredentialsProfilePolicy credentialsProfilePolicy;
 
-    @BeforeEach
-    void setUp() {
-        service = new OAuthClientRegistrationDomainService(configurationValidator);
-    }
+    @Spy
+    private OAuthClientAuthenticationPolicy authenticationPolicy;
+
+    @Spy
+    private OAuthClientCollectionsNormalizer collectionsNormalizer;
+
+    @Spy
+    private OAuthClientGrantPolicy grantPolicy;
+
+    @InjectMocks
+    private OAuthClientRegistrationDomainService service;
 
     @Test
     void prepares_the_client_credentials_domain_profile() {

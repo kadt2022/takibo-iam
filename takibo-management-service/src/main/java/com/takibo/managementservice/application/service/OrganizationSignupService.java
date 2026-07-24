@@ -118,9 +118,12 @@ public class OrganizationSignupService {
                 );
 
         return switch (decision) {
-            case OrganizationSignupDecision.CreateNew creation ->
+            case OrganizationSignupDecision.CreateNew(
+                    var code,
+                    var name
+            ) ->
                     organizationApplicationService
-                            .create(creation.code(), creation.name())
+                            .create(code, name)
                             .id();
             case OrganizationSignupDecision.ExistingOrganizationForbidden
                     ignored -> throw new AccessDeniedException(

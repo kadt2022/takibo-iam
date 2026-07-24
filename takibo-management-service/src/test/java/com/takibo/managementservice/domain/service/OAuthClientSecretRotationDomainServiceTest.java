@@ -4,11 +4,13 @@ import com.takibo.managementservice.domain.exception.InvalidClientConfigurationE
 import com.takibo.managementservice.domain.model.ClientType;
 import com.takibo.managementservice.domain.model.OAuthClient;
 import com.takibo.managementservice.domain.model.TokenEndpointAuthMethod;
+import com.takibo.managementservice.domain.policy.OAuthClientAuthenticationPolicy;
 import com.takibo.managementservice.domain.validation.OAuthClientConfigurationValidator;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
@@ -23,14 +25,11 @@ class OAuthClientSecretRotationDomainServiceTest {
     @Mock
     private OAuthClientConfigurationValidator configurationValidator;
 
-    private OAuthClientSecretRotationDomainService service;
+    @Spy
+    private OAuthClientAuthenticationPolicy authenticationPolicy;
 
-    @BeforeEach
-    void setUp() {
-        service = new OAuthClientSecretRotationDomainService(
-                configurationValidator
-        );
-    }
+    @InjectMocks
+    private OAuthClientSecretRotationDomainService service;
 
     @Test
     void rejects_clients_that_do_not_use_secrets() {

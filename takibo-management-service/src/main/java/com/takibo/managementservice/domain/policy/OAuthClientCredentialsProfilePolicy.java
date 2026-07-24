@@ -5,6 +5,7 @@ import com.takibo.managementservice.domain.model.ClientType;
 import com.takibo.managementservice.domain.model.OAuthClientRegistration;
 import com.takibo.managementservice.domain.model.TokenEndpointAuthMethod;
 
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -81,7 +82,7 @@ public final class OAuthClientCredentialsProfilePolicy {
             return Set.of();
         }
         return grantTypes.stream()
-                .filter(value -> value != null)
+                .filter(Objects::nonNull)
                 .map(value -> value.trim().toLowerCase())
                 .collect(Collectors.toUnmodifiableSet());
     }

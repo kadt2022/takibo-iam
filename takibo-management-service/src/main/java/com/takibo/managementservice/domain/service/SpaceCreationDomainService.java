@@ -27,6 +27,10 @@ public final class SpaceCreationDomainService {
         this.spaceFactory = spaceFactory;
     }
 
+    public void assertEligibleForCreation(OrganizationContext organization) {
+        eligibilityPolicy.validateEligibility(organization);
+    }
+
     public Space createSpace(SpaceCreationRequest request) {
         eligibilityPolicy.validateEligibility(request.organization());
         return spaceFactory.createSpace(request);

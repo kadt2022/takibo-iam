@@ -21,7 +21,7 @@ public final class SpaceCodePolicy {
                 .filter(value -> value.length() <= MAXIMUM_BASE_LENGTH)
                 .orElseGet(() -> normalizedCode
                         .substring(0, MAXIMUM_BASE_LENGTH)
-                        .replaceAll("-+$", "")
+                        .replaceFirst("-$", "")
                 );
         return TenantCodeNormalizer.normalizeSpaceCode(boundedCode, suffix);
     }
