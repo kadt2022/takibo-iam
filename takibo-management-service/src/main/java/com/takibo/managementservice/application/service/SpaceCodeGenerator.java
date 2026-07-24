@@ -1,29 +1,29 @@
 package com.takibo.managementservice.application.service;
 
-import com.takibo.managementservice.application.common.TakiboCodeNormalizer;
+import com.takibo.managementservice.domain.policy.SpaceCodePolicy;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.util.concurrent.ThreadLocalRandom;
 
 @Component
+@RequiredArgsConstructor
 public class SpaceCodeGenerator {
 
-    public String normalizeOrGenerate(String requestedCode, String name) {
-        String base = (requestedCode == null || requestedCode.isBlank()) ? name : requestedCode;
-        int suffix = randomSuffix();
-        return TakiboCodeNormalizer.normalizeSpace(normalize(base), suffix);
+    private final SpaceCodePolicy spaceCodePolicy;
+
+    public String generateInitialCode(
+            String requestedCode,
+            String spaceName
+    ) {
+        return spaceCodePolicy.normalizeCandidateCode(
+                spaceCodePolicy.resolveBaseCode(requestedCode, spaceName),
+                randomSuffix()
+        );
     }
 
-    public String nextCandidate(String baseOrCandidate) {
-        return baseOrCandidate + "-" + randomSuffix();
-    }
-
-    private String normalize(String input) {
-        String s = TakiboCodeNormalizer.normalize(input);
-        if (s.length() > 30) {
-            s = s.substring(0, 30).replaceAll("-+$", "");
-        }
-        return s;
+    public String generateNextCandidate(String currentCandidateCode) {
+        return currentCandidateCode + "-" + randomSuffix();
     }
 
     private int randomSuffix() {

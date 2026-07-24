@@ -1,12 +1,14 @@
 package com.takibo.managementservice.application.service;
 
 import com.takibo.managementservice.application.command.CreateSpaceCommand;
+import com.takibo.managementservice.application.port.OrganizationReadPort;
 import com.takibo.managementservice.application.port.SpaceEventPublisherPort;
 import com.takibo.managementservice.domain.event.SpaceCreatedEvent;
 import com.takibo.managementservice.domain.exception.SpaceCodeAlreadyExistsException;
-import com.takibo.managementservice.domain.model.OrganizationContext;
 import com.takibo.managementservice.domain.model.ActorSource;
+import com.takibo.managementservice.domain.model.OrganizationContext;
 import com.takibo.managementservice.domain.model.Space;
+import com.takibo.managementservice.domain.model.SpaceCreationRequest;
 import com.takibo.managementservice.domain.model.SpaceRegistrationResult;
 import com.takibo.managementservice.domain.repository.SpaceRepository;
 import com.takibo.managementservice.domain.service.SpaceCreationDomainService;
@@ -18,7 +20,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
@@ -26,61 +30,77 @@ public class SpaceRegistrationOrchestrator {
 
     private static final int MAX_CODE_ATTEMPTS = 5;
 
-    private final OrganizationDomainService organizationDomainService;
+    private final OrganizationReadPort organizationReadPort;
     private final SpaceCreationDomainService spaceCreationDomainService;
     private final SpaceCodeGenerator spaceCodeGenerator;
     private final SpaceRepository spaceRepository;
 
-    private final SpaceEventPublisherPort spaceEventPublisher;
+    private final SpaceEventPublisherPort spaceEventPublisherPort;
     private final Clock clock;
 
-    private static final Logger log = LoggerFactory.getLogger(SpaceRegistrationOrchestrator.class);
+    private static final Logger log =
+            LoggerFactory.getLogger(SpaceRegistrationOrchestrator.class);
 
     @Transactional
     public SpaceRegistrationResult registerSpace(CreateSpaceCommand command) {
-        log.info("registerSpace() reached | orgId={} code={}", command.orgId(), command.code());
-        OrganizationContext orgCtx =
-                organizationDomainService.assertOrganizationAllowsSpaceCreation(command.orgId());
+        log.info(
+                "Registering space | organizationId={} requestedCode={}",
+                command.orgId(),
+                command.code()
+        );
+        OrganizationContext organizationContext =
+                organizationReadPort.getOrganizationContextForSpaceCreation(
+                        command.orgId()
+                );
 
-        String candidate = spaceCodeGenerator.normalizeOrGenerate(command.code(), command.name());
+        spaceCreationDomainService.assertEligibleForCreation(organizationContext);
 
-        for (int attempt = 1; attempt <= MAX_CODE_ATTEMPTS; attempt++) {
+        String initialCode = spaceCodeGenerator.generateInitialCode(
+                command.code(),
+                command.name()
+        );
+        String availableCode = Stream.iterate(
+                        initialCode,
+                        spaceCodeGenerator::generateNextCandidate
+                )
+                .limit(MAX_CODE_ATTEMPTS)
+                .filter(candidateCode ->
+                        !spaceRepository.existsByOrgIdAndCode(
+                                organizationContext.orgId(),
+                                candidateCode
+                        )
+                )
+                .findFirst()
+                .orElseThrow(() ->
+                        new SpaceCodeAlreadyExistsException(command.code())
+                );
 
-            if (spaceRepository.existsByOrgIdAndCode(orgCtx.orgId(), candidate)) {
-                candidate = spaceCodeGenerator.nextCandidate(candidate);
-                continue;
-            }
+        SpaceId spaceId = SpaceId.of(UUID.randomUUID());
+        Space space = spaceCreationDomainService.createSpace(
+                new SpaceCreationRequest(
+                        organizationContext,
+                        command.ownerAccountId(),
+                        availableCode,
+                        command.name(),
+                        command.description(),
+                        spaceId,
+                        clock.instant()
+                )
+        );
+        Space savedSpace = spaceRepository.save(space);
+        ActorSource actorSource = Optional.ofNullable(command.source())
+                .orElse(ActorSource.SYSTEM);
 
-            SpaceId spaceId = SpaceId.of(UUID.randomUUID());
-            Space space = spaceCreationDomainService.createSpace(
-                    orgCtx,
-                    command.ownerAccountId(),
-                    candidate,
-                    command.name(),
-                    command.description(),
-                    spaceId,
-                    clock.instant()
-            );
+        SpaceCreatedEvent spaceCreatedEvent = new SpaceCreatedEvent(
+                UUID.randomUUID(),
+                savedSpace.getOrgId(),
+                savedSpace.getId().value(),
+                command.ownerAccountId(),
+                actorSource,
+                clock.instant()
+        );
+        spaceEventPublisherPort.publish(spaceCreatedEvent);
 
-            Space saved = spaceRepository.save(space);
-
-            ActorSource actorSource = command.source() != null ? command.source() : ActorSource.SYSTEM;
-
-
-            SpaceCreatedEvent event = new SpaceCreatedEvent(
-                    UUID.randomUUID(),
-                    saved.getOrgId(),
-                    saved.getId().value(),
-                    command.ownerAccountId(),
-                    actorSource,
-                    clock.instant()
-            );
-
-            spaceEventPublisher.publish(event);
-
-            return new SpaceRegistrationResult(saved);
-        }
-
-        throw new SpaceCodeAlreadyExistsException(command.code());
+        return new SpaceRegistrationResult(savedSpace);
     }
 }

@@ -3,6 +3,7 @@ package com.takibo.managementservice.application.command;
 import com.takibo.managementservice.domain.model.ActorSource;
 import lombok.Builder;
 
+import java.util.Optional;
 import java.util.UUID;
 
 @Builder
@@ -16,10 +17,9 @@ public record CreateSpaceCommand(
 ) {
 
     public CreateSpaceCommand {
-        if (source == null) {
-            source = ActorSource.SYSTEM;
-        }
+        source = Optional.ofNullable(source).orElse(ActorSource.SYSTEM);
     }
+
     public CreateSpaceCommand(UUID orgId, String code, String name) {
         this(orgId, null, null, name, code, null);
     }

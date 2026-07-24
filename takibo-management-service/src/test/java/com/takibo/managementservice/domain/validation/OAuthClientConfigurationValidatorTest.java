@@ -1,4 +1,4 @@
-package com.takibo.managementservice.application.validation;
+package com.takibo.managementservice.domain.validation;
 
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.jwk.Curve;
@@ -6,9 +6,9 @@ import com.nimbusds.jose.jwk.ECKey;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.util.Base64URL;
-import com.takibo.managementservice.application.command.RegisterClientCommand;
 import com.takibo.managementservice.domain.exception.InvalidClientConfigurationException;
 import com.takibo.managementservice.domain.model.ClientType;
+import com.takibo.managementservice.domain.model.OAuthClientRegistration;
 import com.takibo.managementservice.domain.model.TokenEndpointAuthMethod;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -241,8 +241,8 @@ class OAuthClientConfigurationValidatorTest {
         );
     }
 
-    private void assertInvalid(RegisterClientCommand command, String message) {
-        assertThatThrownBy(() -> validator.validateRegistration(command))
+    private void assertInvalid(OAuthClientRegistration registration, String message) {
+        assertThatThrownBy(() -> validator.validateRegistration(registration))
                 .isInstanceOf(InvalidClientConfigurationException.class)
                 .hasMessageContaining(message);
     }
@@ -364,8 +364,8 @@ class OAuthClientConfigurationValidatorTest {
             return this;
         }
 
-        RegisterClientCommand build() {
-            return new RegisterClientCommand(
+        OAuthClientRegistration build() {
+            return new OAuthClientRegistration(
                     clientId,
                     clientName,
                     clientType,

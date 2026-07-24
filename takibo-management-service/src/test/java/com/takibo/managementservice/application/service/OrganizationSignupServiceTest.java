@@ -8,10 +8,11 @@ import com.takibo.managementservice.application.port.OrganizationAccountProvisio
 import com.takibo.managementservice.application.port.TechnicalRbacProvisioningPort;
 import com.takibo.managementservice.application.result.OrganizationResult;
 import com.takibo.managementservice.domain.model.SpaceStatus;
+import com.takibo.managementservice.domain.policy.OrganizationSignupPolicy;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
@@ -39,7 +40,19 @@ class OrganizationSignupServiceTest {
     @Mock private FounderProvisioningPort founderProvisioning;
     @Mock private TechnicalRbacProvisioningPort technicalRbacProvisioning;
 
-    @InjectMocks private OrganizationSignupService service;
+    private OrganizationSignupService service;
+
+    @BeforeEach
+    void setUp() {
+        service = new OrganizationSignupService(
+                orgApp,
+                spaceApp,
+                accountProvisioning,
+                founderProvisioning,
+                technicalRbacProvisioning,
+                new OrganizationSignupPolicy()
+        );
+    }
 
     @Test
     void given_missing_organization_id_when_signup_then_creates_organization_account_space_founder_and_rbac() {
