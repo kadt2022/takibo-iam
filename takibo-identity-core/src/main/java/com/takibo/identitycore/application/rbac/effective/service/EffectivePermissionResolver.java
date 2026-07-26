@@ -6,7 +6,6 @@ import com.takibo.identitycore.application.rbac.effective.model.SituatedTechnica
 import com.takibo.identitycore.application.rbac.effective.model.SituatedTechnicalRole;
 import com.takibo.identitycore.domain.catalogrbac.AuthorityPlan;
 import com.takibo.identitycore.domain.catalogrbac.RolePermissionCatalog;
-import com.takibo.identitycore.domain.catalogrbac.TechnicalGroup;
 import com.takibo.identitycore.domain.catalogrbac.TechnicalPermission;
 import com.takibo.identitycore.domain.catalogrbac.TechnicalRole;
 import com.takibo.identitycore.domain.exception.EffectivePermissionResolutionException;
@@ -169,20 +168,24 @@ public class EffectivePermissionResolver {
 
     private void validateTargetBoundary(EffectivePermissionRequest request) {
         switch (request.authorityPlan()) {
-            case PLATFORM -> {
-                if (request.orgId() != null || request.spaceId() != null) {
-                    throw refusal("PLATFORM resolution cannot carry an organization or space");
-                }
-            }
-            case ORGANIZATION -> {
-                if (request.orgId() == null) {
-                    throw refusal("ORGANIZATION resolution requires orgId");
-                }
-                if (request.spaceId() != null) {
-                    throw refusal("ORGANIZATION resolution cannot carry spaceId");
-                }
-            }
+            case PLATFORM -> validateTargetPlatform(request.orgId(), request.spaceId());
+            case ORGANIZATION -> validateTargetOrganization(request.orgId(), request.spaceId());
             case SPACE -> validateTargetSpace(request.orgId(), request.spaceId());
+        }
+    }
+
+    private void validateTargetPlatform(UUID orgId, UUID spaceId) {
+        if (orgId != null || spaceId != null) {
+            throw refusal("PLATFORM resolution cannot carry an organization or space");
+        }
+    }
+
+    private void validateTargetOrganization(UUID orgId, UUID spaceId) {
+        if (orgId == null) {
+            throw refusal("ORGANIZATION resolution requires orgId");
+        }
+        if (spaceId != null) {
+            throw refusal("ORGANIZATION resolution cannot carry spaceId");
         }
     }
 

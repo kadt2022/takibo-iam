@@ -10,7 +10,6 @@ import com.takibo.identitycore.domain.catalogrbac.AuthorityPlan;
 import com.takibo.identitycore.domain.catalogrbac.RolePermissionCatalog;
 import com.takibo.identitycore.domain.catalogrbac.TechnicalGroup;
 import com.takibo.identitycore.domain.catalogrbac.TechnicalPermission;
-import com.takibo.identitycore.domain.catalogrbac.TechnicalRole;
 import com.takibo.identitycore.domain.exception.EffectivePermissionResolutionException;
 import com.takibo.identitycore.domain.vo.SpaceId;
 import com.takibo.identitycore.integration.space.port.SpaceManagementCase;
@@ -87,8 +86,8 @@ class EffectivePermissionResolverTest {
 
         Set<PermissionCode> result = resolver.resolve(request);
 
-        assertThat(result).containsExactlyInAnyOrderElementsOf(codesForPlan(SPACE));
         assertThat(result)
+                .containsExactlyInAnyOrderElementsOf(codesForPlan(SPACE))
                 .doesNotContain(
                         code(ORG_READ),
                         code(ORG_UPDATE),
@@ -126,12 +125,13 @@ class EffectivePermissionResolverTest {
 
         Set<PermissionCode> result = resolver.resolve(request);
 
-        assertThat(result).containsExactlyInAnyOrderElementsOf(
-                codes(rolePermissionCatalog.permissionsFor(ORG_ADMIN)));
-        assertThat(result).doesNotContain(
-                code(ORG_OWNERSHIP_TRANSFER),
-                code(ORG_DEACTIVATE),
-                code(ORG_DELETION_REQUEST));
+        assertThat(result)
+                .containsExactlyInAnyOrderElementsOf(
+                        codes(rolePermissionCatalog.permissionsFor(ORG_ADMIN)))
+                .doesNotContain(
+                        code(ORG_OWNERSHIP_TRANSFER),
+                        code(ORG_DEACTIVATE),
+                        code(ORG_DELETION_REQUEST));
     }
 
     @Test
