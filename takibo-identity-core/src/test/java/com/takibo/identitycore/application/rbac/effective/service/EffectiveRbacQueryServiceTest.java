@@ -10,6 +10,8 @@ import com.takibo.identitycore.domain.rbac.repository.GovernanceRoleAssignmentRe
 import com.takibo.identitycore.domain.repository.GroupRoleRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -105,6 +107,34 @@ class EffectiveRbacQueryServiceTest {
     }
 
     @Test
+    void governanceDbGroup_doesNotTransmitLegacyReservedRole() {
+        givenDirectRoles();
+        givenMemberships(membership("GRP_LOCAL_ADMINS", GroupSource.GOVERNANCE));
+        when(groupRoles.findGovernanceRoleCodesByGroups(ORG_ID, SPACE_ID, List.of("GRP_LOCAL_ADMINS")))
+                .thenReturn(List.of("GOV_LOCAL", "R_ORG_ADMIN"));
+
+        EffectiveRbac rbac = effective();
+
+        assertThat(rbac.roles()).containsExactly("GOV_LOCAL");
+        assertThat(rbac.permissions()).isEmpty();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "R_ORG_OWNER", "R_ORG_ADMIN", "R_SPACE_ADMIN",
+            "ROLE_R_ORG_ADMIN", "ROLE_R_SPACE_ADMIN", "PLATFORM_ADMIN"
+    })
+    void tenantOwnedReservedRole_doesNotEnterSpaceClaims(String code) {
+        givenDirectRoles(directRole(code, RoleSource.GOVERNANCE));
+        givenMemberships();
+
+        EffectiveRbac rbac = effective();
+
+        assertThat(rbac.roles()).isEmpty();
+        assertThat(rbac.permissions()).isEmpty();
+    }
+
+    @Test
     void directAndInheritedOverlap_isDeduplicatedAndSorted() {
         givenDirectRoles(
                 directRole("R_SPACE_ADMIN", RoleSource.TECHNICAL),
@@ -186,8 +216,12 @@ class EffectiveRbacQueryServiceTest {
     // ───────────────────── IAM 31 — effectiveOrgFor (portée ORGANIZATION) ─────────────────────
 
     private RoleAssignment orgLevelRole(String code) {
+        return orgLevelRole(code, RoleSource.TECHNICAL);
+    }
+
+    private RoleAssignment orgLevelRole(String code, RoleSource source) {
         return new RoleAssignment(UUID.randomUUID(), ORG_ID, null, null,
-                code, RoleSource.TECHNICAL, null, Instant.now(), "actor", null, null);
+                code, source, null, Instant.now(), "actor", null, null);
     }
 
     private GroupAssignment orgLevelMembership(String code) {
@@ -245,6 +279,17 @@ class EffectiveRbacQueryServiceTest {
         assertThat(rbac.roles()).containsExactly("R_ORG_VIEWER");
         assertThat(rbac.groups()).isEmpty();
         assertThat(rbac.permissions()).containsExactly("P_READ_ORG", "P_READ_POLICY");
+    }
+
+    @Test
+    void orgScope_tenantOwnedCanonicalOrgRole_isIgnoredOnRead() {
+        givenOrgLevelRoles(orgLevelRole("R_ORG_ADMIN", RoleSource.GOVERNANCE));
+        givenOrgLevelMemberships();
+
+        EffectiveRbac rbac = service.effectiveOrgFor(ORG_ID, ACCOUNT_ID);
+
+        assertThat(rbac.roles()).isEmpty();
+        assertThat(rbac.permissions()).isEmpty();
     }
 
     @Test

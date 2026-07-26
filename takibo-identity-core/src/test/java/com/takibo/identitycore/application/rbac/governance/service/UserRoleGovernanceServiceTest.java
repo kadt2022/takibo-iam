@@ -8,6 +8,7 @@ import com.takibo.identitycore.domain.exception.LastAdminRemovalException;
 import com.takibo.identitycore.domain.exception.RoleNotFoundException;
 import com.takibo.identitycore.domain.exception.RoleScopeEscalationException;
 import com.takibo.identitycore.domain.exception.RoleTypeNotAllowedException;
+import com.takibo.identitycore.domain.exception.ReservedTenantRoleCodeException;
 import com.takibo.identitycore.domain.exception.SelfDemotionException;
 import com.takibo.identitycore.domain.exception.SpaceNotActiveException;
 import com.takibo.identitycore.domain.exception.UserNotFoundException;
@@ -30,6 +31,8 @@ import com.takibo.identitycore.integration.space.port.ResolvedSpaceKey;
 import com.takibo.identitycore.interfaces.rest.response.UserRoleAssignmentsResponse;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -178,6 +181,25 @@ class UserRoleGovernanceServiceTest {
         verify(assignments, never()).saveGovernanceAssignment(any());
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "PLATFORM_ADMIN", "R_PLATFORM_ADMIN", "ROLE_PLATFORM_ADMIN",
+            "R_TAKIBO_CUSTOM", "R_ORG_CUSTOM", "R_SPACE_CUSTOM"
+    })
+    void assign_legacyTenantRoleWithReservedCode_isRejected(String code) {
+        stubActor();
+        stubTargetUser();
+        when(roleRepository.findBySpaceIdAndCode(SpaceId.of(SPACE_ID), code))
+                .thenReturn(Optional.of(dbRole(code, RoleNature.GOVERNANCE)));
+        AssignUserRoleCommand command = new AssignUserRoleCommand(USER_ID, code, null);
+
+        assertThatThrownBy(() -> service.assignRole(KEY, command))
+                .isInstanceOf(ReservedTenantRoleCodeException.class)
+                .hasMessageContaining(code);
+
+        verify(assignments, never()).saveGovernanceAssignment(any());
+    }
+
     @Test
     void assign_selfRole_doesNotExistOnThisSurface() {
         stubActor();
@@ -293,6 +315,22 @@ class UserRoleGovernanceServiceTest {
 
         verify(assignments).deleteAssignment(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID, "R_SPACE_USER_ADMIN");
         assertThat(state.roles()).isEmpty();
+    }
+
+    @Test
+    void remove_legacyReservedGovernanceRole_remainsPossibleForCleanup() {
+        stubActor();
+        stubTargetUser();
+        when(roleRepository.findBySpaceIdAndCode(SpaceId.of(SPACE_ID), "PLATFORM_ADMIN"))
+                .thenReturn(Optional.of(dbRole("PLATFORM_ADMIN", RoleNature.GOVERNANCE)));
+        when(assignments.existsAssignment(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID, "PLATFORM_ADMIN"))
+                .thenReturn(true);
+        when(assignments.findDirectAssignments(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID))
+                .thenReturn(List.of());
+
+        service.removeRole(KEY, new RemoveUserRoleCommand(USER_ID, "PLATFORM_ADMIN", "security cleanup"));
+
+        verify(assignments).deleteAssignment(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID, "PLATFORM_ADMIN");
     }
 
     @Test

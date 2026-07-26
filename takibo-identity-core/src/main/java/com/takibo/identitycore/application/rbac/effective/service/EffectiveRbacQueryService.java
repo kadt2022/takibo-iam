@@ -5,9 +5,11 @@ import com.takibo.identitycore.application.rbac.effective.port.in.EffectiveRbacQ
 import com.takibo.identitycore.domain.catalogrbac.TechnicalGroup;
 import com.takibo.identitycore.domain.catalogrbac.TechnicalRole;
 import com.takibo.identitycore.domain.catalogrbac.TechnicalScope;
+import com.takibo.identitycore.domain.catalogrbac.TenantRoleCodePolicy;
 import com.takibo.identitycore.domain.rbac.model.GroupAssignment;
 import com.takibo.identitycore.domain.rbac.model.GroupSource;
 import com.takibo.identitycore.domain.rbac.model.RoleAssignment;
+import com.takibo.identitycore.domain.rbac.model.RoleSource;
 import com.takibo.identitycore.domain.rbac.repository.GovernanceGroupAssignmentRepository;
 import com.takibo.identitycore.domain.rbac.repository.GovernanceRoleAssignmentRepository;
 import com.takibo.identitycore.domain.repository.GroupRoleRepository;
@@ -36,6 +38,8 @@ import java.util.UUID;
  * Les assignations BUSINESS sont ignorées (récit dédié). Les codes techniques
  * de scope SYSTEM/USER ne sont jamais racontés aux tenants : même une ligne
  * seedée en base ne les fait pas entrer dans un token tenant.
+ * Un code du catalogue technique n'est accepté que si l'assignation est elle-même
+ * de source TECHNICAL. Les collisions historiques de source GOVERNANCE sont filtrées.
  * <p>
  * Frontière stricte : tout est lu pour (org, space, account) — les assignments
  * org-level du même org (space NULL) sont inclus, rien d'un autre org/space.
@@ -64,8 +68,8 @@ public class EffectiveRbacQueryService implements EffectiveRbacQueryCase {
 
         // 1) Rôles directs (BUSINESS déjà exclu par le repository).
         roleAssignments.findDirectAssignments(orgId, spaceId, accountId).stream()
+                .filter(this::isTenantVisibleRoleAssignment)
                 .map(RoleAssignment::roleCode)
-                .filter(this::isTenantVisibleRoleCode)
                 .forEach(roles::add);
 
         // 2) Groupes directs (BUSINESS déjà exclu par le repository).
@@ -96,7 +100,9 @@ public class EffectiveRbacQueryService implements EffectiveRbacQueryCase {
                 .filter(Objects::nonNull)
                 .toList();
         if (!governanceGroupCodes.isEmpty()) {
-            roles.addAll(groupRoles.findGovernanceRoleCodesByGroups(orgId, spaceId, governanceGroupCodes));
+            groupRoles.findGovernanceRoleCodesByGroups(orgId, spaceId, governanceGroupCodes).stream()
+                    .filter(this::isTenantOwnedRoleCode)
+                    .forEach(roles::add);
         }
 
         // 5) Permissions des rôles techniques effectifs (directs + hérités).
@@ -124,8 +130,8 @@ public class EffectiveRbacQueryService implements EffectiveRbacQueryCase {
         //    ORGANIZATION entrent : une ligne org-level anormale (code SPACE,
         //    code inconnu) est ignorée en lecture, pas seulement refusée en écriture.
         roleAssignments.findOrgLevelAssignments(orgId, accountId).stream()
+                .filter(this::isOrganizationRoleAssignment)
                 .map(RoleAssignment::roleCode)
-                .filter(this::isOrganizationRoleCode)
                 .forEach(roles::add);
 
         // 2) Groupes directs org-level (même filtre strict de scope).
@@ -166,6 +172,12 @@ public class EffectiveRbacQueryService implements EffectiveRbacQueryCase {
     }
 
     /** Seul un code technique de scope ORGANIZATION entre dans un token ORG. */
+    private boolean isOrganizationRoleAssignment(RoleAssignment assignment) {
+        return assignment != null
+                && assignment.roleSource() == RoleSource.TECHNICAL
+                && isOrganizationRoleCode(assignment.roleCode());
+    }
+
     private boolean isOrganizationRoleCode(String code) {
         if (code == null) {
             return false;
@@ -185,6 +197,21 @@ public class EffectiveRbacQueryService implements EffectiveRbacQueryCase {
     }
 
     /** Un code technique de scope non visible tenant n'entre jamais dans un token tenant. */
+    private boolean isTenantVisibleRoleAssignment(RoleAssignment assignment) {
+        if (assignment == null) {
+            return false;
+        }
+        if (assignment.roleSource() == RoleSource.TECHNICAL) {
+            return isTenantVisibleRoleCode(assignment.roleCode());
+        }
+        return assignment.roleSource() == RoleSource.GOVERNANCE
+                && isTenantOwnedRoleCode(assignment.roleCode());
+    }
+
+    private boolean isTenantOwnedRoleCode(String code) {
+        return code != null && !TenantRoleCodePolicy.isReserved(code);
+    }
+
     private boolean isTenantVisibleRoleCode(String code) {
         if (code == null) {
             return false;

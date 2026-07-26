@@ -62,6 +62,7 @@ public class ReadableUserRoleGovernanceController {
     @Operation(summary = "Assign a technical or governance role to a user (idempotent)")
     @ApiResponse(responseCode = "200", description = "Current direct assignments after the operation",
             content = @Content(schema = @Schema(implementation = UserRoleAssignmentsResponse.class)))
+    @ApiResponse(responseCode = "400", description = "Reserved tenant role code")
     @ApiResponse(responseCode = "403", description = "Missing admin role, business role or scope escalation")
     @ApiResponse(responseCode = "404", description = "Organization, space, user or role not found")
     public ResponseEntity<UserRoleAssignmentsResponse> assign(@PathVariable("orgCode") String orgCode,

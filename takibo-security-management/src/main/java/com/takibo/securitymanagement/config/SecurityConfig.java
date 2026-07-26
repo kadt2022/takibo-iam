@@ -1,5 +1,6 @@
 package com.takibo.securitymanagement.config;
 
+import com.takibo.identitycore.domain.catalogrbac.TechnicalRole;
 import com.takibo.securitymanagement.infrastructure.adp.PolicyBasedAuthorizationManager;
 import com.takibo.securitymanagement.infrastructure.security.JwtAuthenticationFilter;
 import com.takibo.securitymanagement.infrastructure.security.boundary.OrgBoundaryFilter;
@@ -22,11 +23,8 @@ import org.springframework.security.web.authentication.AnonymousAuthenticationFi
 @RequiredArgsConstructor
 public class SecurityConfig {
 
-    private static final String[] PLATFORM_ADMIN_AUTHORITIES = {
-            "ROLE_R_TAKIBO_PLATFORM_ADMIN",
-            "ROLE_R_PLATFORM_ADMIN",
-            "ROLE_PLATFORM_ADMIN"
-    };
+    private static final String PLATFORM_ADMIN_AUTHORITY =
+            "ROLE_" + TechnicalRole.SYSTEM_ADMIN.code();
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final OrgBoundaryFilter orgBoundaryFilter;
@@ -67,13 +65,13 @@ public class SecurityConfig {
                                 "/actuator/health/readiness"
                         ).permitAll()
                         .requestMatchers("/actuator/**")
-                        .hasAnyAuthority(PLATFORM_ADMIN_AUTHORITIES)
+                        .hasAuthority(PLATFORM_ADMIN_AUTHORITY)
 
                         // Login humain : public par nature (l'appelant n'a pas encore de token).
                         // Volontairement limité à cette route exacte — pas tout /api/v1/auth/**.
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
 
-                        .requestMatchers("/api/platform/**").hasRole("PLATFORM_ADMIN")
+                        .requestMatchers("/api/platform/**").hasAuthority(PLATFORM_ADMIN_AUTHORITY)
 
                         .requestMatchers("/api/organizations/**").access(policyBasedAuthorizationManager)
                         .requestMatchers("/api/orgs/**").access(policyBasedAuthorizationManager)

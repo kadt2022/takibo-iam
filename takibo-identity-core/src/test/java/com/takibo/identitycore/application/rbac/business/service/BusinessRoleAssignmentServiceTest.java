@@ -1,6 +1,7 @@
 package com.takibo.identitycore.application.rbac.business.service;
 
 import com.takibo.identitycore.domain.exception.UserCreationException;
+import com.takibo.identitycore.domain.exception.ReservedTenantRoleCodeException;
 import com.takibo.identitycore.domain.model.Role;
 import com.takibo.identitycore.domain.model.RoleNature;
 import com.takibo.identitycore.domain.rbac.model.BusinessRoleAssignment;
@@ -44,7 +45,7 @@ class BusinessRoleAssignmentServiceTest {
 
     @Test
     void assignBusinessRoles_governanceCodeNotFoundInBusinessPort_throws() {
-        List<String> roleCodes = List.of("R_SPACE_ADMIN");
+        List<String> roleCodes = List.of("GOV_LOCAL");
         when(takiboIdentityRepository.lockAndFindIdentityIdByOrgIdAndAccountId(ORG_ID, ACCOUNT_ID))
                 .thenReturn(Optional.of(IDENTITY_ID));
         when(roleRepository.findBusinessRolesByOrgAndSpaceAndCodes(ORG_ID, SPACE_ID, roleCodes))
@@ -55,6 +56,17 @@ class BusinessRoleAssignmentServiceTest {
                 .hasMessageContaining("Unknown business role codes");
 
         verify(businessRoleAssignmentRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void assignBusinessRoles_legacyReservedBusinessRole_isRejectedBeforeLookup() {
+        List<String> roleCodes = List.of("PLATFORM_APPROVER");
+
+        assertThatThrownBy(() ->
+                service.assignBusinessRoles(ORG_ID, SPACE_ID, ACCOUNT_ID, roleCodes))
+                .isInstanceOf(ReservedTenantRoleCodeException.class);
+
+        verifyNoInteractions(takiboIdentityRepository, roleRepository, businessRoleAssignmentRepository);
     }
 
     @Test

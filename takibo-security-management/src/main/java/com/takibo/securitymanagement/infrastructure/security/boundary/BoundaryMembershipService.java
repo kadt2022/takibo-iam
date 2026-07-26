@@ -1,5 +1,6 @@
 package com.takibo.securitymanagement.infrastructure.security.boundary;
 
+import com.takibo.identitycore.domain.catalogrbac.TechnicalRole;
 import com.takibo.securitycontext.model.TakiboSecurityContext;
 import com.takibo.securitycontext.spi.TakiboSecurityContextCarrier;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +29,8 @@ import java.util.concurrent.ConcurrentHashMap;
 @RequiredArgsConstructor
 public class BoundaryMembershipService {
 
+    private static final String ROLE_PREFIX = "ROLE_";
+
     private final JdbcTemplate jdbc;
 
     private final ConcurrentHashMap<UUID, CacheEntry> orgBySpaceCache = new ConcurrentHashMap<>();
@@ -48,9 +51,8 @@ public class BoundaryMembershipService {
         // Bypass org-level : uniquement la vérification d'appartenance à l'ORG.
         // Ne bypass jamais la règle stricte token.space_id d'un token SPACE.
         if (hasAnyAuthority(auth,
-                "ROLE_ORG_ADMIN", "ORG_ADMIN",
-                "ROLE_R_ORG_ADMIN", "R_ORG_ADMIN",
-                "ROLE_R_ORG_OWNER", "R_ORG_OWNER")) {
+                TechnicalRole.ORG_ADMIN.code(), ROLE_PREFIX + TechnicalRole.ORG_ADMIN.code(),
+                TechnicalRole.ORG_OWNER.code(), ROLE_PREFIX + TechnicalRole.ORG_OWNER.code())) {
             if (tokenOrg != null && tokenOrg.equals(targetOrg)) {
                 log.debug("Org-level role bypass: token org matches target org ({})", targetOrg);
                 return;
@@ -282,9 +284,9 @@ public class BoundaryMembershipService {
     }
 
     private boolean isPlatformAdmin(Authentication auth) {
+        String code = TechnicalRole.SYSTEM_ADMIN.code();
         return hasAnyAuthority(auth,
-                "PLATFORM_ADMIN", "ROLE_PLATFORM_ADMIN",
-                "R_PLATFORM_ADMIN", "ROLE_R_PLATFORM_ADMIN");
+                code, ROLE_PREFIX + code);
     }
 
     private record CacheEntry(UUID value, Instant at) {

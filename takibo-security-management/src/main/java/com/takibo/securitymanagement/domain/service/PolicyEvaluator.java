@@ -1,5 +1,6 @@
 package com.takibo.securitymanagement.domain.service;
 
+import com.takibo.identitycore.domain.catalogrbac.TechnicalRole;
 import com.takibo.securitymanagement.domain.model.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -105,14 +106,14 @@ public class PolicyEvaluator {
     /**
      * Admin tenant = pouvoir d'agir dans la frontière portée par le token.
      * Ce statut n'élargit JAMAIS la frontière elle-même (token.space_id reste strict).
-     * Les codes réels du catalogue technique (R_*) sont la référence ; les anciens
-     * alias sans préfixe restent acceptés pour compatibilité.
+     * Seuls les codes réels du catalogue technique confèrent ce statut.
      */
     private static boolean isTenantAdmin(Subject subject) {
-        return hasAnyRole(subject, "R_PLATFORM_ADMIN", "PLATFORM_ADMIN")
-                || hasAnyRole(subject, "R_ORG_OWNER", "ORG_OWNER")
-                || hasAnyRole(subject, "R_ORG_ADMIN", "ORG_ADMIN")
-                || hasAnyRole(subject, "R_SPACE_ADMIN", "SPACE_ADMIN");
+        return hasAnyRole(subject,
+                TechnicalRole.SYSTEM_ADMIN.code(),
+                TechnicalRole.ORG_OWNER.code(),
+                TechnicalRole.ORG_ADMIN.code(),
+                TechnicalRole.SPACE_ADMIN.code());
     }
 
     private static boolean hasAnyRole(Subject subject, String... codes) {
@@ -184,7 +185,7 @@ public class PolicyEvaluator {
             return deny("POL_ORG_DASHBOARD_ORG_HUMAN_REQUIRED",
                     "Organization-scoped human token matching the target organization is required");
         }
-        if (!hasAnyRole(subject, "R_ORG_OWNER", "ORG_OWNER", "R_ORG_ADMIN", "ORG_ADMIN")) {
+        if (!hasAnyRole(subject, TechnicalRole.ORG_OWNER.code(), TechnicalRole.ORG_ADMIN.code())) {
             return deny("POL_ORG_DASHBOARD_ADMIN_REQUIRED",
                     "R_ORG_OWNER or R_ORG_ADMIN required to read the organization dashboard");
         }
@@ -232,7 +233,7 @@ public class PolicyEvaluator {
         if (path.startsWith("/api/spaces/") && path.contains("/users")
                 && action == Action.CREATE && !tenantAdmin) {
             return deny("POL_USER_CREATE_ADMIN_REQUIRED",
-                    "ORG_ADMIN or SPACE_ADMIN or PLATFORM_ADMIN required to create user");
+                    "R_ORG_OWNER, R_ORG_ADMIN, R_SPACE_ADMIN or R_TAKIBO_PLATFORM_ADMIN required to create user");
         }
         return Optional.empty();
     }
@@ -276,7 +277,7 @@ public class PolicyEvaluator {
     // son secret est l'acte le plus sensible du tenant (le secret sort en clair).
     // Exigences cumulatives : sujet HUMAIN, token de portée SPACE (org_id ET space_id
     // présents), org et space du token == org et space du chemin, et un rôle d'admin
-    // tenant (R_ORG_OWNER / R_ORG_ADMIN / R_SPACE_ADMIN, alias legacy acceptés).
+    // tenant (R_ORG_OWNER / R_ORG_ADMIN / R_SPACE_ADMIN).
     // Un token ORGANIZATION (sans space_id) est REFUSÉ : la surface reste volontairement
     // inutilisable pour lui jusqu'à l'échange ORG->SPACE (IAM 34) — fail-closed assumé.
     // Cette règle gouverne TOUTE la surface clients : rien n'y retombe jamais sur
@@ -311,8 +312,10 @@ public class PolicyEvaluator {
             return deny("POL_OAUTH_CLIENT_ACTION_NOT_SUPPORTED",
                     "Only CREATE is governed on the OAuth clients surface");
         }
-        if (!hasAnyRole(subject, "R_ORG_OWNER", "ORG_OWNER", "R_ORG_ADMIN", "ORG_ADMIN",
-                "R_SPACE_ADMIN", "SPACE_ADMIN")) {
+        if (!hasAnyRole(subject,
+                TechnicalRole.ORG_OWNER.code(),
+                TechnicalRole.ORG_ADMIN.code(),
+                TechnicalRole.SPACE_ADMIN.code())) {
             return deny("POL_OAUTH_CLIENT_ADMIN_REQUIRED",
                     "R_ORG_OWNER, R_ORG_ADMIN or R_SPACE_ADMIN required to manage OAuth clients");
         }
@@ -389,7 +392,8 @@ public class PolicyEvaluator {
                     "No policy governs this space route yet — denied by default");
         }
 
-        boolean orgAuthority = hasAnyRole(subject, "R_ORG_OWNER", "ORG_OWNER", "R_ORG_ADMIN", "ORG_ADMIN");
+        boolean orgAuthority =
+                hasAnyRole(subject, TechnicalRole.ORG_OWNER.code(), TechnicalRole.ORG_ADMIN.code());
 
         if (route.isCollectionRoute()) {
             if (action != Action.READ && action != Action.CREATE) {
@@ -421,7 +425,7 @@ public class PolicyEvaluator {
         }
         // Exception locale, strictement READ : un R_SPACE_ADMIN lit le space que
         // son token désigne déjà (org ET space du chemin == org ET space du token).
-        boolean localSpaceAdmin = hasAnyRole(subject, "R_SPACE_ADMIN", "SPACE_ADMIN")
+        boolean localSpaceAdmin = hasAnyRole(subject, TechnicalRole.SPACE_ADMIN.code())
                 && route.spaceId().equalsIgnoreCase(subject.spaceId());
         if (localSpaceAdmin) {
             return permit("POL_SPACE_READ_ORG_OR_LOCAL_ADMIN_REQUIRED",
@@ -507,7 +511,7 @@ public class PolicyEvaluator {
         if (path.startsWith("/api/spaces/") && path.contains("/clients")
                 && action == Action.CREATE && !tenantAdmin) {
             return deny("POL_CLIENT_CREATE_ADMIN_REQUIRED",
-                    "ORG_ADMIN or SPACE_ADMIN or PLATFORM_ADMIN required to create client");
+                    "R_ORG_OWNER, R_ORG_ADMIN, R_SPACE_ADMIN or R_TAKIBO_PLATFORM_ADMIN required to create client");
         }
         return Optional.empty();
     }
@@ -523,7 +527,7 @@ public class PolicyEvaluator {
         }
         if (action == Action.CREATE && !tenantAdmin) {
             return deny("POL_USER_CREATE_ADMIN_REQUIRED",
-                    "ORG_ADMIN or SPACE_ADMIN or PLATFORM_ADMIN required");
+                    "R_ORG_OWNER, R_ORG_ADMIN, R_SPACE_ADMIN or R_TAKIBO_PLATFORM_ADMIN required");
         }
         return Optional.empty();
     }

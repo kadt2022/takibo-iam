@@ -1,6 +1,7 @@
 package com.takibo.identitycore.application.rbac.service;
 
 import com.takibo.identitycore.domain.exception.UserCreationException;
+import com.takibo.identitycore.domain.exception.ReservedTenantRoleCodeException;
 import com.takibo.identitycore.domain.model.Group;
 import com.takibo.identitycore.domain.model.GroupNature;
 import com.takibo.identitycore.domain.model.GroupRole;
@@ -102,6 +103,19 @@ class GroupRoleApplicationServiceTest {
     }
 
     @Test
+    void ensureGroupHasRole_legacyReservedRole_isRejected() {
+        when(groupRepository.findById(GroupId.of(GROUP_UUID)))
+                .thenReturn(Optional.of(group(GroupNature.GOVERNANCE)));
+        when(roleRepository.findById(RoleId.of(ROLE_UUID)))
+                .thenReturn(Optional.of(role(RoleNature.GOVERNANCE, "R_TAKIBO_CUSTOM")));
+
+        assertThatThrownBy(() -> service.ensureGroupHasRole(SPACE_UUID, GROUP_UUID, ROLE_UUID))
+                .isInstanceOf(ReservedTenantRoleCodeException.class);
+
+        verify(groupRoleRepository, never()).save(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
     void ensureGroupHasRole_groupNotFound_throws() {
         when(groupRepository.findById(GroupId.of(GROUP_UUID))).thenReturn(Optional.empty());
 
@@ -138,11 +152,15 @@ class GroupRoleApplicationServiceTest {
     }
 
     private Role role(RoleNature nature) {
+        return role(nature, "R_TEST");
+    }
+
+    private Role role(RoleNature nature, String code) {
         return Role.builder()
                 .id(RoleId.of(ROLE_UUID))
                 .spaceId(SpaceId.of(SPACE_UUID))
                 .nature(nature)
-                .code("R_TEST").name("Test Role")
+                .code(code).name("Test Role")
                 .createdAt(Instant.now()).updatedAt(Instant.now()).version(0L)
                 .build();
     }

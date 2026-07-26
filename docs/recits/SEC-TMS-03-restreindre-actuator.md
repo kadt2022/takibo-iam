@@ -25,9 +25,9 @@ autres endpoints exigent une autorité d'administration plateforme.
 | `/actuator/health/readiness` | GET | public, sans détails internes |
 | `/actuator/**` | toute autre paire route/méthode | administration plateforme |
 
-Les autorités acceptées sont le rôle canonique `R_TAKIBO_PLATFORM_ADMIN` et les alias
-historiques `R_PLATFORM_ADMIN` et `PLATFORM_ADMIN`. Les diagnostics restent exposés
-pour l'exploitation, mais ne sont plus publics.
+La seule autorité acceptée est le rôle canonique `R_TAKIBO_PLATFORM_ADMIN`. Les alias
+historiques `R_PLATFORM_ADMIN` et `PLATFORM_ADMIN` ont été retirés par RBAC-00. Les
+diagnostics restent exposés pour l'exploitation, mais ne sont plus publics.
 
 ## Périmètre
 

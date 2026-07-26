@@ -57,8 +57,6 @@ management:
         enabled: true
       roles:
         - R_TAKIBO_PLATFORM_ADMIN
-        - R_PLATFORM_ADMIN
-        - PLATFORM_ADMIN
 
 security:
   password-policy:
