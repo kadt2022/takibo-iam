@@ -27,12 +27,9 @@ class CanonicalRbacCatalogTest {
     void canonicalRoles_areCompleteAndPartitionedByPlan() {
         List<TechnicalRole> roles = catalog.getCanonicalRoles();
 
-        assertThat(roles).hasSize(11);
-        assertThat(roles).filteredOn(role -> role.plan() == AuthorityPlan.PLATFORM).hasSize(2);
-        assertThat(roles).filteredOn(role -> role.plan() == AuthorityPlan.ORGANIZATION).hasSize(5);
-        assertThat(roles).filteredOn(role -> role.plan() == AuthorityPlan.SPACE).hasSize(4);
-        assertThat(roles).contains(TechnicalRole.SPACE_AUDITOR);
         assertThat(roles)
+                .hasSize(11)
+                .contains(TechnicalRole.SPACE_AUDITOR)
                 .allSatisfy(role -> {
                     assertThat(role.code()).startsWith("R_");
                     assertThat(role.displayName()).isNotBlank();
@@ -40,6 +37,9 @@ class CanonicalRbacCatalogTest {
                     assertThat(role.plan()).isNotNull();
                     assertThat(role.deprecated()).isFalse();
                 });
+        assertThat(roles).filteredOn(role -> role.plan() == AuthorityPlan.PLATFORM).hasSize(2);
+        assertThat(roles).filteredOn(role -> role.plan() == AuthorityPlan.ORGANIZATION).hasSize(5);
+        assertThat(roles).filteredOn(role -> role.plan() == AuthorityPlan.SPACE).hasSize(4);
     }
 
     @Test
