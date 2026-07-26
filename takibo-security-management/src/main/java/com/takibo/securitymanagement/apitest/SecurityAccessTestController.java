@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
-//@Profile({"dev", "test"})
+@Profile("test")
 @RestController
 @RequestMapping("/debug/secure")
 @RequiredArgsConstructor
