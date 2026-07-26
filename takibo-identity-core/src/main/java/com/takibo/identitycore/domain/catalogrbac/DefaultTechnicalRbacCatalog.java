@@ -1,10 +1,21 @@
 package com.takibo.identitycore.domain.catalogrbac;
 
 import java.util.Collections;
+import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 public class DefaultTechnicalRbacCatalog implements TechnicalRbacCatalog {
+
+    @Override
+    public List<TechnicalRole> getCanonicalRoles() {
+        return TechnicalRole.canonicalValues();
+    }
+
+    @Override
+    public List<TechnicalPermission> getCanonicalPermissions() {
+        return List.of(TechnicalPermission.values());
+    }
 
     @Override
     public boolean isTechnicalRole(String roleCode) {

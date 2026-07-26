@@ -6,7 +6,7 @@ import com.takibo.identitycore.application.rbac.governance.mapper.UserRbacGovern
 import com.takibo.identitycore.application.rbac.governance.port.in.UserRoleGovernanceCase;
 import com.takibo.identitycore.domain.catalogrbac.TenantRoleCodePolicy;
 import com.takibo.identitycore.domain.catalogrbac.TechnicalRole;
-import com.takibo.identitycore.domain.catalogrbac.TechnicalScope;
+import com.takibo.identitycore.domain.catalogrbac.AuthorityPlan;
 import com.takibo.identitycore.domain.exception.DuplicateAssignmentException;
 import com.takibo.identitycore.domain.exception.LastAdminRemovalException;
 import com.takibo.identitycore.domain.exception.RoleNotFoundException;
@@ -59,8 +59,8 @@ import java.util.UUID;
 @Transactional
 public class UserRoleGovernanceService implements UserRoleGovernanceCase {
 
-    private static final Set<TechnicalScope> ASSIGNABLE_SCOPES =
-            EnumSet.of(TechnicalScope.ORGANIZATION, TechnicalScope.SPACE);
+    private static final Set<AuthorityPlan> ASSIGNABLE_PLANS =
+            EnumSet.of(AuthorityPlan.ORGANIZATION, AuthorityPlan.SPACE);
 
     /** Autorité requise pour déléguer/retirer un pouvoir de scope ORGANIZATION. */
     private static final Set<String> ORG_AUTHORITY_ROLE_CODES = Set.of("R_ORG_OWNER", "R_ORG_ADMIN");
@@ -103,7 +103,7 @@ public class UserRoleGovernanceService implements UserRoleGovernanceCase {
                 // IAM 31 : le niveau de la ligne suit le scope du code — un pouvoir
                 // ORGANIZATION est org-level (space NULL), jamais situé dans un space.
                 UUID assignmentSpaceId =
-                        role.scope() == TechnicalScope.ORGANIZATION ? null : key.spaceId();
+                        role.plan() == AuthorityPlan.ORGANIZATION ? null : key.spaceId();
                 assignments.saveGovernanceAssignment(new RoleAssignment(
                         null, key.orgId(), assignmentSpaceId,
                         new Identity(IdentityType.ACCOUNT, targetAccountId),
@@ -143,7 +143,7 @@ public class UserRoleGovernanceService implements UserRoleGovernanceCase {
         }
 
         // IAM 31 : le retrait cible le niveau où la ligne vit réellement.
-        int deleted = role.scope() == TechnicalScope.ORGANIZATION
+        int deleted = role.plan() == AuthorityPlan.ORGANIZATION
                 ? assignments.deleteOrgLevelAssignment(key.orgId(), targetAccountId, role.code())
                 : assignments.deleteAssignment(key.orgId(), key.spaceId(), targetAccountId, role.code());
         log.info("Role removed roleCode={} userId={} spaceId={} actorAccountId={} deleted={} reason={}",
@@ -175,10 +175,10 @@ public class UserRoleGovernanceService implements UserRoleGovernanceCase {
         Optional<TechnicalRole> technical = TechnicalRole.fromCode(roleCode);
         if (technical.isPresent()) {
             TechnicalRole role = technical.get();
-            if (!ASSIGNABLE_SCOPES.contains(role.scope())) {
+            if (role.selfService() || !ASSIGNABLE_PLANS.contains(role.plan())) {
                 throw new RoleNotFoundException("Role not found in this space: " + roleCode);
             }
-            return new ResolvedRole(role.code(), RoleSource.TECHNICAL, role.scope());
+            return new ResolvedRole(role.code(), RoleSource.TECHNICAL, role.plan());
         }
 
         return roleRepository.findBySpaceIdAndCode(SpaceId.of(key.spaceId()), roleCode)
@@ -187,7 +187,7 @@ public class UserRoleGovernanceService implements UserRoleGovernanceCase {
                         throw new RoleTypeNotAllowedException(
                                 "Business role " + roleCode + " is not assignable on the governance surface");
                     }
-                    return new ResolvedRole(dbRole.getCode(), RoleSource.GOVERNANCE, TechnicalScope.SPACE);
+                    return new ResolvedRole(dbRole.getCode(), RoleSource.GOVERNANCE, AuthorityPlan.SPACE);
                 })
                 .orElseThrow(() -> new RoleNotFoundException("Role not found in this space: " + roleCode));
     }
@@ -197,7 +197,7 @@ public class UserRoleGovernanceService implements UserRoleGovernanceCase {
      * ORGANIZATION exige une autorité ORGANIZATION réelle (état DB, pas le token).
      */
     private void assertNoScopeEscalation(ResolvedSpaceKey key, UUID actorAccountId, ResolvedRole role) {
-        if (role.scope() != TechnicalScope.ORGANIZATION) {
+        if (role.plan() != AuthorityPlan.ORGANIZATION) {
             return;
         }
         Set<String> actorCodes = Set.copyOf(
@@ -214,5 +214,5 @@ public class UserRoleGovernanceService implements UserRoleGovernanceCase {
                 assignments.findDirectAssignments(key.orgId(), key.spaceId(), user.getAccountId().getValue()));
     }
 
-    private record ResolvedRole(String code, RoleSource source, TechnicalScope scope) {}
+    private record ResolvedRole(String code, RoleSource source, AuthorityPlan plan) {}
 }

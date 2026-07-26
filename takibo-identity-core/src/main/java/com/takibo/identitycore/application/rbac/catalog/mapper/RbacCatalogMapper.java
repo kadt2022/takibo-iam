@@ -2,9 +2,9 @@ package com.takibo.identitycore.application.rbac.catalog.mapper;
 
 import com.takibo.identitycore.application.rbac.catalog.model.CatalogNature;
 import com.takibo.identitycore.application.rbac.catalog.model.CatalogOrigin;
+import com.takibo.identitycore.domain.catalogrbac.AuthorityPlan;
 import com.takibo.identitycore.domain.catalogrbac.TechnicalGroup;
 import com.takibo.identitycore.domain.catalogrbac.TechnicalRole;
-import com.takibo.identitycore.domain.catalogrbac.TechnicalScope;
 import com.takibo.identitycore.domain.model.Group;
 import com.takibo.identitycore.domain.model.Role;
 import com.takibo.identitycore.domain.model.RoleNature;
@@ -31,13 +31,13 @@ public class RbacCatalogMapper {
     public RoleCatalogResponse toResponse(TechnicalRole role) {
         return new RoleCatalogResponse(
                 role.code(),
-                role.name(),
-                null,
+                role.displayName(),
+                role.description(),
                 CatalogOrigin.TECHNICAL,
                 CatalogNature.TECHNICAL,
-                role.scope(),
+                role.plan(),
                 false,
-                true,
+                role.assignable(),
                 role.permissions().stream()
                         .map(TechnicalGroup.TechnicalPermission::code)
                         .sorted()
@@ -51,7 +51,7 @@ public class RbacCatalogMapper {
                 role.getDescription(),
                 CatalogOrigin.DATABASE,
                 CatalogNature.valueOf(role.getNature().name()),
-                TechnicalScope.SPACE,
+                AuthorityPlan.SPACE,
                 true,
                 // GOVERNANCE est assignable depuis PR #26 ; BUSINESS attend sa propre PR.
                 role.getNature() == RoleNature.GOVERNANCE,
@@ -65,7 +65,7 @@ public class RbacCatalogMapper {
                 null,
                 CatalogOrigin.TECHNICAL,
                 CatalogNature.TECHNICAL,
-                group.scope(),
+                group.plan(),
                 false,
                 group.roles().stream().map(TechnicalRole::code).sorted().toList());
     }
@@ -77,7 +77,7 @@ public class RbacCatalogMapper {
                 group.getDescription(),
                 CatalogOrigin.DATABASE,
                 CatalogNature.valueOf(group.getNature().name()),
-                TechnicalScope.SPACE,
+                AuthorityPlan.SPACE,
                 true,
                 // Les liens group->roles persistés seront exposés dans une PR ultérieure.
                 List.of());
@@ -89,7 +89,7 @@ public class RbacCatalogMapper {
                 permission.description(),
                 CatalogOrigin.TECHNICAL,
                 CatalogNature.TECHNICAL,
-                permission.scope(),
+                permission.plan(),
                 false);
     }
 }

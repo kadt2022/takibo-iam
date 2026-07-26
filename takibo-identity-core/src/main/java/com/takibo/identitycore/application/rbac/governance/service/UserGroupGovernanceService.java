@@ -5,7 +5,7 @@ import com.takibo.identitycore.application.rbac.governance.command.RemoveUserFro
 import com.takibo.identitycore.application.rbac.governance.mapper.UserRbacGovernanceMapper;
 import com.takibo.identitycore.application.rbac.governance.port.in.UserGroupGovernanceCase;
 import com.takibo.identitycore.domain.catalogrbac.TechnicalGroup;
-import com.takibo.identitycore.domain.catalogrbac.TechnicalScope;
+import com.takibo.identitycore.domain.catalogrbac.AuthorityPlan;
 import com.takibo.identitycore.domain.exception.DuplicateAssignmentException;
 import com.takibo.identitycore.domain.exception.GroupNotFoundException;
 import com.takibo.identitycore.domain.exception.GroupTypeNotAllowedException;
@@ -54,8 +54,8 @@ import java.util.UUID;
 @Transactional
 public class UserGroupGovernanceService implements UserGroupGovernanceCase {
 
-    private static final Set<TechnicalScope> ASSIGNABLE_SCOPES =
-            EnumSet.of(TechnicalScope.ORGANIZATION, TechnicalScope.SPACE);
+    private static final Set<AuthorityPlan> ASSIGNABLE_PLANS =
+            EnumSet.of(AuthorityPlan.ORGANIZATION, AuthorityPlan.SPACE);
 
     /** Autorité requise pour gérer un membership de scope ORGANIZATION. */
     private static final Set<String> ORG_AUTHORITY_ROLE_CODES = Set.of("R_ORG_OWNER", "R_ORG_ADMIN");
@@ -96,7 +96,7 @@ public class UserGroupGovernanceService implements UserGroupGovernanceCase {
                 // IAM 31 : le niveau de la ligne suit le scope du code — un groupe
                 // ORGANIZATION est org-level (space NULL), jamais situé dans un space.
                 UUID membershipSpaceId =
-                        group.scope() == TechnicalScope.ORGANIZATION ? null : key.spaceId();
+                        group.plan() == AuthorityPlan.ORGANIZATION ? null : key.spaceId();
                 memberships.saveGovernanceAssignment(new GroupAssignment(
                         null, key.orgId(), membershipSpaceId,
                         targetAccountId, new Identity(IdentityType.ACCOUNT, targetAccountId),
@@ -137,7 +137,7 @@ public class UserGroupGovernanceService implements UserGroupGovernanceCase {
         }
 
         // IAM 31 : le retrait cible le niveau où la ligne vit réellement.
-        int deleted = group.scope() == TechnicalScope.ORGANIZATION
+        int deleted = group.plan() == AuthorityPlan.ORGANIZATION
                 ? memberships.deleteOrgLevelMembership(key.orgId(), targetAccountId, group.code())
                 : memberships.deleteMembership(key.orgId(), key.spaceId(), targetAccountId, group.code());
         log.info("Group membership removed groupCode={} userId={} spaceId={} actorAccountId={} deleted={} reason={}",
@@ -168,10 +168,10 @@ public class UserGroupGovernanceService implements UserGroupGovernanceCase {
         Optional<TechnicalGroup> technical = TechnicalGroup.fromCode(groupCode);
         if (technical.isPresent()) {
             TechnicalGroup group = technical.get();
-            if (!ASSIGNABLE_SCOPES.contains(group.scope())) {
+            if (!ASSIGNABLE_PLANS.contains(group.plan())) {
                 throw new GroupNotFoundException("Group not found in this space: " + groupCode);
             }
-            return new ResolvedGroup(group.code(), GroupSource.TECHNICAL, group.scope());
+            return new ResolvedGroup(group.code(), GroupSource.TECHNICAL, group.plan());
         }
 
         return groupRepository.findBySpaceIdAndCode(SpaceId.of(key.spaceId()), groupCode)
@@ -181,7 +181,7 @@ public class UserGroupGovernanceService implements UserGroupGovernanceCase {
                                 "Business group " + groupCode + " does not accept memberships"
                                         + " on the governance surface");
                     }
-                    return new ResolvedGroup(dbGroup.getCode(), GroupSource.GOVERNANCE, TechnicalScope.SPACE);
+                    return new ResolvedGroup(dbGroup.getCode(), GroupSource.GOVERNANCE, AuthorityPlan.SPACE);
                 })
                 .orElseThrow(() -> new GroupNotFoundException("Group not found in this space: " + groupCode));
     }
@@ -191,7 +191,7 @@ public class UserGroupGovernanceService implements UserGroupGovernanceCase {
      * un membership ORGANIZATION exige une autorité ORGANIZATION réelle (état DB).
      */
     private void assertNoScopeEscalation(ResolvedSpaceKey key, UUID actorAccountId, ResolvedGroup group) {
-        if (group.scope() != TechnicalScope.ORGANIZATION) {
+        if (group.plan() != AuthorityPlan.ORGANIZATION) {
             return;
         }
         Set<String> actorCodes = Set.copyOf(
@@ -208,5 +208,5 @@ public class UserGroupGovernanceService implements UserGroupGovernanceCase {
                 memberships.findDirectMemberships(key.orgId(), key.spaceId(), user.getAccountId().getValue()));
     }
 
-    private record ResolvedGroup(String code, GroupSource source, TechnicalScope scope) {}
+    private record ResolvedGroup(String code, GroupSource source, AuthorityPlan plan) {}
 }

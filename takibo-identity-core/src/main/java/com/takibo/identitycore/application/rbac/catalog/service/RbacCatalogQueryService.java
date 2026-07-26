@@ -2,9 +2,9 @@ package com.takibo.identitycore.application.rbac.catalog.service;
 
 import com.takibo.identitycore.application.rbac.catalog.mapper.RbacCatalogMapper;
 import com.takibo.identitycore.application.rbac.catalog.port.in.RbacCatalogQueryCase;
+import com.takibo.identitycore.domain.catalogrbac.AuthorityPlan;
 import com.takibo.identitycore.domain.catalogrbac.TechnicalGroup;
 import com.takibo.identitycore.domain.catalogrbac.TechnicalRole;
-import com.takibo.identitycore.domain.catalogrbac.TechnicalScope;
 import com.takibo.identitycore.domain.exception.GroupNotFoundException;
 import com.takibo.identitycore.domain.exception.PermissionNotFoundException;
 import com.takibo.identitycore.domain.exception.RoleNotFoundException;
@@ -49,8 +49,8 @@ import java.util.stream.Stream;
 public class RbacCatalogQueryService implements RbacCatalogQueryCase {
 
     /** Seuls les scopes assignables dans la frontière d'un tenant sont racontés. */
-    private static final Set<TechnicalScope> TENANT_VISIBLE_SCOPES =
-            EnumSet.of(TechnicalScope.ORGANIZATION, TechnicalScope.SPACE);
+    private static final Set<AuthorityPlan> TENANT_VISIBLE_PLANS =
+            EnumSet.of(AuthorityPlan.ORGANIZATION, AuthorityPlan.SPACE);
 
     private final SpaceContextVerifier spaceContextVerifier;
     private final SpaceBoundaryGuard spaceBoundaryGuard;
@@ -81,7 +81,7 @@ public class RbacCatalogQueryService implements RbacCatalogQueryCase {
         guard(key);
 
         Optional<TechnicalRole> technical = TechnicalRole.fromCode(roleCode)
-                .filter(role -> TENANT_VISIBLE_SCOPES.contains(role.scope()));
+                .filter(RbacCatalogQueryService::isTenantVisibleTechnicalRole);
         if (technical.isPresent()) {
             return mapper.toResponse(technical.get());
         }
@@ -116,7 +116,7 @@ public class RbacCatalogQueryService implements RbacCatalogQueryCase {
         guard(key);
 
         Optional<TechnicalGroup> technical = TechnicalGroup.fromCode(groupCode)
-                .filter(group -> TENANT_VISIBLE_SCOPES.contains(group.scope()));
+                .filter(group -> TENANT_VISIBLE_PLANS.contains(group.plan()));
         if (technical.isPresent()) {
             return mapper.toResponse(technical.get());
         }
@@ -147,7 +147,7 @@ public class RbacCatalogQueryService implements RbacCatalogQueryCase {
         guard(key);
 
         return TechnicalGroup.TechnicalPermission.fromCode(permissionCode)
-                .filter(permission -> TENANT_VISIBLE_SCOPES.contains(permission.scope()))
+                .filter(permission -> TENANT_VISIBLE_PLANS.contains(permission.plan()))
                 .map(mapper::toResponse)
                 .orElseThrow(() -> new PermissionNotFoundException(
                         "Permission not found in this space: " + permissionCode));
@@ -161,28 +161,32 @@ public class RbacCatalogQueryService implements RbacCatalogQueryCase {
     /** Code du catalogue technique dont le scope n'est pas raconté aux tenants. */
     private static boolean isHiddenTechnicalRoleCode(String code) {
         return TechnicalRole.fromCode(code)
-                .map(role -> !TENANT_VISIBLE_SCOPES.contains(role.scope()))
+                .map(role -> !isTenantVisibleTechnicalRole(role))
                 .orElse(false);
     }
 
     private static boolean isHiddenTechnicalGroupCode(String code) {
         return TechnicalGroup.fromCode(code)
-                .map(group -> !TENANT_VISIBLE_SCOPES.contains(group.scope()))
+                .map(group -> !TENANT_VISIBLE_PLANS.contains(group.plan()))
                 .orElse(false);
     }
 
     private Stream<TechnicalRole> tenantVisibleTechnicalRoles() {
         return Arrays.stream(TechnicalRole.values())
-                .filter(role -> TENANT_VISIBLE_SCOPES.contains(role.scope()));
+                .filter(RbacCatalogQueryService::isTenantVisibleTechnicalRole);
     }
 
     private Stream<TechnicalGroup> tenantVisibleTechnicalGroups() {
         return Arrays.stream(TechnicalGroup.values())
-                .filter(group -> TENANT_VISIBLE_SCOPES.contains(group.scope()));
+                .filter(group -> TENANT_VISIBLE_PLANS.contains(group.plan()));
     }
 
     private Stream<TechnicalGroup.TechnicalPermission> tenantVisibleTechnicalPermissions() {
         return Arrays.stream(TechnicalGroup.TechnicalPermission.values())
-                .filter(permission -> TENANT_VISIBLE_SCOPES.contains(permission.scope()));
+                .filter(permission -> TENANT_VISIBLE_PLANS.contains(permission.plan()));
+    }
+
+    private static boolean isTenantVisibleTechnicalRole(TechnicalRole role) {
+        return !role.selfService() && TENANT_VISIBLE_PLANS.contains(role.plan());
     }
 }

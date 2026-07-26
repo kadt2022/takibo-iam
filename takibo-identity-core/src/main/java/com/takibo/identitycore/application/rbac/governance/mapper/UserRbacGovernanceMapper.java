@@ -2,9 +2,9 @@ package com.takibo.identitycore.application.rbac.governance.mapper;
 
 import com.takibo.identitycore.application.rbac.catalog.model.CatalogNature;
 import com.takibo.identitycore.application.rbac.catalog.model.CatalogOrigin;
+import com.takibo.identitycore.domain.catalogrbac.AuthorityPlan;
 import com.takibo.identitycore.domain.catalogrbac.TechnicalGroup;
 import com.takibo.identitycore.domain.catalogrbac.TechnicalRole;
-import com.takibo.identitycore.domain.catalogrbac.TechnicalScope;
 import com.takibo.identitycore.domain.rbac.model.GroupAssignment;
 import com.takibo.identitycore.domain.rbac.model.GroupSource;
 import com.takibo.identitycore.domain.rbac.model.RoleAssignment;
@@ -49,27 +49,27 @@ public class UserRbacGovernanceMapper {
 
     private UserRoleAssignmentResponse toRoleItem(RoleAssignment assignment) {
         if (assignment.roleSource() == RoleSource.TECHNICAL) {
-            TechnicalScope scope = TechnicalRole.fromCode(assignment.roleCode())
-                    .map(TechnicalRole::scope)
-                    .orElse(TechnicalScope.SPACE);
+            AuthorityPlan plan = TechnicalRole.fromCode(assignment.roleCode())
+                    .map(TechnicalRole::plan)
+                    .orElse(AuthorityPlan.SPACE);
             return new UserRoleAssignmentResponse(
-                    assignment.roleCode(), CatalogOrigin.TECHNICAL, CatalogNature.TECHNICAL, scope, DIRECT);
+                    assignment.roleCode(), CatalogOrigin.TECHNICAL, CatalogNature.TECHNICAL, plan, DIRECT);
         }
         return new UserRoleAssignmentResponse(
                 assignment.roleCode(), CatalogOrigin.DATABASE, CatalogNature.GOVERNANCE,
-                TechnicalScope.SPACE, DIRECT);
+                AuthorityPlan.SPACE, DIRECT);
     }
 
     private UserGroupMembershipResponse toGroupItem(GroupAssignment membership) {
         if (membership.groupSource() == GroupSource.TECHNICAL) {
-            TechnicalScope scope = TechnicalGroup.fromCode(membership.groupCode())
-                    .map(TechnicalGroup::scope)
-                    .orElse(TechnicalScope.SPACE);
+            AuthorityPlan plan = TechnicalGroup.fromCode(membership.groupCode())
+                    .map(TechnicalGroup::plan)
+                    .orElse(AuthorityPlan.SPACE);
             return new UserGroupMembershipResponse(
-                    membership.groupCode(), CatalogOrigin.TECHNICAL, CatalogNature.TECHNICAL, scope, DIRECT);
+                    membership.groupCode(), CatalogOrigin.TECHNICAL, CatalogNature.TECHNICAL, plan, DIRECT);
         }
         return new UserGroupMembershipResponse(
                 membership.groupCode(), CatalogOrigin.DATABASE, CatalogNature.GOVERNANCE,
-                TechnicalScope.SPACE, DIRECT);
+                AuthorityPlan.SPACE, DIRECT);
     }
 }

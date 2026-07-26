@@ -2,7 +2,7 @@ package com.takibo.identitycore.interfaces.rest.response;
 
 import com.takibo.identitycore.application.rbac.catalog.model.CatalogNature;
 import com.takibo.identitycore.application.rbac.catalog.model.CatalogOrigin;
-import com.takibo.identitycore.domain.catalogrbac.TechnicalScope;
+import com.takibo.identitycore.domain.catalogrbac.AuthorityPlan;
 
 /**
  * Un rôle directement assigné à un user. {@code source=DIRECT} en PR #26 —
@@ -12,6 +12,6 @@ public record UserRoleAssignmentResponse(
         String code,
         CatalogOrigin origin,
         CatalogNature nature,
-        TechnicalScope scope,
+        AuthorityPlan scope,
         String source
 ) {}

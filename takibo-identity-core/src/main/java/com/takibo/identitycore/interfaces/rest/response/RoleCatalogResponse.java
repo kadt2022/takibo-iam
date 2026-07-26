@@ -2,7 +2,7 @@ package com.takibo.identitycore.interfaces.rest.response;
 
 import com.takibo.identitycore.application.rbac.catalog.model.CatalogNature;
 import com.takibo.identitycore.application.rbac.catalog.model.CatalogOrigin;
-import com.takibo.identitycore.domain.catalogrbac.TechnicalScope;
+import com.takibo.identitycore.domain.catalogrbac.AuthorityPlan;
 
 import java.util.List;
 
@@ -17,7 +17,7 @@ public record RoleCatalogResponse(
         String description,
         CatalogOrigin origin,
         CatalogNature nature,
-        TechnicalScope scope,
+        AuthorityPlan scope,
         boolean editable,
         boolean assignable,
         List<String> permissions

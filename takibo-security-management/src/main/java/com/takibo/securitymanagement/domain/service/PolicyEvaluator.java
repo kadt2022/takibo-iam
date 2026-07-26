@@ -110,7 +110,7 @@ public class PolicyEvaluator {
      */
     private static boolean isTenantAdmin(Subject subject) {
         return hasAnyRole(subject,
-                TechnicalRole.SYSTEM_ADMIN.code(),
+                TechnicalRole.PLATFORM_ADMIN.code(),
                 TechnicalRole.ORG_OWNER.code(),
                 TechnicalRole.ORG_ADMIN.code(),
                 TechnicalRole.SPACE_ADMIN.code());

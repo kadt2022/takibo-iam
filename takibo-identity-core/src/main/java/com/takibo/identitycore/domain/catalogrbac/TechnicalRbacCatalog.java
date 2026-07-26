@@ -1,10 +1,13 @@
 package com.takibo.identitycore.domain.catalogrbac;
 
-import java.util.Collections;
+import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 public interface TechnicalRbacCatalog {
+
+    List<TechnicalRole> getCanonicalRoles();
+
+    List<TechnicalPermission> getCanonicalPermissions();
 
     boolean isTechnicalRole(String roleCode);
 

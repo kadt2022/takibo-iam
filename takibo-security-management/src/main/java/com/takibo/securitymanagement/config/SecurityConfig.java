@@ -24,7 +24,7 @@ import org.springframework.security.web.authentication.AnonymousAuthenticationFi
 public class SecurityConfig {
 
     private static final String PLATFORM_ADMIN_AUTHORITY =
-            "ROLE_" + TechnicalRole.SYSTEM_ADMIN.code();
+            "ROLE_" + TechnicalRole.PLATFORM_ADMIN.code();
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final OrgBoundaryFilter orgBoundaryFilter;
