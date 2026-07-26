@@ -20,6 +20,7 @@ class TenantRoleCodePolicyTest {
     @ParameterizedTest
     @ValueSource(strings = {
             "R_TAKIBO_CUSTOM", "R_ORG_CUSTOM", "R_SPACE_CUSTOM",
+            "ROLE_CUSTOM", "ROLE_R_ORG_ADMIN", "ROLE_R_SPACE_ADMIN",
             "PLATFORM", "PLATFORM_ADMIN", "MY_PLATFORM_OPERATOR",
             "R_SELF"
     })

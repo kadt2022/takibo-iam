@@ -40,13 +40,13 @@ class RoleNamingEscalationRegressionTest {
     @Mock private GroupRoleRepository groupRoles;
 
     @Test
-    void legacyGovernanceRoleCarriedIntoToken_doesNotGrantAdministratorStatus() {
-        RoleAssignment legacyAssignment = new RoleAssignment(
-                UUID.randomUUID(), ORG_ID, SPACE_ID, null,
-                "PLATFORM_ADMIN", RoleSource.GOVERNANCE, null,
-                Instant.now(), "legacy", null, null);
+    void legacyCanonicalGovernanceRoles_doNotEnterTokenOrGrantAdministratorStatus() {
+        List<RoleAssignment> legacyAssignments = List.of(
+                legacyGovernanceAssignment("R_ORG_OWNER"),
+                legacyGovernanceAssignment("R_ORG_ADMIN"),
+                legacyGovernanceAssignment("R_SPACE_ADMIN"));
         when(roleAssignments.findDirectAssignments(ORG_ID, SPACE_ID, ACCOUNT_ID))
-                .thenReturn(List.of(legacyAssignment));
+                .thenReturn(legacyAssignments);
         when(groupMemberships.findDirectMemberships(ORG_ID, SPACE_ID, ACCOUNT_ID))
                 .thenReturn(List.of());
 
@@ -54,7 +54,7 @@ class RoleNamingEscalationRegressionTest {
                 roleAssignments, groupMemberships, groupRoles)
                 .effectiveFor(ORG_ID, SPACE_ID, ACCOUNT_ID);
 
-        assertThat(effective.roles()).containsExactly("PLATFORM_ADMIN");
+        assertThat(effective.roles()).isEmpty();
 
         Subject subject = new Subject(
                 ACCOUNT_ID.toString(), Set.copyOf(effective.roles()), Set.of(),
@@ -69,5 +69,12 @@ class RoleNamingEscalationRegressionTest {
 
         assertThat(decision.isDeny()).isTrue();
         assertThat(decision.getPolicyId()).isEqualTo("POL_USER_ADMIN_REQUIRED");
+    }
+
+    private RoleAssignment legacyGovernanceAssignment(String code) {
+        return new RoleAssignment(
+                UUID.randomUUID(), ORG_ID, SPACE_ID, null,
+                code, RoleSource.GOVERNANCE, null,
+                Instant.now(), "legacy", null, null);
     }
 }

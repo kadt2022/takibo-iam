@@ -11,6 +11,7 @@ import java.util.Objects;
  */
 public final class TenantRoleCodePolicy {
 
+    private static final String AUTHORITY_PREFIX = "ROLE_";
     private static final List<String> RESERVED_PREFIXES =
             List.of("R_TAKIBO_", "R_ORG_", "R_SPACE_");
 
@@ -30,7 +31,8 @@ public final class TenantRoleCodePolicy {
         }
 
         String normalized = code.trim().toUpperCase(Locale.ROOT);
-        return normalized.contains("PLATFORM")
+        return normalized.startsWith(AUTHORITY_PREFIX)
+                || normalized.contains("PLATFORM")
                 || RESERVED_PREFIXES.stream().anyMatch(normalized::startsWith)
                 || TechnicalRole.fromCode(normalized).isPresent();
     }
