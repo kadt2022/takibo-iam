@@ -28,8 +28,10 @@ import static com.takibo.identitycore.domain.catalogrbac.TechnicalGroup.Technica
 /**
  * Canonical technical roles and their model-level characteristics.
  *
- * <p>The legacy permission sets are retained unchanged until RBAC-02 introduces the
- * canonical role-to-permission matrix. They must not be interpreted as that matrix.</p>
+ * <p>The canonical role-to-permission matrix lives in {@link RolePermissionCatalog}.
+ * The legacy permission sets below remain temporarily available to the current
+ * effective-RBAC path until RBAC-03 adopts the canonical resolver. They must not be
+ * interpreted as the normative matrix.</p>
  */
 public enum TechnicalRole {
 
@@ -308,7 +310,8 @@ public enum TechnicalRole {
     }
 
     /**
-     * Compatibility mapping retained until RBAC-02.
+     * Legacy compatibility mapping retained until RBAC-03 migrates effective RBAC.
+     * Canonical consumers must use {@link RolePermissionCatalog}.
      */
     public Set<TechnicalGroup.TechnicalPermission> permissions() {
         return legacyPermissions;
