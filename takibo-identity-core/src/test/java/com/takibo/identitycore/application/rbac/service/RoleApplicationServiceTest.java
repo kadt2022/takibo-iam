@@ -29,8 +29,10 @@ class RoleApplicationServiceTest {
 
     @Test
     void ensure_reservedCodeFailsBeforeExistingRoleLookup() {
+        SpaceId spaceId = SpaceId.of(SPACE_ID);
+
         assertThatThrownBy(() ->
-                service.ensure(SpaceId.of(SPACE_ID), "R_ORG_CUSTOM", "Custom", null))
+                service.ensure(spaceId, "R_ORG_CUSTOM", "Custom", null))
                 .isInstanceOf(ReservedTenantRoleCodeException.class);
 
         verifyNoInteractions(roleRepository, spaceStatusCheckerCase);

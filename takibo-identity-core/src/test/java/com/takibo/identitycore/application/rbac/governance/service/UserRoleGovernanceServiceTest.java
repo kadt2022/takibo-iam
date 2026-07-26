@@ -191,9 +191,9 @@ class UserRoleGovernanceServiceTest {
         stubTargetUser();
         when(roleRepository.findBySpaceIdAndCode(SpaceId.of(SPACE_ID), code))
                 .thenReturn(Optional.of(dbRole(code, RoleNature.GOVERNANCE)));
+        AssignUserRoleCommand command = new AssignUserRoleCommand(USER_ID, code, null);
 
-        assertThatThrownBy(() -> service.assignRole(
-                KEY, new AssignUserRoleCommand(USER_ID, code, null)))
+        assertThatThrownBy(() -> service.assignRole(KEY, command))
                 .isInstanceOf(ReservedTenantRoleCodeException.class)
                 .hasMessageContaining(code);
 

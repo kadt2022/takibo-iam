@@ -60,8 +60,10 @@ class BusinessRoleAssignmentServiceTest {
 
     @Test
     void assignBusinessRoles_legacyReservedBusinessRole_isRejectedBeforeLookup() {
+        List<String> roleCodes = List.of("PLATFORM_APPROVER");
+
         assertThatThrownBy(() ->
-                service.assignBusinessRoles(ORG_ID, SPACE_ID, ACCOUNT_ID, List.of("PLATFORM_APPROVER")))
+                service.assignBusinessRoles(ORG_ID, SPACE_ID, ACCOUNT_ID, roleCodes))
                 .isInstanceOf(ReservedTenantRoleCodeException.class);
 
         verifyNoInteractions(takiboIdentityRepository, roleRepository, businessRoleAssignmentRepository);

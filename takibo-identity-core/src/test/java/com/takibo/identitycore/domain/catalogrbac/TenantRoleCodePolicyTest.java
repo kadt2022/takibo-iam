@@ -24,9 +24,11 @@ class TenantRoleCodePolicyTest {
             "R_SELF"
     })
     void reservedNamespace_isRejectedCaseInsensitively(String code) {
-        assertThatThrownBy(() -> TenantRoleCodePolicy.requireTenantCode(code.toLowerCase()))
+        String lowerCaseCode = code.toLowerCase();
+
+        assertThatThrownBy(() -> TenantRoleCodePolicy.requireTenantCode(lowerCaseCode))
                 .isInstanceOf(ReservedTenantRoleCodeException.class)
-                .hasMessageContaining(code.toLowerCase());
+                .hasMessageContaining(lowerCaseCode);
     }
 
     @Test

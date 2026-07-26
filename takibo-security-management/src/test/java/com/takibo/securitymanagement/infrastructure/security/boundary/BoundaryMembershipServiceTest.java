@@ -82,28 +82,18 @@ class BoundaryMembershipServiceTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"ORG_OWNER", "ROLE_ORG_OWNER", "ORG_ADMIN", "ROLE_ORG_ADMIN"})
-    void legacyOrgAuthorities_doNotBypassMembership(String role) {
-        resolveSpaceOrg(ORG_ID);
-        when(jdbc.queryForObject(contains("WHERE u.id = ?"), eq(Integer.class), eq(USER_ID), eq(ORG_ID)))
-                .thenReturn(0);
-
-        assertThatThrownBy(() -> service.assertActorInSpaceOrg(SPACE_ID, authentication(role, ORG_ID)))
-                .isInstanceOf(AccessDeniedException.class)
-                .hasMessage("ACTOR_NOT_IN_SPACE_ORG");
-    }
-
-    @ParameterizedTest
     @ValueSource(strings = {
+            "ORG_OWNER", "ROLE_ORG_OWNER", "ORG_ADMIN", "ROLE_ORG_ADMIN",
             "PLATFORM_ADMIN", "ROLE_PLATFORM_ADMIN",
             "R_PLATFORM_ADMIN", "ROLE_R_PLATFORM_ADMIN"
     })
-    void phantomPlatformAdminAuthorities_doNotBypassMembership(String role) {
+    void nonCanonicalAuthorities_doNotBypassMembership(String role) {
         resolveSpaceOrg(ORG_ID);
         when(jdbc.queryForObject(contains("WHERE u.id = ?"), eq(Integer.class), eq(USER_ID), eq(ORG_ID)))
                 .thenReturn(0);
+        Authentication auth = authentication(role, ORG_ID);
 
-        assertThatThrownBy(() -> service.assertActorInSpaceOrg(SPACE_ID, authentication(role, ORG_ID)))
+        assertThatThrownBy(() -> service.assertActorInSpaceOrg(SPACE_ID, auth))
                 .isInstanceOf(AccessDeniedException.class)
                 .hasMessage("ACTOR_NOT_IN_SPACE_ORG");
     }
