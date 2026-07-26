@@ -284,7 +284,7 @@ public class BoundaryMembershipService {
     }
 
     private boolean isPlatformAdmin(Authentication auth) {
-        String code = TechnicalRole.SYSTEM_ADMIN.code();
+        String code = TechnicalRole.PLATFORM_ADMIN.code();
         return hasAnyAuthority(auth,
                 code, ROLE_PREFIX + code);
     }

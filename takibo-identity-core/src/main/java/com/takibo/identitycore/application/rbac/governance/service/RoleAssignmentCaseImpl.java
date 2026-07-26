@@ -1,8 +1,8 @@
 package com.takibo.identitycore.application.rbac.governance.service;
 
 import com.takibo.identitycore.application.rbac.governance.port.in.RoleAssignmentCase;
+import com.takibo.identitycore.domain.catalogrbac.AuthorityPlan;
 import com.takibo.identitycore.domain.catalogrbac.TechnicalRole;
-import com.takibo.identitycore.domain.catalogrbac.TechnicalScope;
 import com.takibo.identitycore.domain.exception.InvalidRoleScopeException;
 import com.takibo.identitycore.domain.model.Identity;
 import com.takibo.identitycore.domain.rbac.model.RoleAssignment;
@@ -25,8 +25,6 @@ public class RoleAssignmentCaseImpl implements RoleAssignmentCase {
             "Organization role %s must not be scoped to a space (org authority never depends on a space)";
     private static final String MISSING_SCOPE_IDS_FOR_SPACE_ROLE = "Space role %s requires orgId and spaceId";
     private static final String MISSING_ORG_ID_FOR_USER_ROLE     = "User role %s requires orgId for ownership context";
-    private static final String UNKNOWN_SCOPE_TYPE               = "Unknown scope type: %s";
-
     private final GovernanceRoleAssignmentRepository governanceRoleAssignmentRepository;
 
     @Override
@@ -53,18 +51,21 @@ public class RoleAssignmentCaseImpl implements RoleAssignmentCase {
     }
 
     private void validateTechnicalRoleScope(TechnicalRole role, UUID orgId, UUID spaceId) {
-        TechnicalScope scope = role.scope();
+        AuthorityPlan plan = role.plan();
 
-        if (scope == null) {
+        if (plan == null) {
             throw new InvalidRoleScopeException("Role scope cannot be null for role: " + role.code());
         }
 
-        switch (scope) {
-            case SYSTEM       -> validateSystemRole(role, orgId, spaceId);
+        if (role.selfService()) {
+            validateUserRole(role, orgId);
+            return;
+        }
+
+        switch (plan) {
+            case PLATFORM     -> validateSystemRole(role, orgId, spaceId);
             case ORGANIZATION -> validateOrganizationRole(role, orgId, spaceId);
             case SPACE        -> validateSpaceRole(role, orgId, spaceId);
-            case USER         -> validateUserRole(role, orgId);
-            default           -> throw new InvalidRoleScopeException(String.format(UNKNOWN_SCOPE_TYPE, scope));
         }
     }
 

@@ -3,7 +3,7 @@ package com.takibo.identitycore.application.rbac.catalog.service;
 import com.takibo.identitycore.application.rbac.catalog.mapper.RbacCatalogMapper;
 import com.takibo.identitycore.application.rbac.catalog.model.CatalogNature;
 import com.takibo.identitycore.application.rbac.catalog.model.CatalogOrigin;
-import com.takibo.identitycore.domain.catalogrbac.TechnicalScope;
+import com.takibo.identitycore.domain.catalogrbac.AuthorityPlan;
 import com.takibo.identitycore.domain.exception.GroupNotFoundException;
 import com.takibo.identitycore.domain.exception.PermissionNotFoundException;
 import com.takibo.identitycore.domain.exception.RoleNotFoundException;
@@ -91,10 +91,16 @@ class RbacCatalogQueryServiceTest {
         RbacCatalogListResponse<RoleCatalogResponse> result = service.listRoles(KEY);
 
         List<String> codes = result.items().stream().map(RoleCatalogResponse::code).toList();
-        // 10 rôles techniques visibles tenant (6 ORGANIZATION + 4 SPACE) + 1 rôle DB.
-        assertThat(result.total()).isEqualTo(11);
+        // 11 rôles techniques visibles tenant (6 ORGANIZATION + 5 SPACE) + 1 rôle DB.
+        assertThat(result.total()).isEqualTo(12);
         assertThat(codes)
-                .contains("R_ORG_OWNER", "R_SPACE_ADMIN", "B_APPROVER")
+                .contains(
+                        "R_ORG_OWNER",
+                        "R_SPACE_ADMIN",
+                        "R_SPACE_AUDITOR",
+                        "R_ORG_VIEWER",
+                        "R_SPACE_VIEWER",
+                        "B_APPROVER")
                 .isSorted();
 
         verify(spaceContextVerifier).validateSpaceContext(SPACE_ID);
@@ -135,10 +141,19 @@ class RbacCatalogQueryServiceTest {
 
         assertThat(role.origin()).isEqualTo(CatalogOrigin.TECHNICAL);
         assertThat(role.nature()).isEqualTo(CatalogNature.TECHNICAL);
-        assertThat(role.scope()).isEqualTo(TechnicalScope.SPACE);
+        assertThat(role.scope()).isEqualTo(AuthorityPlan.SPACE);
         assertThat(role.editable()).isFalse();
         assertThat(role.assignable()).isTrue();
         assertThat(role.permissions()).contains("P_MANAGE_USERS", "P_ASSIGN_ROLES");
+        verifyNoInteractions(roleRepository);
+    }
+
+    @Test
+    void getRole_organizationOwner_isNotGenericallyAssignable() {
+        RoleCatalogResponse role = service.getRole(KEY, "R_ORG_OWNER");
+
+        assertThat(role.assignable()).isFalse();
+        assertThat(role.origin()).isEqualTo(CatalogOrigin.TECHNICAL);
         verifyNoInteractions(roleRepository);
     }
 

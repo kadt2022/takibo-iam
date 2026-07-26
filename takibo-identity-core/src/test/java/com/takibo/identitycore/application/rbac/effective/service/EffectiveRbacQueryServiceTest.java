@@ -191,15 +191,27 @@ class EffectiveRbacQueryServiceTest {
     }
 
     @Test
-    void orgScopedTechnicalGroup_transmitsOrgRoles() {
+    void orgScopedTechnicalGroup_transmitsOnlyInheritableOrgRoles() {
         givenDirectRoles();
         givenMemberships(membership("G_ORG_ADMINS", GroupSource.TECHNICAL));
 
         EffectiveRbac rbac = effective();
 
         assertThat(rbac.groups()).containsExactly("G_ORG_ADMINS");
-        assertThat(rbac.roles()).containsExactly("R_ORG_ADMIN", "R_ORG_OWNER");
+        assertThat(rbac.roles()).containsExactly("R_ORG_ADMIN");
         assertThat(rbac.permissions()).contains("P_CREATE_SPACE", "P_UPDATE_POLICY");
+    }
+
+    @Test
+    void spaceAuditor_yieldsCompatibleAuditPermissionsUntilCanonicalMatrixIsActive() {
+        givenDirectRoles(directRole("R_SPACE_AUDITOR", RoleSource.TECHNICAL));
+        givenMemberships();
+
+        EffectiveRbac rbac = effective();
+
+        assertThat(rbac.roles()).containsExactly("R_SPACE_AUDITOR");
+        assertThat(rbac.permissions()).containsExactly(
+                "P_EXPORT_AUDIT_LOGS", "P_READ_AUDIT_LOGS");
     }
 
     @Test
@@ -254,14 +266,14 @@ class EffectiveRbacQueryServiceTest {
     }
 
     @Test
-    void orgScope_orgGroup_transmitsOrgRoles() {
+    void orgScope_orgGroup_transmitsOnlyInheritableOrgRoles() {
         givenOrgLevelRoles();
         givenOrgLevelMemberships(orgLevelMembership("G_ORG_ADMINS"));
 
         EffectiveRbac rbac = service.effectiveOrgFor(ORG_ID, ACCOUNT_ID);
 
         assertThat(rbac.groups()).containsExactly("G_ORG_ADMINS");
-        assertThat(rbac.roles()).containsExactly("R_ORG_ADMIN", "R_ORG_OWNER");
+        assertThat(rbac.roles()).containsExactly("R_ORG_ADMIN");
     }
 
     @Test

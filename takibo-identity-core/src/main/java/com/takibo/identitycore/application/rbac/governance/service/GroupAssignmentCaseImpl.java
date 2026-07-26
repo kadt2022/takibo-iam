@@ -43,11 +43,10 @@ public class GroupAssignmentCaseImpl implements GroupAssignmentCase {
     }
 
     private void validateTechnicalGroupScope(TechnicalGroup group, UUID orgId, UUID spaceId) {
-        switch (group.scope()) {
-            case SYSTEM       -> validateSystemGroup(group, orgId, spaceId);
+        switch (group.plan()) {
+            case PLATFORM     -> validateSystemGroup(group, orgId, spaceId);
             case ORGANIZATION -> validateOrganizationGroup(group, orgId, spaceId);
             case SPACE        -> validateSpaceGroup(group, orgId, spaceId);
-            default           -> { /* no scope restriction for other types */ }
         }
     }
 

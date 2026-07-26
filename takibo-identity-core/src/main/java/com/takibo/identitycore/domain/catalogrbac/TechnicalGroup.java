@@ -6,8 +6,8 @@ import java.util.Optional;
 import java.util.Set;
 
 import static com.takibo.identitycore.domain.catalogrbac.TechnicalRole.*;
-import static com.takibo.identitycore.domain.catalogrbac.TechnicalScope.ORGANIZATION;
-import static com.takibo.identitycore.domain.catalogrbac.TechnicalScope.SPACE;
+import static com.takibo.identitycore.domain.catalogrbac.AuthorityPlan.ORGANIZATION;
+import static com.takibo.identitycore.domain.catalogrbac.AuthorityPlan.SPACE;
 
 public enum TechnicalGroup {
 
@@ -53,12 +53,12 @@ public enum TechnicalGroup {
     );
 
     private final String code;
-    private final TechnicalScope scope;
+    private final AuthorityPlan plan;
     private final Set<TechnicalRole> roles;
 
-    TechnicalGroup(String code, TechnicalScope scope, Set<TechnicalRole> roles) {
+    TechnicalGroup(String code, AuthorityPlan plan, Set<TechnicalRole> roles) {
         this.code = code;
-        this.scope = scope;
+        this.plan = plan;
         this.roles = Collections.unmodifiableSet(roles);
     }
 
@@ -66,8 +66,8 @@ public enum TechnicalGroup {
         return code;
     }
 
-    public TechnicalScope scope() {
-        return scope;
+    public AuthorityPlan plan() {
+        return plan;
     }
 
     public Set<TechnicalRole> roles() {
@@ -84,12 +84,12 @@ public enum TechnicalGroup {
 
         CREATE_ORG(
                 "P_CREATE_ORG",
-                TechnicalScope.SYSTEM,
+                AuthorityPlan.PLATFORM,
                 "Create a new organization"
         ),
         DELETE_ORG(
                 "P_DELETE_ORG",
-                TechnicalScope.SYSTEM,
+                AuthorityPlan.PLATFORM,
                 "Delete an existing organization"
         ),
         READ_ORG(
@@ -149,12 +149,12 @@ public enum TechnicalGroup {
         );
 
         private final String code;
-        private final TechnicalScope scope;
+        private final AuthorityPlan plan;
         private final String description;
 
-        TechnicalPermission(String code, TechnicalScope scope, String description) {
+        TechnicalPermission(String code, AuthorityPlan plan, String description) {
             this.code = code;
-            this.scope = scope;
+            this.plan = plan;
             this.description = description;
         }
 
@@ -162,8 +162,8 @@ public enum TechnicalGroup {
             return code;
         }
 
-        public TechnicalScope scope() {
-            return scope;
+        public AuthorityPlan plan() {
+            return plan;
         }
 
         public String description() {

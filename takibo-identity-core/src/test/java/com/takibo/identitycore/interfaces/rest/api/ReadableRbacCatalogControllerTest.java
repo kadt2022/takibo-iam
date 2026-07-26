@@ -3,7 +3,7 @@ package com.takibo.identitycore.interfaces.rest.api;
 import com.takibo.identitycore.application.rbac.catalog.model.CatalogNature;
 import com.takibo.identitycore.application.rbac.catalog.model.CatalogOrigin;
 import com.takibo.identitycore.application.rbac.catalog.port.in.RbacCatalogQueryCase;
-import com.takibo.identitycore.domain.catalogrbac.TechnicalScope;
+import com.takibo.identitycore.domain.catalogrbac.AuthorityPlan;
 import com.takibo.identitycore.integration.space.port.ResolvedSpaceKey;
 import com.takibo.identitycore.integration.space.port.SpaceKeyResolutionCase;
 import com.takibo.identitycore.interfaces.rest.response.GroupCatalogResponse;
@@ -57,7 +57,7 @@ class ReadableRbacCatalogControllerTest {
     void getRole_resolvesReadableKeyAndDelegatesCode() {
         RoleCatalogResponse expected = new RoleCatalogResponse(
                 "R_SPACE_ADMIN", "SPACE_ADMIN", null, CatalogOrigin.TECHNICAL, CatalogNature.TECHNICAL,
-                TechnicalScope.SPACE, false, true, List.of("P_MANAGE_USERS"));
+                AuthorityPlan.SPACE, false, true, List.of("P_MANAGE_USERS"));
         when(spaceKeyResolution.resolve("takibo-iam", "finance")).thenReturn(KEY);
         when(rbacCatalogQueryCase.getRole(KEY, "R_SPACE_ADMIN")).thenReturn(expected);
 
@@ -85,7 +85,7 @@ class ReadableRbacCatalogControllerTest {
     void getGroup_resolvesReadableKeyAndDelegatesCode() {
         GroupCatalogResponse expected = new GroupCatalogResponse(
                 "G_SPACE_ADMINS", "SPACE_ADMINS", null, CatalogOrigin.TECHNICAL, CatalogNature.TECHNICAL,
-                TechnicalScope.SPACE, false, List.of("R_SPACE_ADMIN"));
+                AuthorityPlan.SPACE, false, List.of("R_SPACE_ADMIN"));
         when(spaceKeyResolution.resolve("takibo-iam", "finance")).thenReturn(KEY);
         when(rbacCatalogQueryCase.getGroup(KEY, "G_SPACE_ADMINS")).thenReturn(expected);
 
@@ -113,7 +113,7 @@ class ReadableRbacCatalogControllerTest {
     void getPermission_resolvesReadableKeyAndDelegatesCode() {
         PermissionCatalogResponse expected = new PermissionCatalogResponse(
                 "P_MANAGE_USERS", "Manage users", CatalogOrigin.TECHNICAL, CatalogNature.TECHNICAL,
-                TechnicalScope.ORGANIZATION, false);
+                AuthorityPlan.ORGANIZATION, false);
         when(spaceKeyResolution.resolve("takibo-iam", "finance")).thenReturn(KEY);
         when(rbacCatalogQueryCase.getPermission(KEY, "P_MANAGE_USERS")).thenReturn(expected);
 

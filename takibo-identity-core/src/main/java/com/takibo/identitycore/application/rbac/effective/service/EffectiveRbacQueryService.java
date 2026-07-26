@@ -2,9 +2,9 @@ package com.takibo.identitycore.application.rbac.effective.service;
 
 import com.takibo.identitycore.application.rbac.effective.model.EffectiveRbac;
 import com.takibo.identitycore.application.rbac.effective.port.in.EffectiveRbacQueryCase;
+import com.takibo.identitycore.domain.catalogrbac.AuthorityPlan;
 import com.takibo.identitycore.domain.catalogrbac.TechnicalGroup;
 import com.takibo.identitycore.domain.catalogrbac.TechnicalRole;
-import com.takibo.identitycore.domain.catalogrbac.TechnicalScope;
 import com.takibo.identitycore.domain.catalogrbac.TenantRoleCodePolicy;
 import com.takibo.identitycore.domain.rbac.model.GroupAssignment;
 import com.takibo.identitycore.domain.rbac.model.GroupSource;
@@ -49,8 +49,8 @@ import java.util.UUID;
 @Transactional(readOnly = true)
 public class EffectiveRbacQueryService implements EffectiveRbacQueryCase {
 
-    private static final Set<TechnicalScope> TENANT_VISIBLE_SCOPES =
-            EnumSet.of(TechnicalScope.ORGANIZATION, TechnicalScope.SPACE);
+    private static final Set<AuthorityPlan> TENANT_VISIBLE_PLANS =
+            EnumSet.of(AuthorityPlan.ORGANIZATION, AuthorityPlan.SPACE);
 
     private final GovernanceRoleAssignmentRepository roleAssignments;
     private final GovernanceGroupAssignmentRepository groupMemberships;
@@ -86,9 +86,10 @@ public class EffectiveRbacQueryService implements EffectiveRbacQueryCase {
                 .map(GroupAssignment::groupCode)
                 .map(TechnicalGroup::fromCode)
                 .flatMap(Optional::stream)
-                .filter(group -> TENANT_VISIBLE_SCOPES.contains(group.scope()))
+                .filter(group -> TENANT_VISIBLE_PLANS.contains(group.plan()))
                 .flatMap(group -> group.roles().stream())
-                .filter(role -> TENANT_VISIBLE_SCOPES.contains(role.scope()))
+                .filter(TechnicalRole::inheritable)
+                .filter(role -> TENANT_VISIBLE_PLANS.contains(role.plan()))
                 .map(TechnicalRole::code)
                 .forEach(roles::add);
 
@@ -111,7 +112,7 @@ public class EffectiveRbacQueryService implements EffectiveRbacQueryCase {
                 .map(TechnicalRole::fromCode)
                 .flatMap(Optional::stream)
                 .flatMap(role -> role.permissions().stream())
-                .filter(permission -> TENANT_VISIBLE_SCOPES.contains(permission.scope()))
+                .filter(permission -> TENANT_VISIBLE_PLANS.contains(permission.plan()))
                 .map(TechnicalGroup.TechnicalPermission::code)
                 .forEach(permissions::add);
 
@@ -149,9 +150,10 @@ public class EffectiveRbacQueryService implements EffectiveRbacQueryCase {
                 .map(GroupAssignment::groupCode)
                 .map(TechnicalGroup::fromCode)
                 .flatMap(Optional::stream)
-                .filter(group -> group.scope() == TechnicalScope.ORGANIZATION)
+                .filter(group -> group.plan() == AuthorityPlan.ORGANIZATION)
                 .flatMap(group -> group.roles().stream())
-                .filter(role -> role.scope() == TechnicalScope.ORGANIZATION)
+                .filter(TechnicalRole::inheritable)
+                .filter(role -> role.plan() == AuthorityPlan.ORGANIZATION)
                 .map(TechnicalRole::code)
                 .forEach(roles::add);
 
@@ -164,7 +166,7 @@ public class EffectiveRbacQueryService implements EffectiveRbacQueryCase {
                 .map(TechnicalRole::fromCode)
                 .flatMap(Optional::stream)
                 .flatMap(role -> role.permissions().stream())
-                .filter(permission -> permission.scope() == TechnicalScope.ORGANIZATION)
+                .filter(permission -> permission.plan() == AuthorityPlan.ORGANIZATION)
                 .map(TechnicalGroup.TechnicalPermission::code)
                 .forEach(permissions::add);
 
@@ -183,7 +185,7 @@ public class EffectiveRbacQueryService implements EffectiveRbacQueryCase {
             return false;
         }
         return TechnicalRole.fromCode(code)
-                .map(role -> role.scope() == TechnicalScope.ORGANIZATION)
+                .map(role -> role.plan() == AuthorityPlan.ORGANIZATION)
                 .orElse(false);
     }
 
@@ -192,7 +194,7 @@ public class EffectiveRbacQueryService implements EffectiveRbacQueryCase {
             return false;
         }
         return TechnicalGroup.fromCode(code)
-                .map(group -> group.scope() == TechnicalScope.ORGANIZATION)
+                .map(group -> group.plan() == AuthorityPlan.ORGANIZATION)
                 .orElse(false);
     }
 
@@ -217,7 +219,7 @@ public class EffectiveRbacQueryService implements EffectiveRbacQueryCase {
             return false;
         }
         return TechnicalRole.fromCode(code)
-                .map(role -> TENANT_VISIBLE_SCOPES.contains(role.scope()))
+                .map(role -> !role.selfService() && TENANT_VISIBLE_PLANS.contains(role.plan()))
                 .orElse(true);
     }
 
@@ -226,7 +228,7 @@ public class EffectiveRbacQueryService implements EffectiveRbacQueryCase {
             return false;
         }
         return TechnicalGroup.fromCode(code)
-                .map(group -> TENANT_VISIBLE_SCOPES.contains(group.scope()))
+                .map(group -> TENANT_VISIBLE_PLANS.contains(group.plan()))
                 .orElse(true);
     }
 }
