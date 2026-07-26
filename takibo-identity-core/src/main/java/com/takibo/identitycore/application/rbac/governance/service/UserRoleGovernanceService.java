@@ -4,6 +4,7 @@ import com.takibo.identitycore.application.rbac.governance.command.AssignUserRol
 import com.takibo.identitycore.application.rbac.governance.command.RemoveUserRoleCommand;
 import com.takibo.identitycore.application.rbac.governance.mapper.UserRbacGovernanceMapper;
 import com.takibo.identitycore.application.rbac.governance.port.in.UserRoleGovernanceCase;
+import com.takibo.identitycore.domain.catalogrbac.TenantRoleCodePolicy;
 import com.takibo.identitycore.domain.catalogrbac.TechnicalRole;
 import com.takibo.identitycore.domain.catalogrbac.TechnicalScope;
 import com.takibo.identitycore.domain.exception.DuplicateAssignmentException;
@@ -91,6 +92,9 @@ public class UserRoleGovernanceService implements UserRoleGovernanceCase {
         UUID actorAccountId = currentAccountContext.requireCurrentAccountId();
         User user = requireUserInSpace(key, command.userId());
         ResolvedRole role = resolveGovernableRole(key, command.roleCode());
+        if (role.source() != RoleSource.TECHNICAL) {
+            TenantRoleCodePolicy.requireTenantCode(role.code());
+        }
         assertNoScopeEscalation(key, actorAccountId, role);
 
         UUID targetAccountId = user.getAccountId().getValue();

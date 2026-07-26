@@ -8,6 +8,8 @@ import com.takibo.securitycontext.model.TenantScope;
 import com.takibo.securitycontext.model.TemporalContext;
 import com.takibo.securitycontext.spi.TakiboSecurityContextCarrier;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.security.access.AccessDeniedException;
@@ -43,7 +45,7 @@ class BoundaryMembershipServiceTest {
     private final BoundaryMembershipService service = new BoundaryMembershipService(jdbc);
 
     @Test
-    void orgOwnerAndOrgAdminAliases_bypassOrgMembershipWhenTokenOrgMatchesTargetOrg() {
+    void canonicalOrgOwnerAndOrgAdminAuthorities_bypassWhenTokenOrgMatchesTargetOrg() {
         List<String> roles = List.of("R_ORG_OWNER", "ROLE_R_ORG_OWNER", "R_ORG_ADMIN", "ROLE_R_ORG_ADMIN");
         for (String role : roles) {
             BoundaryMembershipService localService = new BoundaryMembershipService(jdbc);
@@ -69,14 +71,41 @@ class BoundaryMembershipServiceTest {
     }
 
     @Test
-    void platformAdminAliases_bypassWithoutResolvingSpace() {
-        for (String role : List.of("R_PLATFORM_ADMIN", "ROLE_R_PLATFORM_ADMIN")) {
+    void canonicalPlatformAdminAuthorities_bypassWithoutResolvingSpace() {
+        for (String role : List.of("R_TAKIBO_PLATFORM_ADMIN", "ROLE_R_TAKIBO_PLATFORM_ADMIN")) {
             BoundaryMembershipService localService = new BoundaryMembershipService(jdbc);
 
             localService.assertActorInSpaceOrg(SPACE_ID, authentication(role, null));
 
             verify(jdbc, never()).queryForObject(anyString(), any(RowMapper.class), any());
         }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"ORG_OWNER", "ROLE_ORG_OWNER", "ORG_ADMIN", "ROLE_ORG_ADMIN"})
+    void legacyOrgAuthorities_doNotBypassMembership(String role) {
+        resolveSpaceOrg(ORG_ID);
+        when(jdbc.queryForObject(contains("WHERE u.id = ?"), eq(Integer.class), eq(USER_ID), eq(ORG_ID)))
+                .thenReturn(0);
+
+        assertThatThrownBy(() -> service.assertActorInSpaceOrg(SPACE_ID, authentication(role, ORG_ID)))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessage("ACTOR_NOT_IN_SPACE_ORG");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "PLATFORM_ADMIN", "ROLE_PLATFORM_ADMIN",
+            "R_PLATFORM_ADMIN", "ROLE_R_PLATFORM_ADMIN"
+    })
+    void phantomPlatformAdminAuthorities_doNotBypassMembership(String role) {
+        resolveSpaceOrg(ORG_ID);
+        when(jdbc.queryForObject(contains("WHERE u.id = ?"), eq(Integer.class), eq(USER_ID), eq(ORG_ID)))
+                .thenReturn(0);
+
+        assertThatThrownBy(() -> service.assertActorInSpaceOrg(SPACE_ID, authentication(role, ORG_ID)))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessage("ACTOR_NOT_IN_SPACE_ORG");
     }
 
     private void resolveSpaceOrg(UUID orgId) {

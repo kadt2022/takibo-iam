@@ -1,5 +1,6 @@
 package com.takibo.identitycore.domain.model;
 
+import com.takibo.identitycore.domain.catalogrbac.TenantRoleCodePolicy;
 import com.takibo.identitycore.domain.vo.RoleId;
 import com.takibo.identitycore.domain.vo.SpaceId;
 import lombok.Builder;
@@ -49,6 +50,7 @@ public class Role {
         Objects.requireNonNull(spaceId, "spaceId");
         Objects.requireNonNull(code, "code");
         Objects.requireNonNull(name, "name");
+        TenantRoleCodePolicy.requireTenantCode(code);
         Instant now = Instant.now();
         return Role.builder()
                 .id(RoleId.generate())

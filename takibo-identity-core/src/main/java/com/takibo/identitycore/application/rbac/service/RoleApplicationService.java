@@ -1,6 +1,7 @@
 // tis-core/application/service/RoleApplicationService.java
 package com.takibo.identitycore.application.rbac.service;
 
+import com.takibo.identitycore.domain.catalogrbac.TenantRoleCodePolicy;
 import com.takibo.identitycore.integration.space.port.SpaceStatusCheckerCase;
 import com.takibo.identitycore.domain.model.Role;
 import com.takibo.identitycore.domain.vo.SpaceId;
@@ -22,6 +23,7 @@ public class RoleApplicationService {
 
     @Transactional
     public void ensure(SpaceId spaceId, String code, String name, String description) {
+        TenantRoleCodePolicy.requireTenantCode(code);
         spaceStatusCheckerCase.assertSpaceExistsAndActive(spaceId.getValue());
         if (roleRepository.findBySpaceIdAndCode(spaceId, code).isPresent()) {
             return;
@@ -37,6 +39,7 @@ public class RoleApplicationService {
     }
 
     public UUID ensureRole(UUID spaceId, String code, String name, String desc) {
+        TenantRoleCodePolicy.requireTenantCode(code);
         Optional<UUID> existingId = roleRepository.findIdBySpaceIdAndCode(SpaceId.of(spaceId), code);
         if (existingId.isPresent()) return existingId.get();
 

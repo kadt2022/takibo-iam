@@ -54,6 +54,8 @@ class ActuatorSecurityIntegrationTest {
                 .thenReturn(humanClaims("R_ORG_ADMIN", true));
         when(tokenValidatorAdapter.validate("platform-admin-token"))
                 .thenReturn(humanClaims("R_TAKIBO_PLATFORM_ADMIN", false));
+        when(tokenValidatorAdapter.validate("phantom-platform-admin-token"))
+                .thenReturn(humanClaims("PLATFORM_ADMIN", false));
         when(messagingHealthIndicator.health()).thenReturn(Health.up().build());
         when(outboxHealthIndicator.health()).thenReturn(Health.up().build());
     }
@@ -84,6 +86,13 @@ class ActuatorSecurityIntegrationTest {
                         .header("Authorization", "Bearer platform-admin-token"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.propertySources").isArray());
+    }
+
+    @Test
+    void phantomPlatformAdminRole_cannotAccessDiagnostics() throws Exception {
+        mockMvc.perform(get("/actuator/env")
+                        .header("Authorization", "Bearer phantom-platform-admin-token"))
+                .andExpect(status().isForbidden());
     }
 
     @Test

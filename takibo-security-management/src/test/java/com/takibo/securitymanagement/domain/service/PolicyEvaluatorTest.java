@@ -92,7 +92,7 @@ class PolicyEvaluatorTest {
 
     @Test
     void dashboard_platformAdmin_denied() {
-        PolicyDecision decision = evaluateDashboard(orgHuman(Set.of("R_PLATFORM_ADMIN")));
+        PolicyDecision decision = evaluateDashboard(orgHuman(Set.of("R_TAKIBO_PLATFORM_ADMIN")));
         assertThat(decision.isDeny()).isTrue();
         assertThat(decision.getPolicyId()).isEqualTo("POL_ORG_DASHBOARD_ADMIN_REQUIRED");
     }
@@ -151,15 +151,17 @@ class PolicyEvaluatorTest {
         assertThat(evaluateCreateUser(Set.of("R_SPACE_ADMIN")).isDeny()).isFalse();
         assertThat(evaluateCreateUser(Set.of("R_ORG_OWNER")).isDeny()).isFalse();
         assertThat(evaluateCreateUser(Set.of("R_ORG_ADMIN")).isDeny()).isFalse();
-        assertThat(evaluateCreateUser(Set.of("R_PLATFORM_ADMIN")).isDeny()).isFalse();
+        assertThat(evaluateCreateUser(Set.of("R_TAKIBO_PLATFORM_ADMIN")).isDeny()).isFalse();
         assertThat(evaluateCreateUser(Set.of("R_ORG_OWNER", "R_SPACE_ADMIN")).isDeny()).isFalse();
     }
 
     @Test
-    void legacyAliases_remainAccepted() {
-        assertThat(evaluateCreateUser(Set.of("SPACE_ADMIN")).isDeny()).isFalse();
-        assertThat(evaluateCreateUser(Set.of("ORG_ADMIN")).isDeny()).isFalse();
-        assertThat(evaluateCreateUser(Set.of("PLATFORM_ADMIN")).isDeny()).isFalse();
+    void phantomAndLegacyAliases_areDenied() {
+        for (String alias : new String[]{
+                "PLATFORM_ADMIN", "R_PLATFORM_ADMIN", "ROLE_PLATFORM_ADMIN",
+                "ORG_OWNER", "ORG_ADMIN", "SPACE_ADMIN"}) {
+            assertThat(evaluateCreateUser(Set.of(alias)).isDeny()).as(alias).isTrue();
+        }
     }
 
     @Test
@@ -292,7 +294,7 @@ class PolicyEvaluatorTest {
     @Test
     void currentUserSpaces_deniesPlatformOrServiceTokens() {
         for (Subject subject : java.util.List.of(
-                new Subject("platform", Set.of("R_PLATFORM_ADMIN"), Set.of(), ORG, null,
+                new Subject("platform", Set.of("R_TAKIBO_PLATFORM_ADMIN"), Set.of(), ORG, null,
                         "PLATFORM", "ORGANIZATION", null),
                 new Subject("client", Set.of(), Set.of(), ORG, null,
                         "SERVICE", "ORGANIZATION", null))) {
@@ -486,7 +488,7 @@ class PolicyEvaluatorTest {
 
     @Test
     void tmsSpaceSurface_platformTokenWithoutOrg_denied() {
-        Subject platform = new Subject("actor", Set.of("R_PLATFORM_ADMIN"), Set.of(), null, null,
+        Subject platform = new Subject("actor", Set.of("R_TAKIBO_PLATFORM_ADMIN"), Set.of(), null, null,
                 "HUMAN", "PLATFORM", ACCOUNT);
         PolicyDecision decision = evaluateTmsRoute(platform, TMS_SPACES_PATH, Action.READ);
 
@@ -551,8 +553,7 @@ class PolicyEvaluatorTest {
     void oauthClients_create_allowedForTenantAdminOfTargetSpace() {
         // R_SPACE_ADMIN du space cible, R_ORG_ADMIN et R_ORG_OWNER porteurs d'un
         // token SPACE du space cible : le rôle autorise, la frontière reste le token.
-        for (String role : new String[]{"R_SPACE_ADMIN", "R_ORG_ADMIN", "R_ORG_OWNER",
-                "SPACE_ADMIN", "ORG_ADMIN", "ORG_OWNER"}) {
+        for (String role : new String[]{"R_SPACE_ADMIN", "R_ORG_ADMIN", "R_ORG_OWNER"}) {
             for (String path : new String[]{CLIENTS_PATH, ROTATE_PATH}) {
                 PolicyDecision decision = evaluateTmsRoute(subject(Set.of(role)), path, Action.CREATE);
                 assertThat(decision.isPermit()).as(role + " " + path).isTrue();
@@ -617,7 +618,7 @@ class PolicyEvaluatorTest {
     @Test
     void oauthClients_platformToken_denied() {
         PolicyDecision decision = evaluateTmsRoute(
-                human(Set.of("R_PLATFORM_ADMIN"), null, null), CLIENTS_PATH, Action.CREATE);
+                human(Set.of("R_TAKIBO_PLATFORM_ADMIN"), null, null), CLIENTS_PATH, Action.CREATE);
 
         assertDeniedBy(decision, "POL_ORG_MISMATCH");
     }

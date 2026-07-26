@@ -34,7 +34,7 @@ public class DefaultThresholdPolicy implements ThresholdPolicy {
             }
         }
         
-        if (request.roles() != null && request.roles().contains("PLATFORM_ADMIN")) {
+        if (request.roles() != null && request.roles().contains("R_TAKIBO_PLATFORM_ADMIN")) {
             denyThreshold -= 10.0;
             adjustments.add("admin role");
         }

@@ -1,5 +1,6 @@
 package com.takibo.identitycore.infrastructure.adapter;
 
+import com.takibo.identitycore.domain.catalogrbac.TenantRoleCodePolicy;
 import com.takibo.identitycore.domain.model.Role;
 import com.takibo.identitycore.domain.model.RoleNature;
 import com.takibo.identitycore.domain.repository.RoleRepository;
@@ -63,6 +64,7 @@ public class RoleRepositoryAdapter implements RoleRepository {
 
     @Override
     public Role save(Role role) {
+        TenantRoleCodePolicy.requireTenantCode(role.getCode());
         RoleEntity entity = roleJpaMapper.toEntity(role);
         jpa.save(entity);
         return role;

@@ -41,9 +41,9 @@ public class SecurityAccessTestController {
     }
 
     @GetMapping("/org-admin")
-    @PreAuthorize("hasRole('ORG_ADMIN')")
+    @PreAuthorize("hasRole('R_ORG_ADMIN')")
     public ResponseEntity<?> orgAdminOnly(Authentication authentication) {
-        return ResponseEntity.ok(securityDebugService.snapshot(authentication, "ROLE_ORG_ADMIN", null));
+        return ResponseEntity.ok(securityDebugService.snapshot(authentication, "ROLE_R_ORG_ADMIN", null));
     }
 
     @GetMapping("/deny")
@@ -59,7 +59,7 @@ public class SecurityAccessTestController {
     }
 
     @GetMapping("/hello-org-admin")
-    @PreAuthorize("hasRole('ORG_ADMIN')")
+    @PreAuthorize("hasRole('R_ORG_ADMIN')")
     public ResponseEntity<?> helloOrgAdmin() {
         return ResponseEntity.ok(Map.of("message", "Bonjour Capitaine Pi de la part du CP"));
     }

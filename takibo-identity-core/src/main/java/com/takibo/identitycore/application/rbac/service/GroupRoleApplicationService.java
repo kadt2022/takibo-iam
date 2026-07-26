@@ -1,5 +1,6 @@
 package com.takibo.identitycore.application.rbac.service;
 
+import com.takibo.identitycore.domain.catalogrbac.TenantRoleCodePolicy;
 import com.takibo.identitycore.domain.exception.UserCreationException;
 import com.takibo.identitycore.domain.model.Group;
 import com.takibo.identitycore.domain.model.GroupRole;
@@ -29,6 +30,7 @@ public class GroupRoleApplicationService {
 
         Role role = roleRepository.findById(RoleId.of(roleId))
                 .orElseThrow(() -> new UserCreationException("Role not found: " + roleId));
+        TenantRoleCodePolicy.requireTenantCode(role.getCode());
 
         if (!group.getNature().name().equals(role.getNature().name())) {
             throw new UserCreationException(

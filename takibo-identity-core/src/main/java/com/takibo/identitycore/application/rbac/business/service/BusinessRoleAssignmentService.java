@@ -1,5 +1,6 @@
 package com.takibo.identitycore.application.rbac.business.service;
 
+import com.takibo.identitycore.domain.catalogrbac.TenantRoleCodePolicy;
 import com.takibo.identitycore.domain.exception.UserCreationException;
 import com.takibo.identitycore.domain.model.Role;
 import com.takibo.identitycore.domain.rbac.model.BusinessRoleAssignment;
@@ -39,6 +40,7 @@ public class BusinessRoleAssignmentService {
         if (roleCodes.isEmpty()) {
             return;
         }
+        roleCodes.forEach(TenantRoleCodePolicy::requireTenantCode);
 
         UUID identityId = takiboIdentityRepository
                 .lockAndFindIdentityIdByOrgIdAndAccountId(orgId, accountId)
