@@ -210,6 +210,19 @@ class UserRoleGovernanceServiceTest {
     }
 
     @Test
+    void assign_nonAssignableOrganizationOwner_doesNotExistOnThisSurface() {
+        stubActor();
+        stubTargetUser();
+
+        assertThatThrownBy(() -> service.assignRole(
+                KEY, new AssignUserRoleCommand(USER_ID, "R_ORG_OWNER", null)))
+                .isInstanceOf(RoleNotFoundException.class)
+                .hasMessageContaining("R_ORG_OWNER");
+
+        verify(assignments, never()).saveGovernanceAssignment(any());
+    }
+
+    @Test
     void assign_userOutsideSpace_isNotFound_antiEnumeration() {
         stubActor();
         User foreignUser = User.builder()

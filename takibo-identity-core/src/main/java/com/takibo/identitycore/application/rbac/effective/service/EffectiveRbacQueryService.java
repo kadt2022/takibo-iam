@@ -88,6 +88,7 @@ public class EffectiveRbacQueryService implements EffectiveRbacQueryCase {
                 .flatMap(Optional::stream)
                 .filter(group -> TENANT_VISIBLE_PLANS.contains(group.plan()))
                 .flatMap(group -> group.roles().stream())
+                .filter(TechnicalRole::inheritable)
                 .filter(role -> TENANT_VISIBLE_PLANS.contains(role.plan()))
                 .map(TechnicalRole::code)
                 .forEach(roles::add);
@@ -151,6 +152,7 @@ public class EffectiveRbacQueryService implements EffectiveRbacQueryCase {
                 .flatMap(Optional::stream)
                 .filter(group -> group.plan() == AuthorityPlan.ORGANIZATION)
                 .flatMap(group -> group.roles().stream())
+                .filter(TechnicalRole::inheritable)
                 .filter(role -> role.plan() == AuthorityPlan.ORGANIZATION)
                 .map(TechnicalRole::code)
                 .forEach(roles::add);

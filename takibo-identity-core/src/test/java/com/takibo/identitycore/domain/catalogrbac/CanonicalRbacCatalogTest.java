@@ -56,6 +56,13 @@ class CanonicalRbacCatalogTest {
     }
 
     @Test
+    void spaceAuditor_hasCompatibleAuditPermissionsUntilCanonicalMatrixIsActive() {
+        assertThat(TechnicalRole.SPACE_AUDITOR.permissions())
+                .extracting(TechnicalGroup.TechnicalPermission::code)
+                .containsExactlyInAnyOrder("P_READ_AUDIT_LOGS", "P_EXPORT_AUDIT_LOGS");
+    }
+
+    @Test
     void administratorCharacteristic_distinguishesAdministratorsFromAuditors() {
         assertThat(TechnicalRole.canonicalValues())
                 .filteredOn(TechnicalRole::administrator)

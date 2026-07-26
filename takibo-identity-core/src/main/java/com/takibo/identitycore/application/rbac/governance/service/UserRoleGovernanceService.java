@@ -4,9 +4,9 @@ import com.takibo.identitycore.application.rbac.governance.command.AssignUserRol
 import com.takibo.identitycore.application.rbac.governance.command.RemoveUserRoleCommand;
 import com.takibo.identitycore.application.rbac.governance.mapper.UserRbacGovernanceMapper;
 import com.takibo.identitycore.application.rbac.governance.port.in.UserRoleGovernanceCase;
+import com.takibo.identitycore.domain.catalogrbac.AuthorityPlan;
 import com.takibo.identitycore.domain.catalogrbac.TenantRoleCodePolicy;
 import com.takibo.identitycore.domain.catalogrbac.TechnicalRole;
-import com.takibo.identitycore.domain.catalogrbac.AuthorityPlan;
 import com.takibo.identitycore.domain.exception.DuplicateAssignmentException;
 import com.takibo.identitycore.domain.exception.LastAdminRemovalException;
 import com.takibo.identitycore.domain.exception.RoleNotFoundException;
@@ -92,6 +92,9 @@ public class UserRoleGovernanceService implements UserRoleGovernanceCase {
         UUID actorAccountId = currentAccountContext.requireCurrentAccountId();
         User user = requireUserInSpace(key, command.userId());
         ResolvedRole role = resolveGovernableRole(key, command.roleCode());
+        if (!role.assignable()) {
+            throw new RoleNotFoundException("Role not found in this space: " + role.code());
+        }
         if (role.source() != RoleSource.TECHNICAL) {
             TenantRoleCodePolicy.requireTenantCode(role.code());
         }
@@ -178,7 +181,7 @@ public class UserRoleGovernanceService implements UserRoleGovernanceCase {
             if (role.selfService() || !ASSIGNABLE_PLANS.contains(role.plan())) {
                 throw new RoleNotFoundException("Role not found in this space: " + roleCode);
             }
-            return new ResolvedRole(role.code(), RoleSource.TECHNICAL, role.plan());
+            return new ResolvedRole(role.code(), RoleSource.TECHNICAL, role.plan(), role.assignable());
         }
 
         return roleRepository.findBySpaceIdAndCode(SpaceId.of(key.spaceId()), roleCode)
@@ -187,7 +190,8 @@ public class UserRoleGovernanceService implements UserRoleGovernanceCase {
                         throw new RoleTypeNotAllowedException(
                                 "Business role " + roleCode + " is not assignable on the governance surface");
                     }
-                    return new ResolvedRole(dbRole.getCode(), RoleSource.GOVERNANCE, AuthorityPlan.SPACE);
+                    return new ResolvedRole(
+                            dbRole.getCode(), RoleSource.GOVERNANCE, AuthorityPlan.SPACE, true);
                 })
                 .orElseThrow(() -> new RoleNotFoundException("Role not found in this space: " + roleCode));
     }
@@ -214,5 +218,10 @@ public class UserRoleGovernanceService implements UserRoleGovernanceCase {
                 assignments.findDirectAssignments(key.orgId(), key.spaceId(), user.getAccountId().getValue()));
     }
 
-    private record ResolvedRole(String code, RoleSource source, AuthorityPlan plan) {}
+    private record ResolvedRole(
+            String code,
+            RoleSource source,
+            AuthorityPlan plan,
+            boolean assignable
+    ) {}
 }

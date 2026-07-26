@@ -193,7 +193,10 @@ public enum TechnicalRole {
             SPACE,
             new RoleCharacteristics(true, true, false),
             false,
-            Set.of()
+            Set.of(
+                    READ_AUDIT_LOGS,
+                    EXPORT_AUDIT_LOGS
+            )
     ),
 
     @Deprecated(since = "RBAC-01")
