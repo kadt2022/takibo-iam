@@ -56,7 +56,7 @@ class CanonicalRbacCatalogTest {
     }
 
     @Test
-    void spaceAuditor_hasCompatibleAuditPermissionsUntilCanonicalMatrixIsActive() {
+    void spaceAuditor_keepsLegacyAuditPermissionsUntilEffectiveRbacIsMigrated() {
         assertThat(TechnicalRole.SPACE_AUDITOR.permissions())
                 .extracting(TechnicalGroup.TechnicalPermission::code)
                 .containsExactlyInAnyOrder("P_READ_AUDIT_LOGS", "P_EXPORT_AUDIT_LOGS");

@@ -27,8 +27,8 @@ import static com.takibo.identitycore.domain.catalogrbac.AuthorityPlan.SPACE;
 /**
  * Canonical RBAC permission vocabulary.
  *
- * <p>This enum deliberately does not map permissions to roles. That matrix belongs to
- * RBAC-02; RBAC-01 only defines the three-plane vocabulary.</p>
+ * <p>This enum deliberately does not map permissions to roles. The normative matrix
+ * lives exclusively in {@link RolePermissionCatalog}.</p>
  */
 public enum TechnicalPermission {
 
