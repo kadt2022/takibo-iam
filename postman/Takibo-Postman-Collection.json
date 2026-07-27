@@ -1,0 +1,5506 @@
+{
+  "info": {
+    "name": "Takibo-Postman-Collection",
+    "description": "BVT unique de TAKIBO. Convention : <CODE HTTP> - <Action> - <Resultat attendu>. Chaque nom de requete et chaque assertion portent le code HTTP reel du contrat. Aucun code approximatif, aucun 2xx generique.\n\nTR1 : boot, signup, authentification, utilisateurs, lifecycle.\nTR2 : catalogue RBAC, attribution de roles, groupes et heritage, frontieres et permissions effectives.\nTR3 : spaces, clients OAuth2, surface plateforme, nettoyage.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Identifiant unique par execution : la collection est rejouable sans nettoyage.",
+          "if (!pm.collectionVariables.get('runId')) {",
+          "    var runId = Date.now().toString(36) + Math.floor(Math.random() * 1000);",
+          "    pm.collectionVariables.set('runId', runId);",
+          "    pm.collectionVariables.set('orgCode', 'bvt-org-' + runId);",
+          "    pm.collectionVariables.set('orgCode2', 'bvt-org2-' + runId);",
+          "    pm.collectionVariables.set('orgCodeUpper', ('bvt-org-' + runId).toUpperCase());",
+          "    pm.collectionVariables.set('spaceCode', 'finance');",
+          "}",
+          "// Helpers partages : evalues par chaque script de test via eval().",
+          "pm.collectionVariables.set('takiboHelpers', \"\\ntakibo = {\\n  base64Url: function (value) {\\n    var normalized = value.replace(/-/g, '+').replace(/_/g, '/');\\n    var padding = '='.repeat((4 - normalized.length % 4) % 4);\\n    return Buffer.from(normalized + padding, 'base64').toString('utf8');\\n  },\\n  jwt: function (token) {\\n    var parts = token.split('.');\\n    if (parts.length !== 3) {\\n      throw new Error('Token JWT invalide');\\n    }\\n    return JSON.parse(takibo.base64Url(parts[1]));\\n  },\\n  claimsOf: function (varName) {\\n    return takibo.jwt(pm.collectionVariables.get(varName));\\n  },\\n  assertErrorContract: function (expectedCode) {\\n    var body = pm.response.json();\\n    pm.expect(body.code, 'code Sentinel').to.eql(expectedCode);\\n    pm.expect(body.traceId, 'traceId absent du contrat d erreur').to.exist;\\n    pm.expect(body.status, 'status incoherent dans le corps').to.eql(pm.response.code);\\n    pm.expect(JSON.stringify(body), 'fuite de stacktrace').to.not.include('Exception');\\n  },\\n  require: function (names) {\\n    names.forEach(function (n) {\\n      if (!pm.collectionVariables.get(n)) {\\n        throw new Error('PREREQUIS MANQUANT: ' + n + ' - executer les sagas precedentes');\\n      }\\n    });\\n  }\\n};\\n\");"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8081"
+    },
+    {
+      "key": "postmanSecret",
+      "value": ""
+    },
+    {
+      "key": "runId",
+      "value": ""
+    },
+    {
+      "key": "orgCode",
+      "value": ""
+    },
+    {
+      "key": "orgCode2",
+      "value": ""
+    },
+    {
+      "key": "orgCodeUpper",
+      "value": ""
+    },
+    {
+      "key": "spaceCode",
+      "value": "finance"
+    },
+    {
+      "key": "platform_access_token",
+      "value": ""
+    },
+    {
+      "key": "founder_access_token",
+      "value": ""
+    },
+    {
+      "key": "founder_org_token",
+      "value": ""
+    },
+    {
+      "key": "employee_access_token",
+      "value": ""
+    },
+    {
+      "key": "employee_org_token",
+      "value": ""
+    },
+    {
+      "key": "founder2_org_token",
+      "value": ""
+    },
+    {
+      "key": "spaceCodeB",
+      "value": ""
+    },
+    {
+      "key": "spaceIdB",
+      "value": ""
+    },
+    {
+      "key": "clientDbId",
+      "value": ""
+    },
+    {
+      "key": "clientSecret",
+      "value": ""
+    },
+    {
+      "key": "founder2UserId",
+      "value": ""
+    },
+    {
+      "key": "organizationId",
+      "value": ""
+    },
+    {
+      "key": "organizationId2",
+      "value": ""
+    },
+    {
+      "key": "spaceId",
+      "value": ""
+    },
+    {
+      "key": "spaceId2",
+      "value": ""
+    },
+    {
+      "key": "employeeUserId",
+      "value": ""
+    },
+    {
+      "key": "lifecycleUserId",
+      "value": ""
+    },
+    {
+      "key": "uniform401",
+      "value": ""
+    },
+    {
+      "key": "takiboHelpers",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "00 - Boot et environnement",
+      "item": [
+        {
+          "name": "200 - Health - Application disponible",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "health"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 - Health - Application disponible', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().status).to.eql('UP');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Token PLATFORM - Client machine authentifie",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "postman-client"
+                },
+                {
+                  "key": "password",
+                  "value": "{{postmanSecret}}"
+                }
+              ]
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "client_credentials"
+                },
+                {
+                  "key": "scope",
+                  "value": "api.read api.write"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/oauth2/token",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "oauth2",
+                "token"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Token PLATFORM - Client machine authentifie', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().access_token).to.exist;",
+                  "});",
+                  "pm.collectionVariables.set('platform_access_token', pm.response.json().access_token);",
+                  "pm.test('200 - Token PLATFORM - Aucune frontiere tenant usurpee', function () {",
+                  "    var c = takibo.claimsOf('platform_access_token');",
+                  "    pm.expect(c.org_id, 'un token PLATFORM ne porte jamais d org_id').to.be.undefined;",
+                  "    pm.expect(c.space_id, 'un token PLATFORM ne porte jamais de space_id').to.be.undefined;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "01 - Signup et validations",
+      "item": [
+        {
+          "name": "201 - Signup - Organisation, space et fondateur crees",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{platform_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/signup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "signup"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organization\": { \"code\": \"{{orgCode}}\", \"name\": \"Takibo\" },\n  \"space\":        { \"code\": \"{{spaceCode}}\", \"name\": \"Finance\", \"description\": \"Espace finance\" },\n  \"account\":      { \"email\": \"founder@takibo.io\", \"password\": \"Str0ng!Passw0rd\" },\n  \"profile\":      { \"username\": \"founder\", \"firstName\": \"Tresor\", \"lastName\": \"Kadima\" }\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('201 - Signup - Organisation, space et fondateur crees', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "    var b = pm.response.json();",
+                  "    pm.expect(b.organizationId, 'organizationId').to.exist;",
+                  "    pm.expect(b.spaceId, 'spaceId').to.exist;",
+                  "    pm.expect(b.accountId, 'accountId').to.exist;",
+                  "    pm.expect(b.userId, 'userId').to.exist;",
+                  "});",
+                  "var b = pm.response.json();",
+                  "pm.collectionVariables.set('organizationId', b.organizationId);",
+                  "pm.collectionVariables.set('spaceId', b.spaceId);",
+                  "pm.collectionVariables.set('founderAccountId', b.accountId);",
+                  "pm.collectionVariables.set('founderUserId', b.userId);",
+                  "pm.test('201 - Signup - Aucune cle machine reemise', function () {",
+                  "    pm.expect(pm.response.json().initialClient).to.be.undefined;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "201 - Signup - Deuxieme organisation, meme nom, code different",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{platform_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/signup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "signup"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organization\": { \"code\": \"{{orgCode2}}\", \"name\": \"Takibo\" },\n  \"space\":        { \"code\": \"{{spaceCode}}\", \"name\": \"Finance\", \"description\": \"Espace finance\" },\n  \"account\":      { \"email\": \"founder2@takibo.io\", \"password\": \"Str0ng!Passw0rd\" },\n  \"profile\":      { \"username\": \"founder2\", \"firstName\": \"Tresor\", \"lastName\": \"Kadima\" }\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('201 - Signup - Deuxieme organisation, meme nom, code different', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "var b = pm.response.json();",
+                  "pm.collectionVariables.set('organizationId2', b.organizationId);",
+                  "pm.collectionVariables.set('spaceId2', b.spaceId);",
+                  "pm.collectionVariables.set('founder2UserId', b.userId);",
+                  "pm.test('201 - Signup - Le nom n est pas un identifiant, seul le code l est', function () {",
+                  "    pm.expect(b.organizationId).to.not.eql(pm.collectionVariables.get('organizationId'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "409 - Signup - Code organisation deja pris",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{platform_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/signup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "signup"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organization\": { \"code\": \"{{orgCode}}\", \"name\": \"Takibo\" },\n  \"space\":        { \"code\": \"{{spaceCode}}\", \"name\": \"Finance\", \"description\": \"Espace finance\" },\n  \"account\":      { \"email\": \"other@takibo.io\", \"password\": \"Str0ng!Passw0rd\" },\n  \"profile\":      { \"username\": \"other\", \"firstName\": \"Tresor\", \"lastName\": \"Kadima\" }\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('409 - Signup - Code organisation deja pris', function () {",
+                  "    pm.response.to.have.status(409);",
+                  "    takibo.assertErrorContract('ORGANIZATION_ALREADY_EXISTS');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "409 - Signup - Code organisation identique a la casse pres",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{platform_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/signup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "signup"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organization\": { \"code\": \"{{orgCodeUpper}}\", \"name\": \"Takibo\" },\n  \"space\":        { \"code\": \"{{spaceCode}}\", \"name\": \"Finance\", \"description\": \"Espace finance\" },\n  \"account\":      { \"email\": \"upper@takibo.io\", \"password\": \"Str0ng!Passw0rd\" },\n  \"profile\":      { \"username\": \"upper\", \"firstName\": \"Tresor\", \"lastName\": \"Kadima\" }\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('409 - Signup - Code organisation identique a la casse pres', function () {",
+                  "    pm.response.to.have.status(409);",
+                  "    takibo.assertErrorContract('ORGANIZATION_ALREADY_EXISTS');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "403 - Signup - organization.id renseigne refuse",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{platform_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/signup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "signup"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organization\": { \"id\": \"{{organizationId}}\", \"code\": \"{{orgCode}}\", \"name\": \"Takibo\" },\n  \"space\":        { \"code\": \"intrusion\", \"name\": \"Intrusion\" },\n  \"account\":      { \"email\": \"intruder@takibo.io\", \"password\": \"Str0ng!Passw0rd\" },\n  \"profile\":      { \"username\": \"intruder\", \"firstName\": \"In\", \"lastName\": \"Truder\" }\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('403 - Signup - organization.id renseigne refuse', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "401 - Login - Aucun effet de bord apres signup refuse",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"intruder@takibo.io\",\n  \"password\": \"Str0ng!Passw0rd\",\n  \"orgCode\": \"{{orgCode}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('401 - Login - Aucun effet de bord apres signup refuse', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "400 - Signup - Code organisation trop court",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{platform_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/signup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "signup"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organization\": { \"code\": \"ab\", \"name\": \"Takibo\" },\n  \"space\":        { \"code\": \"{{spaceCode}}\", \"name\": \"Finance\", \"description\": \"Espace finance\" },\n  \"account\":      { \"email\": \"short@takibo.io\", \"password\": \"Str0ng!Passw0rd\" },\n  \"profile\":      { \"username\": \"short\", \"firstName\": \"Tresor\", \"lastName\": \"Kadima\" }\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('400 - Signup - Code organisation trop court', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "400 - Signup - Email invalide",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{platform_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/signup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "signup"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organization\": { \"code\": \"{{orgCode}}-mail\", \"name\": \"Takibo\" },\n  \"space\":        { \"code\": \"{{spaceCode}}\", \"name\": \"Finance\", \"description\": \"Espace finance\" },\n  \"account\":      { \"email\": \"pas-un-email\", \"password\": \"Str0ng!Passw0rd\" },\n  \"profile\":      { \"username\": \"bademail\", \"firstName\": \"Tresor\", \"lastName\": \"Kadima\" }\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('400 - Signup - Email invalide', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "400 - Signup - Mot de passe hors politique",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{platform_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/signup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "signup"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organization\": { \"code\": \"{{orgCode}}-pwd\", \"name\": \"Takibo\" },\n  \"space\":        { \"code\": \"{{spaceCode}}\", \"name\": \"Finance\", \"description\": \"Espace finance\" },\n  \"account\":      { \"email\": \"weak@takibo.io\", \"password\": \"123\" },\n  \"profile\":      { \"username\": \"weakpwd\", \"firstName\": \"Tresor\", \"lastName\": \"Kadima\" }\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('400 - Signup - Mot de passe hors politique', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "400 - Signup - Payload imbrique incomplet",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{platform_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/signup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "signup"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organization\": { \"code\": \"{{orgCode}}-inc\", \"name\": \"Incomplet\" }\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('400 - Signup - Payload imbrique incomplet', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "400 - Signup - Nom d organisation absent",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{platform_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/signup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "signup"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organization\": { \"code\": \"{{orgCode}}-noname\" },\n  \"space\":        { \"code\": \"finance\", \"name\": \"Finance\" },\n  \"account\":      { \"email\": \"noname@takibo.io\", \"password\": \"Str0ng!Passw0rd\" },\n  \"profile\":      { \"username\": \"noname\", \"firstName\": \"No\", \"lastName\": \"Name\" }\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('400 - Signup - Nom d organisation absent', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 - Authentification humaine",
+      "item": [
+        {
+          "name": "200 - Login fondateur - Triplet avec spaceCode donne un token SPACE",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"founder@takibo.io\",\n  \"password\": \"Str0ng!Passw0rd\",\n  \"orgCode\": \"{{orgCode}}\",\n  \"spaceCode\": \"{{spaceCode}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Login fondateur - Triplet avec spaceCode donne un token SPACE', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().accessToken).to.exist;",
+                  "});",
+                  "pm.collectionVariables.set('founder_access_token', pm.response.json().accessToken);",
+                  "pm.test('200 - Token fondateur - Frontiere SPACE complete et acteur humain', function () {",
+                  "    var c = takibo.claimsOf('founder_access_token');",
+                  "    pm.expect(c.org_id).to.eql(pm.collectionVariables.get('organizationId'));",
+                  "    pm.expect(c.space_id).to.eql(pm.collectionVariables.get('spaceId'));",
+                  "    pm.expect(c.subject_type).to.eql('HUMAN');",
+                  "});",
+                  "pm.test('200 - Token fondateur - R_ORG_OWNER present', function () {",
+                  "    pm.expect(takibo.claimsOf('founder_access_token').roles).to.include('R_ORG_OWNER');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Login fondateur - Sans spaceCode donne un token ORGANIZATION",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"founder@takibo.io\",\n  \"password\": \"Str0ng!Passw0rd\",\n  \"orgCode\": \"{{orgCode}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Login fondateur - Sans spaceCode donne un token ORGANIZATION', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.collectionVariables.set('founder_org_token', pm.response.json().accessToken);",
+                  "pm.test('200 - Token ORGANIZATION - org_id present, space_id absent', function () {",
+                  "    var c = takibo.claimsOf('founder_org_token');",
+                  "    pm.expect(c.org_id).to.eql(pm.collectionVariables.get('organizationId'));",
+                  "    pm.expect(c.space_id, 'un token ORGANIZATION ne porte pas de space_id').to.not.exist;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "401 - Login - Organisation inexistante",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"founder@takibo.io\",\n  \"password\": \"Str0ng!Passw0rd\",\n  \"orgCode\": \"org-qui-nexiste-pas\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('401 - Login - Organisation inexistante', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "    takibo.assertErrorContract('AUTHENTICATION_FAILED');",
+                  "});",
+                  "// Reponse de reference : les deux echecs suivants doivent lui etre identiques.",
+                  "pm.collectionVariables.set('uniform401', pm.response.json().message);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "401 - Login - Email inconnu - reponse identique",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"inconnu@takibo.io\",\n  \"password\": \"Str0ng!Passw0rd\",\n  \"orgCode\": \"{{orgCode}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('401 - Login - Email inconnu - reponse identique', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "    pm.expect(pm.response.json().message, 'message distinguable = fuite d information')",
+                  "        .to.eql(pm.collectionVariables.get('uniform401'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "401 - Login - Mot de passe errone - reponse identique",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"founder@takibo.io\",\n  \"password\": \"MauvaisM0tDePasse!\",\n  \"orgCode\": \"{{orgCode}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('401 - Login - Mot de passe errone - reponse identique', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "    pm.expect(pm.response.json().message, 'message distinguable = fuite d information')",
+                  "        .to.eql(pm.collectionVariables.get('uniform401'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "400 - Login - orgCode absent",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"founder@takibo.io\",\n  \"password\": \"Str0ng!Passw0rd\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('400 - Login - orgCode absent', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Mes spaces - Fondateur voit son space initial",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_org_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/me/spaces",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "spaces"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Mes spaces - Fondateur voit son space initial', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var body = pm.response.json();",
+                  "    pm.expect(body.organizationId).to.eql(pm.collectionVariables.get('organizationId'));",
+                  "    pm.expect(body.items.length, 'le fondateur doit voir au moins son space').to.be.above(0);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "401 - Mes spaces - Sans token refuse",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/me/spaces",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "spaces"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 - Mes spaces - Sans token refuse', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 - Utilisateurs",
+      "item": [
+        {
+          "name": "201 - Utilisateur - Employe cree par le fondateur",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"employee1@takibo.io\",\n  \"rawPassword\": \"An0ther!Passw0rd\",\n  \"username\": \"employee1\",\n  \"firstName\": \"Emma\",\n  \"lastName\": \"Employee\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "takibo.require(['founder_access_token']);",
+                  "pm.test('201 - Utilisateur - Employe cree par le fondateur', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "    pm.expect(pm.response.json().id).to.exist;",
+                  "});",
+                  "pm.collectionVariables.set('employeeUserId', pm.response.json().id);",
+                  "pm.test('201 - Utilisateur - Aucun secret renvoye a la creation', function () {",
+                  "    pm.expect(pm.response.text()).to.not.include('An0ther!Passw0rd');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Utilisateurs - Liste consultee par le fondateur",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users?page=0&size=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Utilisateurs - Liste consultee par le fondateur', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('200 - Utilisateurs - L employe figure dans la liste', function () {",
+                  "    pm.expect(pm.response.text()).to.include(pm.collectionVariables.get('employeeUserId'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Utilisateur - Detail de l employe consulte",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{employeeUserId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "{{employeeUserId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Utilisateur - Detail de l employe consulte', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().id).to.eql(pm.collectionVariables.get('employeeUserId'));",
+                  "});",
+                  "pm.test('200 - Utilisateur - Aucun hash de mot de passe expose', function () {",
+                  "    var raw = pm.response.text();",
+                  "    pm.expect(raw).to.not.include('passwordHash');",
+                  "    pm.expect(raw).to.not.include('$2a$');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Utilisateur - Profil de l employe mis a jour",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{employeeUserId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "{{employeeUserId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Emma-Louise\",\n  \"metadata\": { \"department\": \"finance\" }\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Utilisateur - Profil de l employe mis a jour', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().firstName).to.eql('Emma-Louise');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Login employe - Aucun pouvoir, claims vides",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"employee1@takibo.io\",\n  \"password\": \"An0ther!Passw0rd\",\n  \"orgCode\": \"{{orgCode}}\",\n  \"spaceCode\": \"{{spaceCode}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Login employe - Aucun pouvoir, claims vides', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.collectionVariables.set('employee_access_token', pm.response.json().accessToken);",
+                  "pm.test('200 - Token employe - Aucun role ni permission', function () {",
+                  "    var c = takibo.claimsOf('employee_access_token');",
+                  "    pm.expect(c.roles || [], 'un employe sans delegation n a aucun role').to.be.empty;",
+                  "    pm.expect(c.permissions || [], 'ni aucune permission').to.be.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Login employe - Sans spaceCode donne un token ORGANIZATION",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"employee1@takibo.io\",\n  \"password\": \"An0ther!Passw0rd\",\n  \"orgCode\": \"{{orgCode}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Login employe - Sans spaceCode donne un token ORGANIZATION', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.collectionVariables.set('employee_org_token', pm.response.json().accessToken);",
+                  "pm.test('200 - Token employe ORGANIZATION - Aucun pouvoir herite', function () {",
+                  "    var c = takibo.claimsOf('employee_org_token');",
+                  "    pm.expect(c.org_id).to.eql(pm.collectionVariables.get('organizationId'));",
+                  "    pm.expect(c.space_id, 'portee ORGANIZATION : pas de space_id').to.not.exist;",
+                  "    pm.expect(c.roles || [], 'aucun role sans delegation').to.be.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Mes spaces - Employe voit son space sans role administratif",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employee_org_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/me/spaces",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "spaces"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "// L appartenance suffit : voir ses spaces n exige aucun pouvoir delegue.",
+                  "pm.test('200 - Mes spaces - Employe voit son space sans role administratif', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var body = pm.response.json();",
+                  "    pm.expect(body.organizationId).to.eql(pm.collectionVariables.get('organizationId'));",
+                  "    pm.expect(body.items.length, 'l employe est membre de son space').to.be.above(0);",
+                  "});",
+                  "pm.test('200 - Mes spaces - Le space liste est bien celui de son appartenance', function () {",
+                  "    var mine = pm.response.json().items.filter(function (i) {",
+                  "        return i.spaceId === pm.collectionVariables.get('spaceId');",
+                  "    });",
+                  "    pm.expect(mine.length, 'le space d appartenance doit etre liste').to.eql(1);",
+                  "    pm.expect(mine[0].code).to.eql(pm.collectionVariables.get('spaceCode'));",
+                  "    pm.expect(mine[0].selectable, 'un space actif ou l employe est ACTIVE est selectionnable').to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "403 - Mes spaces - Token SPACE refuse, contexte organisation exige",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employee_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/me/spaces",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "spaces"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "// La surface exige un token humain de portee ORGANIZATION :",
+                  "// un token SPACE decrit deja une frontiere choisie, il ne peut pas",
+                  "// servir a decouvrir les autres (CurrentUserSpaceController).",
+                  "pm.test('403 - Mes spaces - Token SPACE refuse, contexte organisation exige', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "403 - Utilisateurs - Liste refusee a l employe sans pouvoir",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employee_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('403 - Utilisateurs - Liste refusee a l employe sans pouvoir', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "404 - Utilisateur - Identifiant inconnu non enumerable",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/00000000-0000-0000-0000-0000000000ff",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "00000000-0000-0000-0000-0000000000ff"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('404 - Utilisateur - Identifiant inconnu non enumerable', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "403 - Utilisateur - Frontiere d une autre organisation refusee",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode2}}/spaces/{{spaceCode}}/users/{{employeeUserId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode2}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "{{employeeUserId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "// Frontiere : SpaceBoundaryGuard leve ORG_MISMATCH avant toute recherche",
+                  "// d utilisateur. Le code d organisation est une adresse publique : on refuse",
+                  "// l entree (403), on ne fait pas semblant qu elle n existe pas.",
+                  "pm.test('403 - Utilisateur - Frontiere d une autre organisation refusee', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "404 - Utilisateur - Utilisateur d une autre organisation invisible dans mon space",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{founder2UserId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "{{founder2UserId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "// Ressource : a l interieur d une frontiere legitime, un utilisateur qui",
+                  "// n appartient pas a ce space N EXISTE PAS (404) — jamais un 403 revelateur.",
+                  "pm.test('404 - Utilisateur - Utilisateur d une autre organisation invisible dans mon space', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 - Lifecycle utilisateur",
+      "item": [
+        {
+          "name": "201 - Utilisateur - Employe dedie au lifecycle cree",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"lifecycle@takibo.io\",\n  \"rawPassword\": \"Lifecycl3!Passw0rd\",\n  \"username\": \"lifecycle\",\n  \"firstName\": \"Luc\",\n  \"lastName\": \"Cycle\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('201 - Utilisateur - Employe dedie au lifecycle cree', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.collectionVariables.set('lifecycleUserId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Utilisateur - Suspension reussie",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{lifecycleUserId}}/suspend",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "{{lifecycleUserId}}",
+                "suspend"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Utilisateur - Suspension reussie', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('200 - Utilisateur - Statut SUSPENDED retourne', function () {",
+                  "    pm.expect(pm.response.json().status).to.eql('SUSPENDED');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "401 - Login - Utilisateur suspendu refuse sans reveler son etat",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"lifecycle@takibo.io\",\n  \"password\": \"Lifecycl3!Passw0rd\",\n  \"orgCode\": \"{{orgCode}}\",\n  \"spaceCode\": \"{{spaceCode}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "// HumanLoginService convertit UserNotActiveException en",
+                  "// AuthenticationFailedException : la reponse de login est uniforme et ne",
+                  "// distingue jamais 'mot de passe faux' de 'compte suspendu'. Le handler",
+                  "// Sentinel USER_NOT_ACTIVE (403) reste donc injoignable depuis le login.",
+                  "pm.test('401 - Login - Utilisateur suspendu refuse sans reveler son etat', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "    takibo.assertErrorContract('AUTHENTICATION_FAILED');",
+                  "});",
+                  "pm.test('401 - Login - Message identique aux autres echecs', function () {",
+                  "    pm.expect(pm.response.json().message, 'un etat revele est un oracle')",
+                  "        .to.eql(pm.collectionVariables.get('uniform401'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Utilisateur - Reactivation reussie",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{lifecycleUserId}}/activate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "{{lifecycleUserId}}",
+                "activate"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Utilisateur - Reactivation reussie', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('200 - Utilisateur - Statut ACTIVE retourne', function () {",
+                  "    pm.expect(pm.response.json().status).to.eql('ACTIVE');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Login - Utilisateur reactive accepte",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"lifecycle@takibo.io\",\n  \"password\": \"Lifecycl3!Passw0rd\",\n  \"orgCode\": \"{{orgCode}}\",\n  \"spaceCode\": \"{{spaceCode}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Login - Utilisateur reactive accepte', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Utilisateur - Verrouillage reussi",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{lifecycleUserId}}/lock",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "{{lifecycleUserId}}",
+                "lock"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Utilisateur - Verrouillage reussi', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('200 - Utilisateur - Statut LOCKED retourne', function () {",
+                  "    pm.expect(pm.response.json().status).to.eql('LOCKED');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "401 - Login - Utilisateur verrouille refuse sans reveler son etat",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"lifecycle@takibo.io\",\n  \"password\": \"Lifecycl3!Passw0rd\",\n  \"orgCode\": \"{{orgCode}}\",\n  \"spaceCode\": \"{{spaceCode}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('401 - Login - Utilisateur verrouille refuse sans reveler son etat', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "    takibo.assertErrorContract('AUTHENTICATION_FAILED');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Utilisateur - Reactivation apres verrouillage",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{lifecycleUserId}}/activate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "{{lifecycleUserId}}",
+                "activate"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Utilisateur - Reactivation apres verrouillage', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Utilisateur - Desactivation reussie (etat terminal)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{lifecycleUserId}}/deactivate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "{{lifecycleUserId}}",
+                "deactivate"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Utilisateur - Desactivation reussie (etat terminal)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('200 - Utilisateur - Statut DEACTIVATED retourne', function () {",
+                  "    pm.expect(pm.response.json().status).to.eql('DEACTIVATED');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "409 - Utilisateur - Reactivation apres desactivation refusee",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{lifecycleUserId}}/activate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "{{lifecycleUserId}}",
+                "activate"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('409 - Utilisateur - Reactivation apres desactivation refusee', function () {",
+                  "    pm.response.to.have.status(409);",
+                  "    takibo.assertErrorContract('INVALID_STATUS_TRANSITION');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "404 - Lifecycle - Utilisateur inconnu non enumerable",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/00000000-0000-0000-0000-0000000000ff/suspend",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "00000000-0000-0000-0000-0000000000ff",
+                "suspend"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('404 - Lifecycle - Utilisateur inconnu non enumerable', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05 - Catalogue RBAC",
+      "item": [
+        {
+          "name": "200 - Roles - Catalogue consulte par le fondateur",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "roles"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Roles - Catalogue consulte par le fondateur', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('200 - Roles - Aucune autorite plateforme ni role personnel expose', function () {",
+                  "    var raw = pm.response.text();",
+                  "    pm.expect(raw, 'le plan PLATFORM ne se raconte jamais a un tenant')",
+                  "        .to.not.include('R_TAKIBO_PLATFORM_');",
+                  "    pm.expect(raw, 'R_SELF n est pas un pouvoir delegable').to.not.include('R_SELF');",
+                  "});",
+                  "pm.test('200 - Roles - Les roles tenant sont bien presents', function () {",
+                  "    var raw = pm.response.text();",
+                  "    pm.expect(raw).to.include('R_SPACE_ADMIN');",
+                  "    pm.expect(raw).to.include('R_ORG_ADMIN');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Role - R_SPACE_ADMIN detaille avec ses permissions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/roles/R_SPACE_ADMIN",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "roles",
+                "R_SPACE_ADMIN"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Role - R_SPACE_ADMIN detaille avec ses permissions', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('200 - Role - Le detail porte le code et ses permissions', function () {",
+                  "    var b = pm.response.json();",
+                  "    pm.expect(b.code).to.eql('R_SPACE_ADMIN');",
+                  "    pm.expect(b.permissions, 'un role technique expose ses permissions').to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "404 - Role - Role plateforme non enumerable",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/roles/R_TAKIBO_PLATFORM_ADMIN",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "roles",
+                "R_TAKIBO_PLATFORM_ADMIN"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('404 - Role - Role plateforme non enumerable', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "404 - Role - R_SELF non enumerable",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/roles/R_SELF",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "roles",
+                "R_SELF"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('404 - Role - R_SELF non enumerable', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "404 - Role - Code inconnu non enumerable",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/roles/R_NEXISTE_PAS",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "roles",
+                "R_NEXISTE_PAS"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('404 - Role - Code inconnu non enumerable', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "403 - Roles - Catalogue refuse a l employe sans pouvoir",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employee_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "roles"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('403 - Roles - Catalogue refuse a l employe sans pouvoir', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Groupes - Catalogue consulte par le fondateur",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/groups",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "groups"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Groupes - Catalogue consulte par le fondateur', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('200 - Groupes - Les groupes tenant sont presents', function () {",
+                  "    var raw = pm.response.text();",
+                  "    pm.expect(raw).to.include('G_SPACE_ADMINS');",
+                  "    pm.expect(raw).to.include('G_ORG_ADMINS');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "404 - Groupe - Code inconnu non enumerable",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/groups/G_NEXISTE_PAS",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "groups",
+                "G_NEXISTE_PAS"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('404 - Groupe - Code inconnu non enumerable', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Permissions - Catalogue sans le plan PLATFORM",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/permissions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "permissions"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Permissions - Catalogue sans le plan PLATFORM', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('200 - Permissions - Les pouvoirs de plan PLATFORM sont masques', function () {",
+                  "    var raw = pm.response.text();",
+                  "    pm.expect(raw, 'creer une organisation est un pouvoir plateforme')",
+                  "        .to.not.include('P_CREATE_ORG');",
+                  "    pm.expect(raw, 'supprimer une organisation aussi')",
+                  "        .to.not.include('P_DELETE_ORG');",
+                  "});",
+                  "pm.test('200 - Permissions - Les pouvoirs tenant sont presents', function () {",
+                  "    pm.expect(pm.response.text()).to.include('P_MANAGE_USERS');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "404 - Permission - Code inconnu non enumerable",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/permissions/P_NEXISTE_PAS",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "permissions",
+                "P_NEXISTE_PAS"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('404 - Permission - Code inconnu non enumerable', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "404 - Permission - Permission de plan PLATFORM non enumerable",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/permissions/P_CREATE_ORG",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "permissions",
+                "P_CREATE_ORG"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('404 - Permission - Permission de plan PLATFORM non enumerable', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});",
+                  "// P_CREATE_ORG EXISTE au catalogue technique mais releve du plan",
+                  "// PLATFORM : le detail doit etre masque au tenant, pas seulement",
+                  "// absent de la liste. Un 404 ici prouve l anti-enumeration reelle,",
+                  "// la ou un code inconnu ne prouverait que l absence."
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "06 - Attribution de roles",
+      "item": [
+        {
+          "name": "200 - Role - R_SPACE_ADMIN attribue a l employe",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{employeeUserId}}/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "{{employeeUserId}}",
+                "roles"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roleCode\": \"R_SPACE_ADMIN\",\n  \"reason\": \"Delegation administration du space\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Role - R_SPACE_ADMIN attribue a l employe', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('200 - Role - L etat courant des assignations est retourne', function () {",
+                  "    pm.expect(pm.response.text()).to.include('R_SPACE_ADMIN');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Role - Attribution idempotente au rejeu",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{employeeUserId}}/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "{{employeeUserId}}",
+                "roles"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roleCode\": \"R_SPACE_ADMIN\",\n  \"reason\": \"BVT\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Role - Attribution idempotente au rejeu', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Role - Assignations directes listees",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{employeeUserId}}/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "{{employeeUserId}}",
+                "roles"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Role - Assignations directes listees', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Login employe - R_SPACE_ADMIN present dans le token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"employee1@takibo.io\",\n  \"password\": \"An0ther!Passw0rd\",\n  \"orgCode\": \"{{orgCode}}\",\n  \"spaceCode\": \"{{spaceCode}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Login employe - R_SPACE_ADMIN present dans le token', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.collectionVariables.set('employee_access_token', pm.response.json().accessToken);",
+                  "pm.test('200 - Token employe - Le role delegue et ses permissions sont portes', function () {",
+                  "    var c = takibo.claimsOf('employee_access_token');",
+                  "    pm.expect(c.roles).to.include('R_SPACE_ADMIN');",
+                  "    pm.expect((c.permissions || []).length, 'un role delegue apporte des permissions')",
+                  "        .to.be.above(0);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Utilisateurs - Liste autorisee par le role direct",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employee_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Utilisateurs - Liste autorisee par le role direct', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "403 - Role - Auto-attribution de R_ORG_ADMIN refusee",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employee_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{employeeUserId}}/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "{{employeeUserId}}",
+                "roles"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roleCode\": \"R_ORG_ADMIN\",\n  \"reason\": \"tentative escalade\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('403 - Role - Auto-attribution de R_ORG_ADMIN refusee', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "    takibo.assertErrorContract('ROLE_SCOPE_ESCALATION_DENIED');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "404 - Role - Attribution generique de R_ORG_OWNER refusee",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{employeeUserId}}/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "{{employeeUserId}}",
+                "roles"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roleCode\": \"R_ORG_OWNER\",\n  \"reason\": \"tentative\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('404 - Role - Attribution generique de R_ORG_OWNER refusee', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});",
+                  "// RBAC-01 : la propriete n est pas assignable. Elle ne s obtient que par",
+                  "// creation d organisation ou transfert dedie (RBAC-07).",
+                  "pm.test('404 - Role - Aucune assignation d ownership creee', function () {",
+                  "    pm.expect(pm.response.text()).to.not.include('\"R_ORG_OWNER\"');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "404 - Role - Code fantome PLATFORM_ADMIN refuse",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{employeeUserId}}/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "{{employeeUserId}}",
+                "roles"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roleCode\": \"PLATFORM_ADMIN\",\n  \"reason\": \"tentative escalade par nommage\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('404 - Role - Code fantome PLATFORM_ADMIN refuse', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});",
+                  "// RBAC-00 : un code hors catalogue ne confere jamais d autorite."
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "404 - Role - Role plateforme non attribuable",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{employeeUserId}}/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "{{employeeUserId}}",
+                "roles"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roleCode\": \"R_TAKIBO_PLATFORM_ADMIN\",\n  \"reason\": \"tentative\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('404 - Role - Role plateforme non attribuable', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "404 - Role - Code inconnu refuse",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{employeeUserId}}/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "{{employeeUserId}}",
+                "roles"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roleCode\": \"R_NEXISTE_PAS\",\n  \"reason\": \"BVT\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('404 - Role - Code inconnu refuse', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "409 - Role - Auto-retrogradation refusee",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employee_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{employeeUserId}}/roles/R_SPACE_ADMIN",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "{{employeeUserId}}",
+                "roles",
+                "R_SPACE_ADMIN"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('409 - Role - Auto-retrogradation refusee', function () {",
+                  "    pm.response.to.have.status(409);",
+                  "    takibo.assertErrorContract('SELF_DEMOTION_DENIED');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Role - R_SPACE_ADMIN retire de l employe",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{employeeUserId}}/roles/R_SPACE_ADMIN",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "{{employeeUserId}}",
+                "roles",
+                "R_SPACE_ADMIN"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Role - R_SPACE_ADMIN retire de l employe', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Login employe - Pouvoir disparu apres retrait",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"employee1@takibo.io\",\n  \"password\": \"An0ther!Passw0rd\",\n  \"orgCode\": \"{{orgCode}}\",\n  \"spaceCode\": \"{{spaceCode}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Login employe - Pouvoir disparu apres retrait', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.collectionVariables.set('employee_access_token', pm.response.json().accessToken);",
+                  "pm.test('200 - Token employe - Plus aucun role ni permission', function () {",
+                  "    var c = takibo.claimsOf('employee_access_token');",
+                  "    pm.expect(c.roles || []).to.be.empty;",
+                  "    pm.expect(c.permissions || []).to.be.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "07 - Groupes et heritage",
+      "item": [
+        {
+          "name": "200 - Groupe - Employe ajoute a G_SPACE_ADMINS",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{employeeUserId}}/groups",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "{{employeeUserId}}",
+                "groups"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"groupCode\": \"G_SPACE_ADMINS\",\n  \"reason\": \"Delegation par groupe\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Groupe - Employe ajoute a G_SPACE_ADMINS', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Login employe - R_SPACE_ADMIN herite du groupe",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"employee1@takibo.io\",\n  \"password\": \"An0ther!Passw0rd\",\n  \"orgCode\": \"{{orgCode}}\",\n  \"spaceCode\": \"{{spaceCode}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Login employe - R_SPACE_ADMIN herite du groupe', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.collectionVariables.set('employee_access_token', pm.response.json().accessToken);",
+                  "pm.test('200 - Token employe - Le role herite est porte sans assignation directe', function () {",
+                  "    pm.expect(takibo.claimsOf('employee_access_token').roles).to.include('R_SPACE_ADMIN');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Utilisateurs - Liste autorisee par heritage de groupe",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employee_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Utilisateurs - Liste autorisee par heritage de groupe', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Groupe - Employe ajoute a G_ORG_ADMINS",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{employeeUserId}}/groups",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "{{employeeUserId}}",
+                "groups"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"groupCode\": \"G_ORG_ADMINS\",\n  \"reason\": \"Delegation organisationnelle\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Groupe - Employe ajoute a G_ORG_ADMINS', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Login employe - R_ORG_ADMIN herite sans R_ORG_OWNER",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"employee1@takibo.io\",\n  \"password\": \"An0ther!Passw0rd\",\n  \"orgCode\": \"{{orgCode}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "// RBAC-01 : G_ORG_ADMINS contient encore ORG_OWNER dans le catalogue, mais",
+                  "// le filtre inheritable interdit qu une propriete se transmette par groupe.",
+                  "pm.test('200 - Login employe - R_ORG_ADMIN herite sans R_ORG_OWNER', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.collectionVariables.set('employee_org_token', pm.response.json().accessToken);",
+                  "pm.test('200 - Token employe - L autorite organisationnelle est heritee', function () {",
+                  "    pm.expect(takibo.claimsOf('employee_org_token').roles).to.include('R_ORG_ADMIN');",
+                  "});",
+                  "pm.test('200 - Token employe - La propriete ne s herite JAMAIS d un groupe', function () {",
+                  "    pm.expect(takibo.claimsOf('employee_org_token').roles,",
+                  "        'un membre de G_ORG_ADMINS ne devient jamais proprietaire')",
+                  "        .to.not.include('R_ORG_OWNER');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Groupe - Employe retire de G_ORG_ADMINS",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{employeeUserId}}/groups/G_ORG_ADMINS",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "{{employeeUserId}}",
+                "groups",
+                "G_ORG_ADMINS"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Groupe - Employe retire de G_ORG_ADMINS', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Groupe - Employe retire de G_SPACE_ADMINS",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{employeeUserId}}/groups/G_SPACE_ADMINS",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "{{employeeUserId}}",
+                "groups",
+                "G_SPACE_ADMINS"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Groupe - Employe retire de G_SPACE_ADMINS', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Login employe - Pouvoir herite disparu apres retrait des groupes",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"employee1@takibo.io\",\n  \"password\": \"An0ther!Passw0rd\",\n  \"orgCode\": \"{{orgCode}}\",\n  \"spaceCode\": \"{{spaceCode}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Login employe - Pouvoir herite disparu apres retrait des groupes', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.collectionVariables.set('employee_access_token', pm.response.json().accessToken);",
+                  "pm.test('200 - Token employe - Plus aucun role herite', function () {",
+                  "    pm.expect(takibo.claimsOf('employee_access_token').roles || []).to.be.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "403 - Utilisateurs - Liste refusee apres retrait des groupes",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employee_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('403 - Utilisateurs - Liste refusee apres retrait des groupes', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "08 - Frontieres et permissions effectives",
+      "item": [
+        {
+          "name": "200 - Login fondateur organisation 2 - Token ORGANIZATION obtenu",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"founder2@takibo.io\",\n  \"password\": \"Str0ng!Passw0rd\",\n  \"orgCode\": \"{{orgCode2}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Login fondateur organisation 2 - Token ORGANIZATION obtenu', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.collectionVariables.set('founder2_org_token', pm.response.json().accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "403 - Frontiere - Token ORGANIZATION refuse sur une route SPACE",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_org_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('403 - Frontiere - Token ORGANIZATION refuse sur une route SPACE', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "201 - Space - Deuxieme space cree dans l organisation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_org_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/spaces",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{organizationId}}",
+                "spaces"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Operations\",\n  \"code\": \"operations\",\n  \"description\": \"Second space pour prouver l etancheite inter-space\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('201 - Space - Deuxieme space cree dans l organisation', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "var b = pm.response.json();",
+                  "pm.collectionVariables.set('spaceCodeB', b.code);",
+                  "pm.collectionVariables.set('spaceIdB', b.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "403 - Frontiere - Token du space A refuse sur le space B de la meme organisation",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCodeB}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCodeB}}",
+                "users"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('403 - Frontiere - Token du space A refuse sur le space B de la meme organisation', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});",
+                  "// Etancheite intra-organisation : le token porte space A. Meme un",
+                  "// R_ORG_OWNER ne sort pas de la frontiere que son token designe",
+                  "// (SPACE_CONTEXT_MISMATCH) — il doit reouvrir un token sur B."
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "404 - Frontiere - Space d une autre organisation invisible depuis la mienne",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_org_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/spaces/{{spaceId2}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId2}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('404 - Frontiere - Space d une autre organisation invisible depuis la mienne', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});",
+                  "// Ressource hors frontiere cherchee DANS ma frontiere legitime :",
+                  "// elle n existe pas (404), symetrique du cas utilisateur."
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "403 - Frontiere - Token de l organisation 2 refuse sur l organisation 1",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder2_org_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "roles"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('403 - Frontiere - Token de l organisation 2 refuse sur l organisation 1', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "403 - Plateforme - Token PLATFORM refuse sur les utilisateurs tenant",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{platform_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('403 - Plateforme - Token PLATFORM refuse sur les utilisateurs tenant', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "403 - Plateforme - Token PLATFORM refuse sur le lifecycle tenant",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{platform_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{employeeUserId}}/suspend",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "{{employeeUserId}}",
+                "suspend"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('403 - Plateforme - Token PLATFORM refuse sur le lifecycle tenant', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "403 - Plateforme - Token PLATFORM refuse sur le catalogue tenant",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{platform_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "roles"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('403 - Plateforme - Token PLATFORM refuse sur le catalogue tenant', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Dashboard - Resume de l organisation consulte",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_org_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/dashboard/summary",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{organizationId}}",
+                "dashboard",
+                "summary"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Dashboard - Resume de l organisation consulte', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('200 - Dashboard - Les compteurs refletent la frontiere reelle', function () {",
+                  "    var b = pm.response.json();",
+                  "    pm.expect(b.usersTotal, 'au moins fondateur, employe et lifecycle').to.be.at.least(3);",
+                  "    pm.expect(b.spacesTotal, 'au moins le space initial').to.be.at.least(1);",
+                  "    pm.expect(b.oauthClientsTotal, 'aucun client cree dans cette saga').to.eql(0);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Login employe - Token ORGANIZATION reemis apres retrait des groupes",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"employee1@takibo.io\",\n  \"password\": \"An0ther!Passw0rd\",\n  \"orgCode\": \"{{orgCode}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "// Le token ORGANIZATION de la saga 07 portait encore R_ORG_ADMIN herite.",
+                  "// On le reemet apres retrait des groupes : le pouvoir doit avoir disparu.",
+                  "pm.test('200 - Login employe - Token ORGANIZATION reemis apres retrait des groupes', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.collectionVariables.set('employee_org_token', pm.response.json().accessToken);",
+                  "pm.test('200 - Token employe ORGANIZATION - Plus aucune autorite heritee', function () {",
+                  "    pm.expect(takibo.claimsOf('employee_org_token').roles || [],",
+                  "        'le retrait du groupe retire aussi l autorite organisationnelle')",
+                  "        .to.be.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "403 - Dashboard - Refuse a l employe sans pouvoir",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employee_org_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/dashboard/summary",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{organizationId}}",
+                "dashboard",
+                "summary"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('403 - Dashboard - Refuse a l employe sans pouvoir', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "403 - Dashboard - Token SPACE refuse",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/dashboard/summary",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{organizationId}}",
+                "dashboard",
+                "summary"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('403 - Dashboard - Token SPACE refuse', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "403 - Dashboard - Consultation cross-organisation refusee",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder2_org_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/dashboard/summary",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{organizationId}}",
+                "dashboard",
+                "summary"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('403 - Dashboard - Consultation cross-organisation refusee', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "09 - Spaces",
+      "item": [
+        {
+          "name": "200 - Spaces - Liste paginee de l organisation",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_org_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/spaces?page=0&size=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{organizationId}}",
+                "spaces"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Spaces - Liste paginee de l organisation', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('200 - Spaces - Les deux spaces de l organisation sont listes', function () {",
+                  "    var b = pm.response.json();",
+                  "    pm.expect(b.totalElements, 'space initial + space operations').to.be.at.least(2);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Spaces - Liste filtree par statut ACTIVE",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_org_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/spaces?status=ACTIVE&page=0&size=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{organizationId}}",
+                "spaces"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "ACTIVE"
+                },
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Spaces - Liste filtree par statut ACTIVE', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('200 - Spaces - Tous les elements filtres sont ACTIVE', function () {",
+                  "    pm.response.json().content.forEach(function (s) {",
+                  "        pm.expect(s.status).to.eql('ACTIVE');",
+                  "    });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Spaces - Recherche par terme",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_org_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/spaces?search=operations&page=0&size=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{organizationId}}",
+                "spaces"
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "operations"
+                },
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Spaces - Recherche par terme', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('200 - Spaces - La recherche isole le space attendu', function () {",
+                  "    var codes = pm.response.json().content.map(function (s) { return s.code; });",
+                  "    pm.expect(codes).to.include(pm.collectionVariables.get('spaceCodeB'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "400 - Spaces - Tri sur un champ hors liste blanche refuse",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_org_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/spaces?sort=passwordHash,asc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{organizationId}}",
+                "spaces"
+              ],
+              "query": [
+                {
+                  "key": "sort",
+                  "value": "passwordHash,asc"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('400 - Spaces - Tri sur un champ hors liste blanche refuse', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "    takibo.assertErrorContract('BAD_REQUEST');",
+                  "});",
+                  "// La liste blanche de tri est une frontiere : trier par un champ",
+                  "// arbitraire exposerait la forme interne du modele."
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Space - Detail consulte par l autorite organisationnelle",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_org_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/spaces/{{spaceIdB}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceIdB}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Space - Detail consulte par l autorite organisationnelle', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('200 - Space - Le detail porte le code et le proprietaire', function () {",
+                  "    var b = pm.response.json();",
+                  "    pm.expect(b.id).to.eql(pm.collectionVariables.get('spaceIdB'));",
+                  "    pm.expect(b.ownerAccountId, 'un space appartient a un compte').to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "201 - Space - Code deja utilise, un code voisin est genere",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_org_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/spaces",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{organizationId}}",
+                "spaces"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Operations bis\",\n  \"code\": \"operations\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "// Asymetrie doctrinale verifiee : un code d ORGANISATION en collision est",
+                  "// refuse (409, cf. saga 01) car il est l adresse publique du tenant. Un code",
+                  "// de SPACE, lui, est ajuste automatiquement par SpaceCodeGenerator jusqu a",
+                  "// MAX_CODE_ATTEMPTS — la creation reussit avec un code voisin.",
+                  "pm.test('201 - Space - Code deja utilise, un code voisin est genere', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test('201 - Space - Le code retourne differe du code demande', function () {",
+                  "    var code = pm.response.json().code;",
+                  "    pm.expect(code, 'le code demande etait deja pris').to.not.eql('operations');",
+                  "    pm.expect(code, 'le code voisin derive du code demande').to.include('operations');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "404 - Space - Identifiant inconnu non enumerable",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_org_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/spaces/00000000-0000-0000-0000-0000000000ff",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{organizationId}}",
+                "spaces",
+                "00000000-0000-0000-0000-0000000000ff"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('404 - Space - Identifiant inconnu non enumerable', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "403 - Space - Creation refusee a l employe sans pouvoir",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employee_org_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/spaces",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{organizationId}}",
+                "spaces"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Interdit\",\n  \"code\": \"interdit\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('403 - Space - Creation refusee a l employe sans pouvoir', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "10 - Clients OAuth2 et OIDC",
+      "item": [
+        {
+          "name": "201 - Client - Cree avec un secret livre une seule fois",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/spaces/{{spaceId}}/clients",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "clients"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientId\": \"bvt-client-{{runId}}\",\n  \"clientName\": \"BVT Client\",\n  \"clientType\": \"CONFIDENTIAL\",\n  \"grantTypes\": [\"client_credentials\"],\n  \"scopes\": [\"api.read\"]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('201 - Client - Cree avec un secret livre une seule fois', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "    var b = pm.response.json();",
+                  "    pm.expect(b.client.clientId).to.eql('bvt-client-' + pm.collectionVariables.get('runId'));",
+                  "    pm.expect(b.oneTimePlainSecret, 'le secret initial est livre a la creation').to.exist;",
+                  "});",
+                  "var b = pm.response.json();",
+                  "pm.collectionVariables.set('clientDbId', b.client.id);",
+                  "pm.collectionVariables.set('clientSecret', b.oneTimePlainSecret);",
+                  "pm.test('201 - Client - Le secret n est jamais stocke en clair dans la reponse client', function () {",
+                  "    pm.expect(JSON.stringify(b.client), 'le bloc client ne contient pas le secret')",
+                  "        .to.not.include(b.oneTimePlainSecret);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "409 - Client - client_id deja utilise",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/spaces/{{spaceId}}/clients",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "clients"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientId\": \"bvt-client-{{runId}}\",\n  \"clientName\": \"BVT Client\",\n  \"clientType\": \"CONFIDENTIAL\",\n  \"grantTypes\": [\"client_credentials\"],\n  \"scopes\": [\"api.read\"]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('409 - Client - client_id deja utilise', function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Client - Rotation du secret reussie",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/spaces/{{spaceId}}/clients/{{clientDbId}}/rotate-secret",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "clients",
+                "{{clientDbId}}",
+                "rotate-secret"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Client - Rotation du secret reussie', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('200 - Client - Le nouveau secret differe de l ancien', function () {",
+                  "    var nouveau = pm.response.json().oneTimePlainSecret || pm.response.json().clientSecret;",
+                  "    pm.expect(nouveau, 'un secret est livre a la rotation').to.exist;",
+                  "    pm.expect(nouveau, 'la rotation doit reellement changer le secret')",
+                  "        .to.not.eql(pm.collectionVariables.get('clientSecret'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "400 - Client - URI de redirection invalide refusee",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/spaces/{{spaceId}}/clients",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "clients"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientId\": \"bvt-bad-uri-{{runId}}\",\n  \"clientName\": \"BVT Client\",\n  \"clientType\": \"CONFIDENTIAL\",\n  \"grantTypes\": [\"client_credentials\"],\n  \"scopes\": [\"api.read\"],\n  \"redirectUris\": [\"pas-une-uri\"]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('400 - Client - URI de redirection invalide refusee', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "400 - Client - Identifiant de client absent refuse",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/spaces/{{spaceId}}/clients",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "clients"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientName\": \"Sans identifiant\",\n  \"clientType\": \"CONFIDENTIAL\",\n  \"grantTypes\": [\"client_credentials\"]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('400 - Client - Identifiant de client absent refuse', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "403 - Client - Token PLATFORM refuse a la creation tenant",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{platform_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/spaces/{{spaceId}}/clients",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "clients"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientId\": \"bvt-intrus-{{runId}}\",\n  \"clientName\": \"BVT Client\",\n  \"clientType\": \"CONFIDENTIAL\",\n  \"grantTypes\": [\"client_credentials\"],\n  \"scopes\": [\"api.read\"]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('403 - Client - Token PLATFORM refuse a la creation tenant', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});",
+                  "// Un client tenant appartient a la frontiere du tenant : la plateforme",
+                  "// ne s en fabrique pas un sans intervention situee (RBAC-08)."
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "403 - Client - Token PLATFORM refuse a la rotation tenant",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{platform_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/spaces/{{spaceId}}/clients/{{clientDbId}}/rotate-secret",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "clients",
+                "{{clientDbId}}",
+                "rotate-secret"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('403 - Client - Token PLATFORM refuse a la rotation tenant', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});",
+                  "pm.test('403 - Client - Aucun secret livre lors du refus', function () {",
+                  "    pm.expect(pm.response.text(), 'un refus ne livre jamais de secret')",
+                  "        .to.not.include('oneTimePlainSecret');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "403 - Client - Token ORGANIZATION refuse sur la surface clients",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_org_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/spaces/{{spaceId}}/clients",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "clients"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientId\": \"bvt-org-token-{{runId}}\",\n  \"clientName\": \"BVT Client\",\n  \"clientType\": \"CONFIDENTIAL\",\n  \"grantTypes\": [\"client_credentials\"],\n  \"scopes\": [\"api.read\"]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('403 - Client - Token ORGANIZATION refuse sur la surface clients', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});",
+                  "// Fail-closed assume : la surface clients exige un token SPACE complet.",
+                  "// Un token ORGANIZATION reste sans pouvoir jusqu a l echange ORG->SPACE."
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "11 - Surface plateforme et actuator",
+      "item": [
+        {
+          "name": "200 - Actuator - Health public sans authentification",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "health"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Actuator - Health public sans authentification', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "401 - Actuator - Env refuse sans token",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/env",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "env"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('401 - Actuator - Env refuse sans token', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "403 - Actuator - Env refuse au fondateur tenant",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/env",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "env"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('403 - Actuator - Env refuse au fondateur tenant', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});",
+                  "// SEC-TMS-03 : l actuator est une surface plateforme. Meme le",
+                  "// proprietaire d une organisation n y a aucun droit."
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "403 - Actuator - Beans refuse au fondateur tenant",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/beans",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "beans"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('403 - Actuator - Beans refuse au fondateur tenant', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "403 - Plateforme - Route platform refusee au tenant",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/platform/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "platform",
+                "health"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('403 - Plateforme - Route platform refusee au tenant', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "99 - Nettoyage",
+      "item": [
+        {
+          "name": "200 - Nettoyage - Employe de test desactive",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{employeeUserId}}/deactivate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "{{employeeUserId}}",
+                "deactivate"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Nettoyage - Employe de test desactive', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('200 - Nettoyage - Statut terminal atteint', function () {",
+                  "    pm.expect(pm.response.json().status).to.eql('DEACTIVATED');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
