@@ -5009,7 +5009,7 @@
           ]
         },
         {
-          "name": "400 - Client - URI de redirection invalide refusee",
+          "name": "400 - Client - client_credentials refuse toute URI de redirection",
           "request": {
             "method": "POST",
             "header": [
@@ -5039,7 +5039,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"clientId\": \"bvt-bad-uri-{{runId}}\",\n  \"clientName\": \"BVT Client\",\n  \"clientType\": \"CONFIDENTIAL\",\n  \"grantTypes\": [\"client_credentials\"],\n  \"scopes\": [\"api.read\"],\n  \"redirectUris\": [\"pas-une-uri\"]\n}"
+              "raw": "{\n  \"clientId\": \"bvt-cc-uri-{{runId}}\",\n  \"clientName\": \"BVT Client\",\n  \"clientType\": \"CONFIDENTIAL\",\n  \"grantTypes\": [\"client_credentials\"],\n  \"scopes\": [\"api.read\"],\n  \"redirectUris\": [\"https://valide.example/callback\"]\n}"
             }
           },
           "event": [
@@ -5049,9 +5049,18 @@
                 "type": "text/javascript",
                 "exec": [
                   "eval(pm.collectionVariables.get('takiboHelpers'));",
-                  "pm.test('400 - Client - URI de redirection invalide refusee', function () {",
+                  "pm.test('400 - Client - client_credentials refuse toute URI de redirection', function () {",
                   "    pm.response.to.have.status(400);",
-                  "});"
+                  "    takibo.assertErrorContract('OAUTH_CLIENT_PROFILE_INVALID');",
+                  "});",
+                  "// L URI fournie est volontairement VALIDE : le refus prouve la regle de",
+                  "// forme (un client machine ne redirige personne), pas la syntaxe. Utiliser",
+                  "// une URI malformee ici ne prouverait rien — assertClientCredentialsShape",
+                  "// rejette toute URI non vide sur ce grant, quelle que soit sa syntaxe.",
+                  "//",
+                  "// La validation de syntaxe d URI, elle, se teste sur un grant qui autorise",
+                  "// la redirection (authorization_code) : elle renvoie aujourd hui 500 et",
+                  "// releve du recit SEC-TMS-04."
                 ]
               }
             }
