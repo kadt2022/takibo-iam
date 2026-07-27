@@ -112,11 +112,7 @@ node_modules/
 **/commande.txt
 **/data.sql
 **/view.sql
-/docs/adr/0001-separation-account-user-identitylink.md
 /takibo-management-service/CLIENT_PROFILES.md
 /takibo-authorization-server/ERROR_RESPONSE_STRATEGY.md
-/docs/PHILOSOPHY.md
 /docs/rapport-analyse-takibo-dependances-2026-03-07.md
 /takibo-authorization-server/recit.md
-
-/docs/
