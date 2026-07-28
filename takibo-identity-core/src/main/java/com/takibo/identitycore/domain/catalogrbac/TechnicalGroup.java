@@ -15,7 +15,6 @@ public enum TechnicalGroup {
             "G_ORG_ADMINS",
             ORGANIZATION,
             Set.of(
-                    ORG_OWNER,
                     ORG_ADMIN
             )
     ),
