@@ -3,6 +3,7 @@ package com.takibo.identitycore.application.auth.service;
 import com.takibo.identitycore.application.auth.command.LoginCommand;
 import com.takibo.identitycore.application.auth.mapper.AuthMapper;
 import com.takibo.identitycore.application.auth.model.HumanTokenRequest;
+import com.takibo.identitycore.application.auth.model.HumanTokenSource;
 import com.takibo.identitycore.application.auth.model.LoginToken;
 import com.takibo.identitycore.application.auth.port.HumanAccessTokenIssuer;
 import com.takibo.identitycore.application.rbac.effective.model.EffectiveRbac;
@@ -142,7 +143,7 @@ class HumanLoginServiceTest {
                 .thenReturn(new EffectiveRbac(
                         List.of("R_ORG_OWNER", "R_SPACE_ADMIN"),
                         List.of("G_ORG_ADMINS", "G_SPACE_ADMINS"),
-                        List.of("P_ASSIGN_ROLES", "P_MANAGE_USERS")));
+                        List.of("P_SPACE_RBAC_ASSIGN", "P_SPACE_USERS_MANAGE")));
 
         LoginToken token = new LoginToken("jwt-value", "Bearer", 300);
         when(tokenIssuer.issue(any())).thenReturn(token);
@@ -161,9 +162,11 @@ class HumanLoginServiceTest {
         assertThat(request.accountId()).isEqualTo(account.getId().getValue());
         assertThat(request.userId()).isEqualTo(USER_ID);
         assertThat(request.isOrganizationScoped()).isFalse();
+        assertThat(request.source()).isEqualTo(HumanTokenSource.SPACE_SELECTION);
         assertThat(request.roles()).containsExactly("R_ORG_OWNER", "R_SPACE_ADMIN");
         assertThat(request.groups()).containsExactly("G_ORG_ADMINS", "G_SPACE_ADMINS");
-        assertThat(request.permissions()).containsExactly("P_ASSIGN_ROLES", "P_MANAGE_USERS");
+        assertThat(request.permissions())
+                .containsExactly("P_SPACE_RBAC_ASSIGN", "P_SPACE_USERS_MANAGE");
 
         // Aucun échec préalable : pas de reset superflu des credentials.
         verify(accountCredentialsRepository, never()).save(any(), any());
@@ -323,7 +326,7 @@ class HumanLoginServiceTest {
                 .thenReturn(new EffectiveRbac(
                         List.of("R_ORG_ADMIN", "R_ORG_OWNER"),
                         List.of("G_ORG_ADMINS"),
-                        List.of("P_READ_ORG", "P_UPDATE_ORG_SETTINGS")));
+                        List.of("P_ORG_READ", "P_ORG_UPDATE")));
 
         LoginToken token = new LoginToken("jwt-org", "Bearer", 300);
         when(tokenIssuer.issue(any())).thenReturn(token);
@@ -338,6 +341,7 @@ class HumanLoginServiceTest {
         verify(tokenIssuer).issue(captor.capture());
         HumanTokenRequest request = captor.getValue();
         assertThat(request.isOrganizationScoped()).isTrue();
+        assertThat(request.source()).isEqualTo(HumanTokenSource.ORGANIZATION_LOGIN);
         assertThat(request.orgId()).isEqualTo(ORG_ID);
         assertThat(request.accountId()).isEqualTo(account.getId().getValue());
         assertThat(request.spaceId()).isNull();

@@ -3,8 +3,8 @@ package com.takibo.identitycore.application.rbac.effective.model;
 import java.util.List;
 
 /**
- * Snapshot borné du pouvoir effectif d'un user dans un space, au moment de
- * l'authentification. Partition par provenance, jamais par préfixe :
+ * Snapshot borné du pouvoir effectif d'un account dans une frontière ORGANIZATION
+ * ou SPACE, recalculé au moment de l'émission. Partition par provenance, jamais par préfixe :
  * {@code roles} ne contient que des codes issus d'assignations ou de liens de
  * rôles, {@code groups} que des codes issus de memberships, {@code permissions}
  * que des codes dérivés des rôles techniques effectifs.

@@ -1,6 +1,6 @@
 # RBAC-04 — Projection des permissions dans les tokens
 
-**Statut** : à faire
+**Statut** : EN COURS
 **Doctrine** : [ADR 0003 §1, §7](../adr/0003-doctrine-rbac-v2.md)
 **Dépend de** : RBAC-03
 **Risque** : élevé
@@ -92,6 +92,17 @@ côté TAS.
 - `:takibo-authorization-server:test`
 - `:takibo-iam-boot:test`
 - Test d'intégration : login, ouverture de Space, vérification des claims émis.
+
+## Validation locale
+
+- `:takibo-identity-core:test` : 348 tests réussis.
+- `:takibo-authorization-server:test` : 46 tests réussis.
+- `:takibo-iam-boot:test` : 30 tests recensés, dont 29 réussis et 1 ignoré.
+- Test d'intégration du pipeline TIS-CORE → TAS : un changement de Space recalcule les
+  permissions, conserve les rôles réels et signe une nouvelle frontière complète.
+
+La clôture documentaire reste subordonnée à la validation de livraison (CI/PR), conformément
+à la règle du backlog.
 
 ## Branche
 

@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -26,6 +27,8 @@ import java.util.UUID;
  *       construction : l'organisation identifie le compte, le space situe l'action.</li>
  * </ul>
  * Jamais de token partiellement situé : une forme intermédiaire est une incohérence.
+ * Les permissions incompatibles avec le plan sont refusées ; TAS ne les filtre ni ne
+ * les recalcule.
  */
 @Component
 public class HumanTokenSigner {
@@ -57,8 +60,34 @@ public class HumanTokenSigner {
         if (!organizationScoped && command.userId() == null) {
             throw new IllegalStateException("HUMAN_TOKEN_REQUIRES_FULL_TENANT_IDENTITY");
         }
+        validateSituatedAuthority(command, organizationScoped);
 
         return organizationScoped ? signOrganization(command) : signSpace(command);
+    }
+
+    private void validateSituatedAuthority(
+            HumanTokenCommand command,
+            boolean organizationScoped
+    ) {
+        String expectedSource = organizationScoped
+                ? TakiboTokenClaims.SOURCE_HUMAN_LOGIN
+                : TakiboTokenClaims.SOURCE_HUMAN_SPACE_SELECTION;
+        if (!expectedSource.equals(command.tenantSource())) {
+            throw new IllegalStateException(
+                    "HUMAN_TOKEN_SOURCE_INCOMPATIBLE_WITH_SCOPE: expected "
+                            + expectedSource);
+        }
+
+        String expectedPermissionPrefix = organizationScoped ? "P_ORG_" : "P_SPACE_";
+        List<String> incompatiblePermissions = command.permissions().stream()
+                .filter(permission -> permission == null
+                        || !permission.startsWith(expectedPermissionPrefix))
+                .toList();
+        if (!incompatiblePermissions.isEmpty()) {
+            throw new IllegalStateException(
+                    "HUMAN_TOKEN_PERMISSION_INCOMPATIBLE_WITH_SCOPE: "
+                            + incompatiblePermissions);
+        }
     }
 
     private SignedHumanToken signSpace(HumanTokenCommand command) {
@@ -94,7 +123,7 @@ public class HumanTokenSigner {
                 .expiresAt(now.plus(ttl))
                 .claim(TakiboTokenClaims.SUBJECT_TYPE, TakiboTokenClaims.SUBJECT_HUMAN)
                 .claim(TakiboTokenClaims.AUTH_METHOD, TakiboTokenClaims.AUTH_PASSWORD)
-                .claim(TakiboTokenClaims.TENANT_SOURCE, TakiboTokenClaims.SOURCE_HUMAN_LOGIN)
+                .claim(TakiboTokenClaims.TENANT_SOURCE, command.tenantSource())
                 .claim(TakiboTokenClaims.ORG_ID, command.orgId().toString())
                 .claim(TakiboTokenClaims.ACCOUNT_ID, command.accountId().toString())
                 .claim(TakiboTokenClaims.ROLES, command.roles())

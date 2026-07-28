@@ -1,6 +1,12 @@
 package com.takibo.identitycore.application.rbac.effective.service;
 
+import com.takibo.identitycore.application.rbac.effective.model.EffectivePermissionRequest;
 import com.takibo.identitycore.application.rbac.effective.model.EffectiveRbac;
+import com.takibo.identitycore.application.rbac.effective.model.PermissionCode;
+import com.takibo.identitycore.application.rbac.effective.model.RbacActorSource;
+import com.takibo.identitycore.application.rbac.effective.model.RbacSubjectNature;
+import com.takibo.identitycore.application.rbac.effective.model.SituatedTechnicalGroup;
+import com.takibo.identitycore.application.rbac.effective.model.SituatedTechnicalRole;
 import com.takibo.identitycore.application.rbac.effective.port.in.EffectiveRbacQueryCase;
 import com.takibo.identitycore.domain.catalogrbac.AuthorityPlan;
 import com.takibo.identitycore.domain.catalogrbac.TechnicalGroup;
@@ -24,6 +30,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Le pouvoir effectif d'un account dans un space, calculé au moment de
@@ -33,7 +40,7 @@ import java.util.UUID;
  * + groupes directs (TECHNICAL + GOVERNANCE)
  * + rôles hérités des groupes techniques (enum TechnicalGroup)
  * + rôles hérités des groupes DB (liens group_roles, rôles GOVERNANCE)
- * + permissions des rôles techniques effectifs (enum TechnicalRole)
+ * + permissions canoniques calculées par {@link EffectivePermissionResolver}
  * </pre>
  * Les assignations BUSINESS sont ignorées (récit dédié). Les codes techniques
  * de scope SYSTEM/USER ne sont jamais racontés aux tenants : même une ligne
@@ -55,6 +62,7 @@ public class EffectiveRbacQueryService implements EffectiveRbacQueryCase {
     private final GovernanceRoleAssignmentRepository roleAssignments;
     private final GovernanceGroupAssignmentRepository groupMemberships;
     private final GroupRoleRepository groupRoles;
+    private final EffectivePermissionResolver permissionResolver;
 
     @Override
     public EffectiveRbac effectiveFor(UUID orgId, UUID spaceId, UUID accountId) {
@@ -67,7 +75,9 @@ public class EffectiveRbacQueryService implements EffectiveRbacQueryCase {
         Set<String> groups = new TreeSet<>();
 
         // 1) Rôles directs (BUSINESS déjà exclu par le repository).
-        roleAssignments.findDirectAssignments(orgId, spaceId, accountId).stream()
+        List<RoleAssignment> assignments =
+                roleAssignments.findDirectAssignments(orgId, spaceId, accountId);
+        assignments.stream()
                 .filter(this::isTenantVisibleRoleAssignment)
                 .map(RoleAssignment::roleCode)
                 .forEach(roles::add);
@@ -106,17 +116,12 @@ public class EffectiveRbacQueryService implements EffectiveRbacQueryCase {
                     .forEach(roles::add);
         }
 
-        // 5) Permissions des rôles techniques effectifs (directs + hérités).
-        Set<String> permissions = new TreeSet<>();
-        roles.stream()
-                .map(TechnicalRole::fromCode)
-                .flatMap(Optional::stream)
-                .flatMap(role -> role.permissions().stream())
-                .filter(permission -> TENANT_VISIBLE_PLANS.contains(permission.plan()))
-                .map(TechnicalGroup.TechnicalPermission::code)
-                .forEach(permissions::add);
+        // 5) Le résolveur canonique RBAC-03 calcule les permissions du plan SPACE.
+        //    Les rôles ci-dessus restent réels ; aucune réécriture R_ORG_* -> R_SPACE_*.
+        List<String> permissions = resolvePermissions(
+                assignments, memberships, AuthorityPlan.SPACE, orgId, spaceId);
 
-        return new EffectiveRbac(List.copyOf(roles), List.copyOf(groups), List.copyOf(permissions));
+        return new EffectiveRbac(List.copyOf(roles), List.copyOf(groups), permissions);
     }
 
     @Override
@@ -130,7 +135,9 @@ public class EffectiveRbacQueryService implements EffectiveRbacQueryCase {
         // 1) Rôles directs org-level — seuls les codes techniques de scope
         //    ORGANIZATION entrent : une ligne org-level anormale (code SPACE,
         //    code inconnu) est ignorée en lecture, pas seulement refusée en écriture.
-        roleAssignments.findOrgLevelAssignments(orgId, accountId).stream()
+        List<RoleAssignment> assignments =
+                roleAssignments.findOrgLevelAssignments(orgId, accountId);
+        assignments.stream()
                 .filter(this::isOrganizationRoleAssignment)
                 .map(RoleAssignment::roleCode)
                 .forEach(roles::add);
@@ -160,17 +167,50 @@ public class EffectiveRbacQueryService implements EffectiveRbacQueryCase {
         // Pas d'héritage group_roles : les groupes GOVERNANCE sont des lignes
         // situées dans un space (doctrine PR #26) — rien d'org-level à hériter.
 
-        // 4) Permissions des rôles effectifs, scope ORGANIZATION exclusivement.
-        Set<String> permissions = new TreeSet<>();
-        roles.stream()
-                .map(TechnicalRole::fromCode)
-                .flatMap(Optional::stream)
-                .flatMap(role -> role.permissions().stream())
-                .filter(permission -> permission.plan() == AuthorityPlan.ORGANIZATION)
-                .map(TechnicalGroup.TechnicalPermission::code)
-                .forEach(permissions::add);
+        // 4) Le même résolveur canonique recalcule le snapshot ORGANIZATION.
+        List<String> permissions = resolvePermissions(
+                assignments, memberships, AuthorityPlan.ORGANIZATION, orgId, null);
 
-        return new EffectiveRbac(List.copyOf(roles), List.copyOf(groups), List.copyOf(permissions));
+        return new EffectiveRbac(List.copyOf(roles), List.copyOf(groups), permissions);
+    }
+
+    private List<String> resolvePermissions(
+            List<RoleAssignment> assignments,
+            List<GroupAssignment> memberships,
+            AuthorityPlan authorityPlan,
+            UUID orgId,
+            UUID spaceId
+    ) {
+        Set<SituatedTechnicalRole> technicalRoles = assignments.stream()
+                .filter(Objects::nonNull)
+                .filter(assignment -> assignment.roleSource() == RoleSource.TECHNICAL)
+                .map(assignment -> TechnicalRole.fromCode(assignment.roleCode())
+                        .map(role -> new SituatedTechnicalRole(
+                                role, assignment.orgId(), assignment.spaceId())))
+                .flatMap(Optional::stream)
+                .collect(Collectors.toUnmodifiableSet());
+
+        Set<SituatedTechnicalGroup> technicalGroups = memberships.stream()
+                .filter(Objects::nonNull)
+                .filter(membership -> membership.groupSource() == GroupSource.TECHNICAL)
+                .map(membership -> TechnicalGroup.fromCode(membership.groupCode())
+                        .map(group -> new SituatedTechnicalGroup(
+                                group, membership.orgId(), membership.spaceId())))
+                .flatMap(Optional::stream)
+                .collect(Collectors.toUnmodifiableSet());
+
+        EffectivePermissionRequest request = new EffectivePermissionRequest(
+                technicalRoles,
+                technicalGroups,
+                authorityPlan,
+                orgId,
+                spaceId,
+                RbacSubjectNature.HUMAN,
+                RbacActorSource.HUMAN);
+
+        return permissionResolver.resolve(request).stream()
+                .map(PermissionCode::code)
+                .toList();
     }
 
     /** Seul un code technique de scope ORGANIZATION entre dans un token ORG. */

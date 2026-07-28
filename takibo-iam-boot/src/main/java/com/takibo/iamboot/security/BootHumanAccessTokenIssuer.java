@@ -30,6 +30,7 @@ public class BootHumanAccessTokenIssuer implements HumanAccessTokenIssuer {
                 request.spaceId(),
                 request.accountId(),
                 request.userId(),
+                request.source().claimValue(),
                 request.roles(),
                 request.groups(),
                 request.permissions()
