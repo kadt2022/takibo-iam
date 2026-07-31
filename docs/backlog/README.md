@@ -34,7 +34,7 @@ suffisent pas à clôturer un récit.
 | [RBAC-01](../terminer/RBAC-01-catalogue-canonique-roles-permissions.md) | Catalogue canonique des rôles et permissions situés | **TERMINÉ** (PR #45, 2026-07-26) | faible | RBAC-00 |
 | [RBAC-02](../terminer/RBAC-02-matrice-roles-permissions.md) | Matrice rôles-permissions | **TERMINÉ** (PR #46, 2026-07-26) | faible | RBAC-01 |
 | [RBAC-03](../terminer/RBAC-03-permissions-effectives.md) | Calcul des permissions effectives | **TERMINÉ** (PR #47, 2026-07-26) | moyen | RBAC-02 |
-| [RBAC-04](RBAC-04-tokens-situes.md) | Projection des permissions dans les tokens | à faire | élevé | RBAC-03 |
+| [RBAC-04](../terminer/RBAC-04-tokens-situes.md) | Projection des permissions dans les tokens | **TERMINÉ** (PR #50, 2026-07-27) | élevé | RBAC-03 |
 | [RBAC-05](RBAC-05-enforcement-space.md) | Enforcement des routes SPACE | à faire | élevé | RBAC-04 |
 | [RBAC-06](RBAC-06-enforcement-organization.md) | Enforcement des routes ORGANIZATION | à faire | élevé | RBAC-05 |
 | [RBAC-07](RBAC-07-ownership-et-gouvernance.md) | Ownership et gouvernance des attributions | à faire | élevé | RBAC-06 |

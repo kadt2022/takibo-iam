@@ -4,6 +4,7 @@ import com.takibo.authorizationserver.infrastructure.springauthserver.token.Huma
 import com.takibo.authorizationserver.infrastructure.springauthserver.token.HumanTokenSigner;
 import com.takibo.authorizationserver.infrastructure.springauthserver.token.SignedHumanToken;
 import com.takibo.identitycore.application.auth.model.HumanTokenRequest;
+import com.takibo.identitycore.application.auth.model.HumanTokenSource;
 import com.takibo.identitycore.application.auth.model.LoginToken;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -40,9 +41,10 @@ class BootHumanAccessTokenIssuerTest {
                 SPACE_ID,
                 ACCOUNT_ID,
                 USER_ID,
+                HumanTokenSource.SPACE_SELECTION,
                 List.of("R_ORG_OWNER", "R_SPACE_ADMIN"),
                 List.of("G_SPACE_ADMINS"),
-                List.of("P_MANAGE_USERS")
+                List.of("P_SPACE_USERS_MANAGE")
         );
         when(humanTokenSigner.sign(org.mockito.ArgumentMatchers.any(HumanTokenCommand.class)))
                 .thenReturn(new SignedHumanToken("signed.jwt", 300));
@@ -56,9 +58,10 @@ class BootHumanAccessTokenIssuerTest {
         assertThat(command.spaceId()).isEqualTo(SPACE_ID);
         assertThat(command.accountId()).isEqualTo(ACCOUNT_ID);
         assertThat(command.userId()).isEqualTo(USER_ID);
+        assertThat(command.tenantSource()).isEqualTo("human_space_selection");
         assertThat(command.roles()).containsExactly("R_ORG_OWNER", "R_SPACE_ADMIN");
         assertThat(command.groups()).containsExactly("G_SPACE_ADMINS");
-        assertThat(command.permissions()).containsExactly("P_MANAGE_USERS");
+        assertThat(command.permissions()).containsExactly("P_SPACE_USERS_MANAGE");
 
         assertThat(result.accessToken()).isEqualTo("signed.jwt");
         assertThat(result.tokenType()).isEqualTo("Bearer");

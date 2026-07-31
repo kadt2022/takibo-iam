@@ -9,6 +9,7 @@ import org.springframework.security.oauth2.server.authorization.client.Registere
 import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
 import org.springframework.security.oauth2.server.authorization.token.JwtEncodingContext;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenCustomizer;
+import org.springframework.util.StringUtils;
 
 /**
  * Situe les access tokens à partir du client OAuth2 enregistré — sans rien inventer.
@@ -17,8 +18,9 @@ import org.springframework.security.oauth2.server.authorization.token.OAuth2Toke
  * ({@code org_id}/{@code space_id}) sont portés par le {@link RegisteredClient} (ses
  * {@code ClientSettings}, renseignés par le repository). Le customizer ne fait que les transcrire.
  * <p>
- * Plus de fallback : un client PLATFORM produit un token sans tenant (fail-closed sur les routes
- * tenant) ; un client SPACE sans org/space est une configuration incohérente -> erreur.
+ * Plus de fallback : chaque plan et sa provenance doivent être explicites. Un client PLATFORM
+ * produit un token sans tenant (fail-closed sur les routes tenant) ; une frontière incomplète
+ * ou incompatible est une configuration incohérente -> erreur.
  */
 @Configuration
 public class TakiboOAuth2TokenCustomizer {
@@ -35,8 +37,8 @@ public class TakiboOAuth2TokenCustomizer {
     }
 
     /**
-     * Transcrit le scope/tenant porté par le client. SPACE exige org_id + space_id (sinon
-     * fail-closed). Tout autre niveau (PLATFORM) -> aucun claim de tenant.
+     * Transcrit le plan et la frontière portés par le client. TAS ne complète aucune valeur :
+     * SPACE exige org_id + space_id, ORGANIZATION exige org_id seul, PLATFORM refuse les deux.
      */
     static void applyTenantClaims(RegisteredClient client, JwtClaimsSet.Builder claims) {
         ClientSettings settings = client.getClientSettings();
@@ -45,22 +47,47 @@ public class TakiboOAuth2TokenCustomizer {
         String orgId = settings.getSetting(TakiboTokenClaims.ORG_ID);
         String spaceId = settings.getSetting(TakiboTokenClaims.SPACE_ID);
 
-        if (TakiboTokenClaims.SCOPE_SPACE.equals(scopeLevel)) {
-            if (orgId == null || spaceId == null) {
+        if (!StringUtils.hasText(scopeLevel)) {
+            throw new IllegalStateException(
+                    "CLIENT_REQUIRES_EXPLICIT_SCOPE_LEVEL: client " + client.getClientId());
+        }
+        if (!StringUtils.hasText(tenantSource)) {
+            throw new IllegalStateException(
+                    "CLIENT_REQUIRES_EXPLICIT_TENANT_SOURCE: client " + client.getClientId());
+        }
+
+        switch (scopeLevel) {
+        case TakiboTokenClaims.SCOPE_SPACE -> {
+            if (!StringUtils.hasText(orgId) || !StringUtils.hasText(spaceId)) {
                 throw new IllegalStateException(
                         "SPACE_CLIENT_REQUIRES_ORG_AND_SPACE: client " + client.getClientId());
             }
             claims.claim(TakiboTokenClaims.SCOPE_LEVEL, TakiboTokenClaims.SCOPE_SPACE)
                     .claim(TakiboTokenClaims.ORG_ID, orgId)
                     .claim(TakiboTokenClaims.SPACE_ID, spaceId)
-                    .claim(TakiboTokenClaims.TENANT_SOURCE,
-                            tenantSource != null ? tenantSource : TakiboTokenClaims.SOURCE_OAUTH2_CLIENT);
-        } else {
-            // PLATFORM (ou non situé) : aucun org_id/space_id émis.
-            claims.claim(TakiboTokenClaims.SCOPE_LEVEL,
-                            scopeLevel != null ? scopeLevel : TakiboTokenClaims.SCOPE_PLATFORM)
-                    .claim(TakiboTokenClaims.TENANT_SOURCE,
-                            tenantSource != null ? tenantSource : TakiboTokenClaims.SOURCE_PLATFORM);
+                    .claim(TakiboTokenClaims.TENANT_SOURCE, tenantSource);
+        }
+        case TakiboTokenClaims.SCOPE_ORGANIZATION -> {
+            if (!StringUtils.hasText(orgId) || StringUtils.hasText(spaceId)) {
+                throw new IllegalStateException(
+                        "ORGANIZATION_CLIENT_REQUIRES_ORG_WITHOUT_SPACE: client "
+                                + client.getClientId());
+            }
+            claims.claim(TakiboTokenClaims.SCOPE_LEVEL, TakiboTokenClaims.SCOPE_ORGANIZATION)
+                    .claim(TakiboTokenClaims.ORG_ID, orgId)
+                    .claim(TakiboTokenClaims.TENANT_SOURCE, tenantSource);
+        }
+        case TakiboTokenClaims.SCOPE_PLATFORM -> {
+            if (StringUtils.hasText(orgId) || StringUtils.hasText(spaceId)) {
+                throw new IllegalStateException(
+                        "PLATFORM_CLIENT_MUST_NOT_CARRY_TENANT: client "
+                                + client.getClientId());
+            }
+            claims.claim(TakiboTokenClaims.SCOPE_LEVEL, TakiboTokenClaims.SCOPE_PLATFORM)
+                    .claim(TakiboTokenClaims.TENANT_SOURCE, tenantSource);
+        }
+        default -> throw new IllegalStateException(
+                "UNSUPPORTED_CLIENT_SCOPE_LEVEL: " + scopeLevel);
         }
     }
 

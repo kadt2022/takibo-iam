@@ -251,7 +251,7 @@ class RbacCatalogQueryServiceTest {
         assertThat(group.origin()).isEqualTo(CatalogOrigin.TECHNICAL);
         assertThat(group.nature()).isEqualTo(CatalogNature.TECHNICAL);
         assertThat(group.editable()).isFalse();
-        assertThat(group.roles()).containsExactly("R_ORG_ADMIN", "R_ORG_OWNER");
+        assertThat(group.roles()).containsExactly("R_ORG_ADMIN");
         verifyNoInteractions(groupRepository);
     }
 

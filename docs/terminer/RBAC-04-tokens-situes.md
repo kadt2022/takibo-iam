@@ -1,6 +1,6 @@
 # RBAC-04 — Projection des permissions dans les tokens
 
-**Statut** : à faire
+**Statut** : TERMINÉ
 **Doctrine** : [ADR 0003 §1, §7](../adr/0003-doctrine-rbac-v2.md)
 **Dépend de** : RBAC-03
 **Risque** : élevé
@@ -93,6 +93,24 @@ côté TAS.
 - `:takibo-iam-boot:test`
 - Test d'intégration : login, ouverture de Space, vérification des claims émis.
 
+## Validation locale
+
+- `:takibo-identity-core:test` : 348 tests réussis.
+- `:takibo-authorization-server:test` : 46 tests réussis.
+- `:takibo-iam-boot:test` : 30 tests recensés, dont 29 réussis et 1 ignoré.
+- Test d'intégration du pipeline TIS-CORE → TAS : un changement de Space recalcule les
+  permissions, conserve les rôles réels et signe une nouvelle frontière complète.
+
+La validation de livraison est consignée ci-dessous, conformément à la règle du backlog.
+
+## Validation de clôture
+
+- PR [#50](https://github.com/kadt2022/takibo-iam/pull/50).
+- Workflow [Takibo CI #30320523252](https://github.com/kadt2022/takibo-iam/actions/runs/30320523252)
+  entièrement réussi : matrice de tests, BVT, analyse Sonar et quality gate.
+- Le job `Takibo Tests - security-context` est validé après mise à jour strictement
+  limitée au montage du test de régression de nommage des rôles.
+
 ## Branche
 
 `feat/rbac-situated-token-claims`
@@ -100,12 +118,3 @@ côté TAS.
 ## Commit proposé
 
 `feat(rbac): project effective permissions into situated tokens`
-
-## Clôture documentaire
-
-Lorsque ce récit est terminé et validé :
-
-1. passer son statut à `TERMINÉ` ;
-2. déplacer ce fichier de `docs/backlog` vers `docs/terminer` avec `git mv` ;
-3. mettre à jour les index et liens concernés ;
-4. inclure ce déplacement dans la PR de clôture du récit.

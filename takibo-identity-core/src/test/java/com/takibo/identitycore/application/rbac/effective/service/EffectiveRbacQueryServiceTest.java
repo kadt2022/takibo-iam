@@ -1,6 +1,8 @@
 package com.takibo.identitycore.application.rbac.effective.service;
 
 import com.takibo.identitycore.application.rbac.effective.model.EffectiveRbac;
+import com.takibo.identitycore.domain.catalogrbac.RolePermissionCatalog;
+import com.takibo.identitycore.domain.exception.EffectivePermissionResolutionException;
 import com.takibo.identitycore.domain.rbac.model.GroupAssignment;
 import com.takibo.identitycore.domain.rbac.model.GroupSource;
 import com.takibo.identitycore.domain.rbac.model.RoleAssignment;
@@ -8,19 +10,23 @@ import com.takibo.identitycore.domain.rbac.model.RoleSource;
 import com.takibo.identitycore.domain.rbac.repository.GovernanceGroupAssignmentRepository;
 import com.takibo.identitycore.domain.rbac.repository.GovernanceRoleAssignmentRepository;
 import com.takibo.identitycore.domain.repository.GroupRoleRepository;
+import com.takibo.identitycore.domain.vo.SpaceId;
+import com.takibo.identitycore.integration.space.port.SpaceManagementCase;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.Mockito.never;
@@ -32,17 +38,31 @@ class EffectiveRbacQueryServiceTest {
 
     private static final UUID ORG_ID = UUID.fromString("aaaaaaaa-0000-0000-0000-000000000001");
     private static final UUID SPACE_ID = UUID.fromString("bbbbbbbb-0000-0000-0000-000000000002");
+    private static final UUID OTHER_SPACE_ID =
+            UUID.fromString("bbbbbbbb-0000-0000-0000-000000000099");
     private static final UUID ACCOUNT_ID = UUID.fromString("cccccccc-0000-0000-0000-000000000003");
 
     @Mock private GovernanceRoleAssignmentRepository roleAssignments;
     @Mock private GovernanceGroupAssignmentRepository groupMemberships;
     @Mock private GroupRoleRepository groupRoles;
+    @Mock private SpaceManagementCase spaceManagementCase;
 
-    @InjectMocks
     private EffectiveRbacQueryService service;
 
+    @BeforeEach
+    void setUp() {
+        EffectivePermissionResolver resolver = new EffectivePermissionResolver(
+                new RolePermissionCatalog(), spaceManagementCase);
+        service = new EffectiveRbacQueryService(
+                roleAssignments, groupMemberships, groupRoles, resolver);
+    }
+
     private RoleAssignment directRole(String code, RoleSource source) {
-        return new RoleAssignment(UUID.randomUUID(), ORG_ID, SPACE_ID, null,
+        return directRole(code, source, SPACE_ID);
+    }
+
+    private RoleAssignment directRole(String code, RoleSource source, UUID spaceId) {
+        return new RoleAssignment(UUID.randomUUID(), ORG_ID, spaceId, null,
                 code, source, null, Instant.now(), "actor", null, null);
     }
 
@@ -63,6 +83,8 @@ class EffectiveRbacQueryServiceTest {
     }
 
     private EffectiveRbac effective() {
+        when(spaceManagementCase.findOrgIdBySpaceId(SpaceId.of(SPACE_ID)))
+                .thenReturn(Optional.of(ORG_ID));
         return service.effectiveFor(ORG_ID, SPACE_ID, ACCOUNT_ID);
     }
 
@@ -75,7 +97,9 @@ class EffectiveRbacQueryServiceTest {
 
         assertThat(rbac.roles()).containsExactly("R_SPACE_ADMIN");
         assertThat(rbac.groups()).isEmpty();
-        assertThat(rbac.permissions()).contains("P_MANAGE_USERS", "P_ASSIGN_ROLES", "P_READ_POLICY");
+        assertThat(rbac.permissions()).contains(
+                "P_SPACE_USERS_MANAGE", "P_SPACE_RBAC_ASSIGN", "P_SPACE_POLICY_READ");
+        assertThat(rbac.permissions()).allMatch(permission -> permission.startsWith("P_SPACE_"));
     }
 
     @Test
@@ -88,7 +112,7 @@ class EffectiveRbacQueryServiceTest {
 
         assertThat(rbac.groups()).containsExactly("G_SPACE_ADMINS");
         assertThat(rbac.roles()).containsExactly("R_SPACE_ADMIN");
-        assertThat(rbac.permissions()).contains("P_MANAGE_USERS");
+        assertThat(rbac.permissions()).contains("P_SPACE_USERS_MANAGE");
     }
 
     @Test
@@ -162,18 +186,14 @@ class EffectiveRbacQueryServiceTest {
     }
 
     @Test
-    void hiddenTechnicalCodes_neverEnterTenantClaims_evenFromSeededRows() {
-        // Une ligne seedée R_TAKIBO_PLATFORM_ADMIN / R_SELF ne fuit jamais dans un token tenant.
-        givenDirectRoles(
-                directRole("R_TAKIBO_PLATFORM_ADMIN", RoleSource.TECHNICAL),
-                directRole("R_SELF", RoleSource.TECHNICAL),
-                directRole("R_SPACE_ADMIN", RoleSource.TECHNICAL));
+    void platformRoleSeededOnTenant_failsClosedInsteadOfEnteringClaims() {
+        givenDirectRoles(directRole(
+                "R_TAKIBO_PLATFORM_ADMIN", RoleSource.TECHNICAL));
         givenMemberships();
 
-        EffectiveRbac rbac = effective();
-
-        assertThat(rbac.roles()).containsExactly("R_SPACE_ADMIN");
-        assertThat(rbac.permissions()).doesNotContain("P_CREATE_ORG", "P_DELETE_ORG");
+        assertThatThrownBy(this::effective)
+                .isInstanceOf(EffectivePermissionResolutionException.class)
+                .hasMessageContaining("Automatic PLATFORM projection");
     }
 
     @Test
@@ -191,19 +211,22 @@ class EffectiveRbacQueryServiceTest {
     }
 
     @Test
-    void orgScopedTechnicalGroup_transmitsOnlyInheritableOrgRoles() {
+    void orgScopedTechnicalGroup_projectsSpacePermissionsWithoutFabricatingSpaceRole() {
         givenDirectRoles();
-        givenMemberships(membership("G_ORG_ADMINS", GroupSource.TECHNICAL));
+        givenMemberships(orgLevelMembership("G_ORG_ADMINS"));
 
         EffectiveRbac rbac = effective();
 
         assertThat(rbac.groups()).containsExactly("G_ORG_ADMINS");
         assertThat(rbac.roles()).containsExactly("R_ORG_ADMIN");
-        assertThat(rbac.permissions()).contains("P_CREATE_SPACE", "P_UPDATE_POLICY");
+        assertThat(rbac.roles()).doesNotContain("R_SPACE_ADMIN");
+        assertThat(rbac.permissions())
+                .hasSize(15)
+                .allMatch(permission -> permission.startsWith("P_SPACE_"));
     }
 
     @Test
-    void spaceAuditor_yieldsCompatibleAuditPermissionsUntilCanonicalMatrixIsActive() {
+    void spaceAuditor_yieldsCanonicalSpacePermissions() {
         givenDirectRoles(directRole("R_SPACE_AUDITOR", RoleSource.TECHNICAL));
         givenMemberships();
 
@@ -211,18 +234,48 @@ class EffectiveRbacQueryServiceTest {
 
         assertThat(rbac.roles()).containsExactly("R_SPACE_AUDITOR");
         assertThat(rbac.permissions()).containsExactly(
-                "P_EXPORT_AUDIT_LOGS", "P_READ_AUDIT_LOGS");
+                "P_SPACE_AUDIT_EXPORT", "P_SPACE_AUDIT_READ", "P_SPACE_READ");
     }
 
     @Test
     void permissions_deriveOnlyFromTenantVisibleTechnicalRoles() {
-        givenDirectRoles(directRole("R_ORG_AUDITOR", RoleSource.TECHNICAL));
+        givenDirectRoles(orgLevelRole("R_ORG_AUDITOR"));
         givenMemberships();
 
         EffectiveRbac rbac = effective();
 
         assertThat(rbac.permissions()).containsExactly(
-                "P_EXPORT_AUDIT_LOGS", "P_READ_AUDIT_LOGS", "P_READ_ORG", "P_READ_POLICY");
+                "P_SPACE_AUDIT_EXPORT", "P_SPACE_AUDIT_READ", "P_SPACE_POLICY_READ");
+    }
+
+    @Test
+    void changingSpace_reloadsAssignmentsAndRecalculatesPermissions() {
+        RoleAssignment orgUserAdmin = orgLevelRole("R_ORG_USER_ADMIN");
+        when(roleAssignments.findDirectAssignments(ORG_ID, SPACE_ID, ACCOUNT_ID))
+                .thenReturn(List.of(
+                        orgUserAdmin,
+                        directRole("R_SPACE_CLIENT_ADMIN", RoleSource.TECHNICAL, SPACE_ID)));
+        when(roleAssignments.findDirectAssignments(ORG_ID, OTHER_SPACE_ID, ACCOUNT_ID))
+                .thenReturn(List.of(orgUserAdmin));
+        when(groupMemberships.findDirectMemberships(ORG_ID, SPACE_ID, ACCOUNT_ID))
+                .thenReturn(List.of());
+        when(groupMemberships.findDirectMemberships(ORG_ID, OTHER_SPACE_ID, ACCOUNT_ID))
+                .thenReturn(List.of());
+        when(spaceManagementCase.findOrgIdBySpaceId(SpaceId.of(SPACE_ID)))
+                .thenReturn(Optional.of(ORG_ID));
+        when(spaceManagementCase.findOrgIdBySpaceId(SpaceId.of(OTHER_SPACE_ID)))
+                .thenReturn(Optional.of(ORG_ID));
+
+        EffectiveRbac firstSpace =
+                service.effectiveFor(ORG_ID, SPACE_ID, ACCOUNT_ID);
+        EffectiveRbac secondSpace =
+                service.effectiveFor(ORG_ID, OTHER_SPACE_ID, ACCOUNT_ID);
+
+        assertThat(firstSpace.permissions()).contains("P_SPACE_CLIENTS_MANAGE");
+        assertThat(secondSpace.permissions()).doesNotContain("P_SPACE_CLIENTS_MANAGE");
+        assertThat(firstSpace.roles())
+                .containsExactly("R_ORG_USER_ADMIN", "R_SPACE_CLIENT_ADMIN");
+        assertThat(secondSpace.roles()).containsExactly("R_ORG_USER_ADMIN");
     }
 
     // ───────────────────── IAM 31 — effectiveOrgFor (portée ORGANIZATION) ─────────────────────
@@ -260,9 +313,11 @@ class EffectiveRbacQueryServiceTest {
         EffectiveRbac rbac = service.effectiveOrgFor(ORG_ID, ACCOUNT_ID);
 
         assertThat(rbac.roles()).containsExactly("R_ORG_OWNER");
-        assertThat(rbac.permissions()).contains("P_READ_ORG", "P_CREATE_SPACE", "P_ASSIGN_ROLES");
+        assertThat(rbac.permissions()).contains(
+                "P_ORG_READ", "P_ORG_SPACES_CREATE", "P_ORG_RBAC_ASSIGN");
+        assertThat(rbac.permissions()).allMatch(permission -> permission.startsWith("P_ORG_"));
         // I2 : aucun code de scope SYSTEM/SPACE/USER.
-        assertThat(rbac.permissions()).doesNotContain("P_CREATE_ORG", "P_DELETE_ORG");
+        assertThat(rbac.permissions()).noneMatch(permission -> permission.startsWith("P_PLATFORM_"));
     }
 
     @Test
@@ -290,7 +345,7 @@ class EffectiveRbacQueryServiceTest {
 
         assertThat(rbac.roles()).containsExactly("R_ORG_VIEWER");
         assertThat(rbac.groups()).isEmpty();
-        assertThat(rbac.permissions()).containsExactly("P_READ_ORG", "P_READ_POLICY");
+        assertThat(rbac.permissions()).isEmpty();
     }
 
     @Test

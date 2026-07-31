@@ -1,6 +1,7 @@
 package com.takibo.securitymanagement.domain.service;
 
 import com.takibo.identitycore.application.rbac.effective.model.EffectiveRbac;
+import com.takibo.identitycore.application.rbac.effective.service.EffectivePermissionResolver;
 import com.takibo.identitycore.application.rbac.effective.service.EffectiveRbacQueryService;
 import com.takibo.identitycore.domain.rbac.model.RoleAssignment;
 import com.takibo.identitycore.domain.rbac.model.RoleSource;
@@ -23,6 +24,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -38,6 +40,7 @@ class RoleNamingEscalationRegressionTest {
     @Mock private GovernanceRoleAssignmentRepository roleAssignments;
     @Mock private GovernanceGroupAssignmentRepository groupMemberships;
     @Mock private GroupRoleRepository groupRoles;
+    @Mock private EffectivePermissionResolver permissionResolver;
 
     @Test
     void legacyCanonicalGovernanceRoles_doNotEnterTokenOrGrantAdministratorStatus() {
@@ -49,9 +52,10 @@ class RoleNamingEscalationRegressionTest {
                 .thenReturn(legacyAssignments);
         when(groupMemberships.findDirectMemberships(ORG_ID, SPACE_ID, ACCOUNT_ID))
                 .thenReturn(List.of());
+        when(permissionResolver.resolve(any())).thenReturn(Set.of());
 
         EffectiveRbac effective = new EffectiveRbacQueryService(
-                roleAssignments, groupMemberships, groupRoles)
+                roleAssignments, groupMemberships, groupRoles, permissionResolver)
                 .effectiveFor(ORG_ID, SPACE_ID, ACCOUNT_ID);
 
         assertThat(effective.roles()).isEmpty();

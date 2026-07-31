@@ -56,6 +56,13 @@ class CanonicalRbacCatalogTest {
     }
 
     @Test
+    void organizationAdminGroup_transmitsAdminRoleOnly() {
+        assertThat(TechnicalGroup.ORG_ADMINS.roles())
+                .containsExactly(TechnicalRole.ORG_ADMIN)
+                .doesNotContain(TechnicalRole.ORG_OWNER);
+    }
+
+    @Test
     void spaceAuditor_keepsLegacyAuditPermissionsUntilEffectiveRbacIsMigrated() {
         assertThat(TechnicalRole.SPACE_AUDITOR.permissions())
                 .extracting(TechnicalGroup.TechnicalPermission::code)

@@ -47,6 +47,18 @@ class TakiboOAuth2TokenCustomizerTest {
                 .build();
     }
 
+    private RegisteredClient organizationClient() {
+        return baseClient("4", "organization-client")
+                .clientSettings(ClientSettings.builder()
+                        .setting(TakiboTokenClaims.SCOPE_LEVEL,
+                                TakiboTokenClaims.SCOPE_ORGANIZATION)
+                        .setting(TakiboTokenClaims.TENANT_SOURCE,
+                                TakiboTokenClaims.SOURCE_OAUTH2_CLIENT)
+                        .setting(TakiboTokenClaims.ORG_ID, ORG)
+                        .build())
+                .build();
+    }
+
     @Test
     void given_space_client_when_apply_tenant_claims_then_emits_real_tenant_and_scope() {
         JwtClaimsSet.Builder claims = JwtClaimsSet.builder();
@@ -72,6 +84,18 @@ class TakiboOAuth2TokenCustomizerTest {
     }
 
     @Test
+    void given_organization_client_when_apply_tenant_claims_then_emits_org_without_space() {
+        JwtClaimsSet.Builder claims = JwtClaimsSet.builder();
+        TakiboOAuth2TokenCustomizer.applyTenantClaims(organizationClient(), claims);
+        JwtClaimsSet set = claims.build();
+
+        assertThat(set.getClaimAsString("takibo_scope_level")).isEqualTo("ORGANIZATION");
+        assertThat(set.getClaimAsString("org_id")).isEqualTo(ORG);
+        assertThat((Object) set.getClaim("space_id")).isNull();
+        assertThat(set.getClaimAsString("takibo_tenant_source")).isEqualTo("oauth2_client");
+    }
+
+    @Test
     void given_platform_client_when_apply_tenant_claims_then_no_token_contains_stub_org() {
         JwtClaimsSet.Builder claims = JwtClaimsSet.builder();
         TakiboOAuth2TokenCustomizer.applyTenantClaims(platformClient(), claims);
@@ -86,12 +110,53 @@ class TakiboOAuth2TokenCustomizerTest {
         RegisteredClient broken = baseClient("3", "broken-space")
                 .clientSettings(ClientSettings.builder()
                         .setting(TakiboTokenClaims.SCOPE_LEVEL, TakiboTokenClaims.SCOPE_SPACE)
+                        .setting(TakiboTokenClaims.TENANT_SOURCE,
+                                TakiboTokenClaims.SOURCE_OAUTH2_CLIENT)
                         .build())
                 .build();
 
         assertThatThrownBy(() -> TakiboOAuth2TokenCustomizer.applyTenantClaims(broken, JwtClaimsSet.builder()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("SPACE_CLIENT_REQUIRES_ORG_AND_SPACE");
+    }
+
+    @Test
+    void given_platform_client_with_tenant_when_apply_tenant_claims_then_fails_closed() {
+        RegisteredClient broken = baseClient("5", "broken-platform")
+                .clientSettings(ClientSettings.builder()
+                        .setting(TakiboTokenClaims.SCOPE_LEVEL, TakiboTokenClaims.SCOPE_PLATFORM)
+                        .setting(TakiboTokenClaims.TENANT_SOURCE,
+                                TakiboTokenClaims.SOURCE_PLATFORM)
+                        .setting(TakiboTokenClaims.ORG_ID, ORG)
+                        .build())
+                .build();
+
+        assertThatThrownBy(() -> TakiboOAuth2TokenCustomizer.applyTenantClaims(
+                broken, JwtClaimsSet.builder()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("PLATFORM_CLIENT_MUST_NOT_CARRY_TENANT");
+    }
+
+    @Test
+    void given_client_without_explicit_scope_or_source_then_fails_closed() {
+        RegisteredClient missingScope = baseClient("6", "missing-scope")
+                .clientSettings(ClientSettings.builder()
+                        .setting(TakiboTokenClaims.TENANT_SOURCE,
+                                TakiboTokenClaims.SOURCE_PLATFORM)
+                        .build())
+                .build();
+        RegisteredClient missingSource = baseClient("7", "missing-source")
+                .clientSettings(ClientSettings.builder()
+                        .setting(TakiboTokenClaims.SCOPE_LEVEL, TakiboTokenClaims.SCOPE_PLATFORM)
+                        .build())
+                .build();
+
+        assertThatThrownBy(() -> TakiboOAuth2TokenCustomizer.applyTenantClaims(
+                missingScope, JwtClaimsSet.builder()))
+                .hasMessageContaining("CLIENT_REQUIRES_EXPLICIT_SCOPE_LEVEL");
+        assertThatThrownBy(() -> TakiboOAuth2TokenCustomizer.applyTenantClaims(
+                missingSource, JwtClaimsSet.builder()))
+                .hasMessageContaining("CLIENT_REQUIRES_EXPLICIT_TENANT_SOURCE");
     }
 
     @Test

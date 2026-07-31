@@ -34,6 +34,7 @@ public final class TakiboTokenClaims {
     public static final String SOURCE_OAUTH2_CLIENT = "oauth2_client";
     public static final String SOURCE_PLATFORM = "platform_client";
     public static final String SOURCE_HUMAN_LOGIN = "human_login";
+    public static final String SOURCE_HUMAN_SPACE_SELECTION = "human_space_selection";
 
     // Valeurs sujet / auth (flux client_credentials)
     public static final String SUBJECT_CLIENT_APP = "CLIENT_APP";
