@@ -41,6 +41,13 @@ dependencies {
     testImplementation 'org.springframework.security:spring-security-oauth2-jose'
     testImplementation 'org.flywaydb:flyway-core'
     testImplementation 'org.flywaydb:flyway-database-postgresql'
+    // Filet de securite TAS-GRANTS-00 : PostgreSQL reel + migrations Flyway reelles.
+    // H2 en mode PostgreSQL ne porte ni jsonb ni index uniques partiels.
+    testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
+    testImplementation 'org.testcontainers:testcontainers-postgresql'
+    // Le module TAS expose Spring Authorization Server en 'implementation' : ses types ne
+    // fuient pas ici. Le filet doit pouvoir observer OAuth2AuthorizationService.
+    testImplementation 'org.springframework.boot:spring-boot-starter-security-oauth2-authorization-server'
     testRuntimeOnly 'com.h2database:h2'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
