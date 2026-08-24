@@ -3,6 +3,7 @@ package com.takibo.iamboot.tas;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.MissingNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
@@ -189,21 +190,63 @@ class HumanLoginBaselineIntegrationTest extends TasPostgresBaseline {
     }
 
     @Test
-    void given_every_failure_cause_when_login_then_responses_are_indistinguishable() {
+    void given_every_failure_cause_when_login_then_payloads_are_byte_for_byte_identical() {
         HttpResponse<String> badPassword = login(TasBaselineDataset.ORG_CODE,
                 TasBaselineDataset.ACCOUNT_EMAIL, "Wrong!Password9", null);
         HttpResponse<String> unknownAccount = login(TasBaselineDataset.ORG_CODE,
                 "nobody@takibo.test", TasBaselineDataset.ACCOUNT_PASSWORD, null);
         HttpResponse<String> unknownOrg = login("NO-SUCH-ORG",
                 TasBaselineDataset.ACCOUNT_EMAIL, TasBaselineDataset.ACCOUNT_PASSWORD, null);
+        HttpResponse<String> noLocalUser = login(TasBaselineDataset.ORG_CODE,
+                TasBaselineDataset.ACCOUNT_EMAIL, TasBaselineDataset.ACCOUNT_PASSWORD,
+                TasBaselineDataset.SPACE_CODE);
 
         assertThat(badPassword.statusCode())
                 .isEqualTo(unknownAccount.statusCode())
-                .isEqualTo(unknownOrg.statusCode());
-        // Aucun corps ne doit trahir la cause reelle.
-        assertThat(body(badPassword).path("accessToken").asText()).isEmpty();
-        assertThat(body(unknownAccount).path("accessToken").asText()).isEmpty();
-        assertThat(body(unknownOrg).path("accessToken").asText()).isEmpty();
+                .isEqualTo(unknownOrg.statusCode())
+                .isEqualTo(noLocalUser.statusCode());
+
+        // Comparaison de la charge utile entiere, et non de quelques champs choisis :
+        // tout champ ajoute plus tard qui differerait selon la cause ferait tomber ce test.
+        assertThat(withoutVariableFields(badPassword))
+                .isEqualTo(withoutVariableFields(unknownAccount))
+                .isEqualTo(withoutVariableFields(unknownOrg))
+                .isEqualTo(withoutVariableFields(noLocalUser));
+    }
+
+    /**
+     * Retire les deux seuls champs intrinsequement variables de {@code SentinelResponse}
+     * — {@code timestamp} et {@code traceId} — et rend tout le reste tel quel.
+     * <p>
+     * Deux gardes encadrent cette normalisation, pour que la comparaison qui s'appuie dessus
+     * ne puisse pas devenir vide sans qu'on s'en apercoive :
+     * <ul>
+     *   <li>les champs retires doivent exister ; renommes ou supprimes, la normalisation
+     *       deviendrait un no-op silencieux ;</li>
+     *   <li>les champs porteurs de cause doivent subsister. Elargir la normalisation
+     *       jusqu'a {@code code} ou {@code message} reduirait la comparaison a une egalite
+     *       triviale entre deux objets vides.</li>
+     * </ul>
+     */
+    private static JsonNode withoutVariableFields(HttpResponse<String> response) {
+        JsonNode body = body(response);
+        assertThat(body.isObject())
+                .as("la reponse de refus doit etre un objet JSON")
+                .isTrue();
+        assertThat(body.has("timestamp")).isTrue();
+        assertThat(body.has("traceId")).isTrue();
+
+        ObjectNode normalized = ((ObjectNode) body).deepCopy();
+        normalized.remove("timestamp");
+        normalized.remove("traceId");
+
+        assertThat(normalized.has("code"))
+                .as("la comparaison doit porter sur le code d'erreur")
+                .isTrue();
+        assertThat(normalized.has("message"))
+                .as("la comparaison doit porter sur le message")
+                .isTrue();
+        return normalized;
     }
 
     private static void assertRefused(HttpResponse<String> response) {
