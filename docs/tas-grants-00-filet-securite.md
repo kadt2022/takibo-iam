@@ -118,3 +118,9 @@ concerné est le signal recherché :
 
 Le récit 02 devra les mettre à jour pour constater la ligne `oauth2_authorization`, PLATFORM
 comprise — et non les contourner par un service composite.
+
+Un troisième point demande l'attention du récit 02 : `AuthorizationSaveContractBaselineIntegrationTest`
+déclare son propre bean via `@TestConfiguration`, et un bean imbriqué prend le pas sur celui
+du contexte. Une fois le service JPA introduit, ce test continuerait donc d'observer
+l'enregistreur en mémoire au lieu de la vraie persistance. Il faudra soit le faire déléguer
+au service du contexte, soit le remplacer par une observation directe de la base.
