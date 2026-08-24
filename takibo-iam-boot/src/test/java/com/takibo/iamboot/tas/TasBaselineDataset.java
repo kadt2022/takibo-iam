@@ -29,8 +29,11 @@ final class TasBaselineDataset {
     static final UUID ACCOUNT_ID = UUID.fromString("cccccccc-0000-0000-0000-000000000003");
     static final UUID SPACE_CLIENT_UUID = UUID.fromString("dddddddd-0000-0000-0000-000000000005");
 
-    static final String ORG_CODE = "BASELINE-ORG";
-    static final String SPACE_CODE = "BASELINE-SPACE";
+    // Forme canonique imposee par la migration de normalisation des codes :
+    // minuscules en kebab-case. La resolution normalise l'entree avant de chercher,
+    // donc un code stocke sous une autre forme serait introuvable.
+    static final String ORG_CODE = "baseline-org";
+    static final String SPACE_CODE = "baseline-space";
 
     static final String ACCOUNT_EMAIL = "baseline@takibo.test";
     static final String ACCOUNT_PASSWORD = "Baseline!Pass1";
