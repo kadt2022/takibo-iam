@@ -1,6 +1,6 @@
 # TAS-GRANTS-00 — Filet de sécurité `client_credentials`
 
-**Statut :** À FAIRE  
+**Statut :** TERMINÉ (PR #51, 2026-08-24)  
 **Branche :** `test/tas-client-credentials-baseline-00`  
 **Dépendances :** aucune
 

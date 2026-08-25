@@ -31,6 +31,16 @@ En tant que TAS, nous voulons persister les autorisations et consentements OAuth
 - Toute valeur TTL nulle applique un défaut documenté identique au comportement machine antérieur; elle ne modifie pas silencieusement la durée des tokens `client_credentials`.
 - `reuseRefreshTokens(false)` est imposé aux clients confidentiels autorisés au refresh.
 
+### Consentement
+
+`oauth2_authorization_consent` porte aujourd'hui les quatre mêmes défauts que la table
+d'autorisation, et ils doivent être corrigés dans le même mouvement :
+
+- `space_id` est `NOT NULL`, ce qui interdit un consentement au plan ORGANIZATION ; il devient nullable selon les mêmes règles que `oauth2_authorization`.
+- `principal_account_id` est `NOT NULL` avec une FK vers `accounts(org_id, id)` ; le sujet explicite (`subject_type`, `principal_name`) s'applique ici aussi.
+- `fk_oauth2_consent_client_scope` référence `oauth2_clients(org_id, space_id, client_id)`, c'est-à-dire le `client_id` public, alors que Spring Authorization Server manipule l'identifiant technique. Même traitement que `fk_oauth2_authz_client_scope`.
+- `uk_oauth2_consent_client_principal` est tenant-scopée, alors que la signature de lecture est `findById(String registeredClientId, String principalName)` — **sans aucun paramètre de tenant**, exactement comme `findByToken`. L'unicité doit être globale sur ce couple.
+
 ## Critères d’acceptation
 
 - [ ] Une autorisation survit au redémarrage de TAS.
@@ -46,6 +56,10 @@ En tant que TAS, nous voulons persister les autorisations et consentements OAuth
 - [ ] Le registre de clients reste en lecture seule côté TAS; `RegisteredClientRepository.save` n’est pas utilisé/supporté.
 - [ ] `client_credentials` continue à fonctionner avec la persistance active.
 - [ ] Le test transversal défini en TAS-GRANTS-00 constate bien une ligne `oauth2_authorization` pour PLATFORM et SPACE; aucun service composite ne contourne la persistance PLATFORM.
+- [ ] `findById(registeredClientId, principalName)` retrouve un consentement sans paramètre de tenant, et un consentement au plan ORGANIZATION se sauvegarde sans `space_id`.
+- [ ] Les deux tests sentinelles de TAS-GRANTS-00 sont mis à jour plutôt que contournés : `given_current_wiring_then_no_authorization_service_bean_is_declared` et `given_successful_token_when_database_inspected_then_nothing_is_persisted`.
+- [ ] `AuthorizationSaveContractBaselineIntegrationTest` n'observe plus l'enregistreur en mémoire. Son bean déclaré via `@TestConfiguration` masque celui du contexte : il doit soit déléguer au service réel, soit céder la place à une observation directe de la base.
+- [ ] Le chiffrement au repos consomme le port défini par TAS-GRANTS-02A ; aucun second mécanisme n'est introduit.
 
 ## Tests attendus
 
@@ -58,6 +72,7 @@ En tant que TAS, nous voulons persister les autorisations et consentements OAuth
 - Tests de mapping des `TokenSettings`, valeurs explicites et nulles, avec non-régression des TTL machine.
 - Vérification qu’aucune colonne ni log ne contient un token en clair.
 - Redémarrage simulé et relecture d’une autorisation.
+- Consentement : sauvegarde, relecture sans tenant, unicité globale du couple client/principal, et plan ORGANIZATION sans `space_id`.
 
 ## Hors périmètre
 

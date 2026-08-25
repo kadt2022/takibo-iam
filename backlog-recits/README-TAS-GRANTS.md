@@ -15,17 +15,29 @@ Préparer l’intégration progressive de `authorization_code`, `refresh_token` 
 
 ## Ordre d’exécution
 
-| Ordre | Récit | Branche | Dépend de |
-|---:|---|---|---|
-| 00 | Filet de sécurité `client_credentials` | `test/tas-client-credentials-baseline-00` | — |
-| 01 | Résolution réelle du tenant | `feat/tas-tenant-resolution-01` | 00 |
-| 02 | Persistance OAuth 2.0 | `feat/tas-oauth-persistence-02` | 01 |
-| 02A | Clés de signature persistantes | `feat/tas-signing-keys-02a` | 00; parallèle à 01/02 |
-| 03 | Authentification humaine SAS | `feat/tas-human-authentication-03` | 02, TIS-Core stable |
-| 04 | Authorization Code + PKCE | `feat/tas-authorization-code-pkce-04` | 03, 02A |
-| 05 | Refresh Token | `feat/tas-refresh-token-05` | 04, 02A |
-| 06 | Device Authorization Grant | `feat/tas-device-code-06` | 03, 02, 02A |
-| 07 | Révocation et purge | `feat/tas-revocation-purge-07` | 05, 06 |
+À la finition validée d'un récit, passer son **Statut** à `TERMINÉ`, déplacer son fichier
+avec `git mv` vers `docs/terminer`, puis mettre à jour la ligne correspondante ci-dessous.
+Une PR ouverte ne suffit pas à clôturer.
+
+| Ordre | Récit | Statut | Branche | Dépend de |
+|---:|---|---|---|---|
+| 00 | [Filet de sécurité `client_credentials`](../docs/terminer/TAS-GRANTS-00-filet-securite-client-credentials.md) | **TERMINÉ** (PR #51, 2026-08-24) | `test/tas-client-credentials-baseline-00` | — |
+| 01 | [Résolution réelle du tenant](TAS-GRANTS-01-resolution-tenant.md) | à faire | `feat/tas-tenant-resolution-01` | 00 |
+| 02 | [Persistance OAuth 2.0](TAS-GRANTS-02-persistance-oauth.md) | à faire | `feat/tas-oauth-persistence-02` | 01 |
+| 02A | [Clés de signature persistantes](TAS-GRANTS-02A-cles-signature-persistantes.md) | à faire | `feat/tas-signing-keys-02a` | 00; parallèle à 01/02 |
+| 03 | Authentification humaine SAS | à rédiger | `feat/tas-human-authentication-03` | 02, TIS-Core stable |
+| 04 | Authorization Code + PKCE | à rédiger | `feat/tas-authorization-code-pkce-04` | 03, 02A |
+| 05 | Refresh Token | à rédiger | `feat/tas-refresh-token-05` | 04, 02A |
+| 06 | Device Authorization Grant | à rédiger | `feat/tas-device-code-06` | 03, 02, 02A |
+| 07 | [Révocation et purge](TAS-GRANTS-07-revocation-purge.md) | à faire | `feat/tas-revocation-purge-07` | 05, 06 |
+
+Les récits 03 à 06 sont ordonnancés mais pas encore rédigés. Le récit 04 ne peut pas
+démarrer avant que 03 existe : c'est lui qui décide de la forme du principal humain.
+
+> **Emplacement à arbitrer.** Ce lot vit dans `backlog-recits/` à la racine, alors que le
+> dépôt range son backlog dans `docs/backlog/` avec son propre index. Les récits clos
+> partent pourtant dans le `docs/terminer/` commun. Regrouper le lot sous `docs/backlog/`
+> lèverait l'incohérence, au prix d'une réconciliation des deux index.
 
 ## Règles de livraison
 
@@ -46,6 +58,8 @@ Préparer l’intégration progressive de `authorization_code`, `refresh_token` 
 - TAS-GRANTS-02 porte explicitement le mapping des `TokenSettings` et du consentement. Les colonnes TTL nulles doivent conserver les durées machine actuelles; la rotation impose `reuseRefreshTokens(false)` aux clients confidentiels autorisés.
 - PostgreSQL est la seule base cible de ce lot. Les migrations utilisent notamment `jsonb` et des index uniques partiels; le profil MySQL sans répertoire Flyway complet n’est pas déclaré supporté.
 - TAS-GRANTS-02A peut être développé en parallèle de 01 et 02 : `tas_signing_keys` est indépendante de `oauth2_authorization`. Les grants 04, 05 et 06 attendent cependant sa fusion.
+- **Le chiffrement au repos appartient à TAS-GRANTS-02A.** Les récits 02 et 02A en ont tous deux besoin — valeurs de codes et de tokens pour l'un, matière privée des clés pour l'autre — et sont déclarés parallèles. Sans propriétaire désigné, deux mécanismes seraient construits, ou un secret de configuration serait figé par le premier arrivé. 02A porte déjà la colonne `private_key_encrypted` et prévoit un port de stockage ouvert à un KMS/HSM : il définit le port, 02 le consomme.
+- **Le claim d'époque de sécurité se décide en 03 ou 04, jamais en 07.** `TakiboTokenClaims` n'en porte aucun aujourd'hui. Comparer l'époque d'un token à l'époque courante suppose qu'elle figure dans le JWT ; l'introduire au récit 07 reviendrait à modifier le contrat de token alors que des tokens circulent déjà. La décision appartient au récit qui définit les claims humains, même si son exploitation attend 07.
 
 ## Hors lot
 
