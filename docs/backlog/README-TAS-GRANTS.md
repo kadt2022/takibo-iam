@@ -21,7 +21,7 @@ Une PR ouverte ne suffit pas à clôturer.
 
 | Ordre | Récit | Statut | Branche | Dépend de |
 |---:|---|---|---|---|
-| 00 | [Filet de sécurité `client_credentials`](../docs/terminer/TAS-GRANTS-00-filet-securite-client-credentials.md) | **TERMINÉ** (PR #51, 2026-08-24) | `test/tas-client-credentials-baseline-00` | — |
+| 00 | [Filet de sécurité `client_credentials`](../terminer/TAS-GRANTS-00-filet-securite-client-credentials.md) | **TERMINÉ** (PR #51, 2026-08-24) | `test/tas-client-credentials-baseline-00` | — |
 | 01 | [Résolution réelle du tenant](TAS-GRANTS-01-resolution-tenant.md) | à faire | `feat/tas-tenant-resolution-01` | 00 |
 | 02 | [Persistance OAuth 2.0](TAS-GRANTS-02-persistance-oauth.md) | à faire | `feat/tas-oauth-persistence-02` | 01 |
 | 02A | [Clés de signature persistantes](TAS-GRANTS-02A-cles-signature-persistantes.md) | à faire | `feat/tas-signing-keys-02a` | 00; parallèle à 01/02 |
@@ -33,11 +33,6 @@ Une PR ouverte ne suffit pas à clôturer.
 
 Les récits 03 à 06 sont ordonnancés mais pas encore rédigés. Le récit 04 ne peut pas
 démarrer avant que 03 existe : c'est lui qui décide de la forme du principal humain.
-
-> **Emplacement à arbitrer.** Ce lot vit dans `backlog-recits/` à la racine, alors que le
-> dépôt range son backlog dans `docs/backlog/` avec son propre index. Les récits clos
-> partent pourtant dans le `docs/terminer/` commun. Regrouper le lot sous `docs/backlog/`
-> lèverait l'incohérence, au prix d'une réconciliation des deux index.
 
 ## Règles de livraison
 
