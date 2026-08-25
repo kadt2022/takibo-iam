@@ -2,7 +2,7 @@
 
 **Statut :** À FAIRE  
 **Branche :** `feat/tas-oauth-persistence-02`  
-**Dépendances :** TAS-GRANTS-01
+**Dépendances :** TAS-GRANTS-01 et TAS-GRANTS-02A (port de chiffrement au repos)
 
 ## Récit
 

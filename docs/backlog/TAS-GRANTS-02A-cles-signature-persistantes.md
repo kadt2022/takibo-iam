@@ -2,7 +2,7 @@
 
 **Statut :** À FAIRE  
 **Branche :** `feat/tas-signing-keys-02a`  
-**Dépendances :** TAS-GRANTS-00; développement parallèle possible avec TAS-GRANTS-01 et 02
+**Dépendances :** TAS-GRANTS-00; développement parallèle possible avec TAS-GRANTS-01
 
 ## Récit
 

@@ -23,8 +23,8 @@ Une PR ouverte ne suffit pas à clôturer.
 |---:|---|---|---|---|
 | 00 | [Filet de sécurité `client_credentials`](../terminer/TAS-GRANTS-00-filet-securite-client-credentials.md) | **TERMINÉ** (PR #51, 2026-08-24) | `test/tas-client-credentials-baseline-00` | — |
 | 01 | [Résolution réelle du tenant](TAS-GRANTS-01-resolution-tenant.md) | à faire | `feat/tas-tenant-resolution-01` | 00 |
-| 02 | [Persistance OAuth 2.0](TAS-GRANTS-02-persistance-oauth.md) | à faire | `feat/tas-oauth-persistence-02` | 01 |
-| 02A | [Clés de signature persistantes](TAS-GRANTS-02A-cles-signature-persistantes.md) | à faire | `feat/tas-signing-keys-02a` | 00; parallèle à 01/02 |
+| 02 | [Persistance OAuth 2.0](TAS-GRANTS-02-persistance-oauth.md) | à faire | `feat/tas-oauth-persistence-02` | 01, 02A |
+| 02A | [Clés de signature persistantes](TAS-GRANTS-02A-cles-signature-persistantes.md) | à faire | `feat/tas-signing-keys-02a` | 00; parallèle à 01 |
 | 03 | Authentification humaine SAS | à rédiger | `feat/tas-human-authentication-03` | 02, TIS-Core stable |
 | 04 | Authorization Code + PKCE | à rédiger | `feat/tas-authorization-code-pkce-04` | 03, 02A |
 | 05 | Refresh Token | à rédiger | `feat/tas-refresh-token-05` | 04, 02A |
@@ -52,8 +52,8 @@ démarrer avant que 03 existe : c'est lui qui décide de la forme du principal h
 - Une SPA publique utilise `authorization_code` + PKCE sans refresh token : SAS peut retourner silencieusement `null` pour le refresh avec `ClientAuthenticationMethod.NONE`. Un besoin de refresh impose un client confidentiel/BFF et un profil client TMS distinct.
 - TAS-GRANTS-02 porte explicitement le mapping des `TokenSettings` et du consentement. Les colonnes TTL nulles doivent conserver les durées machine actuelles; la rotation impose `reuseRefreshTokens(false)` aux clients confidentiels autorisés.
 - PostgreSQL est la seule base cible de ce lot. Les migrations utilisent notamment `jsonb` et des index uniques partiels; le profil MySQL sans répertoire Flyway complet n’est pas déclaré supporté.
-- TAS-GRANTS-02A peut être développé en parallèle de 01 et 02 : `tas_signing_keys` est indépendante de `oauth2_authorization`. Les grants 04, 05 et 06 attendent cependant sa fusion.
-- **Le chiffrement au repos appartient à TAS-GRANTS-02A.** Les récits 02 et 02A en ont tous deux besoin — valeurs de codes et de tokens pour l'un, matière privée des clés pour l'autre — et sont déclarés parallèles. Sans propriétaire désigné, deux mécanismes seraient construits, ou un secret de configuration serait figé par le premier arrivé. 02A porte déjà la colonne `private_key_encrypted` et prévoit un port de stockage ouvert à un KMS/HSM : il définit le port, 02 le consomme.
+- **TAS-GRANTS-02A se développe en parallèle de 01, mais précède 02.** Deux indépendances distinctes, à ne pas confondre. Côté données, `tas_signing_keys` est sans rapport avec `oauth2_authorization` : rien n'oblige à les migrer dans l'ordre. Côté code, 02A définit le port de chiffrement au repos que 02 consomme, ce qui crée une dépendance réelle. Le coût sur le chemin critique reste faible, 02A pouvant avancer pendant 01 ; 02 attend simplement les deux. Les grants 04, 05 et 06 attendent également la fusion de 02A.
+- **Le chiffrement au repos appartient à TAS-GRANTS-02A.** Les récits 02 et 02A en ont tous deux besoin — valeurs de codes et de tokens pour l'un, matière privée des clés pour l'autre. Sans propriétaire désigné, deux mécanismes seraient construits, ou un secret de configuration serait figé par le premier arrivé. 02A porte déjà la colonne `private_key_encrypted` et prévoit un port de stockage ouvert à un KMS/HSM : il définit le port, 02 le consomme. C'est cette décision, et non une contrainte de schéma, qui fait de 02A un prérequis de 02.
 - **Le claim d'époque de sécurité se décide en 03 ou 04, jamais en 07.** `TakiboTokenClaims` n'en porte aucun aujourd'hui. Comparer l'époque d'un token à l'époque courante suppose qu'elle figure dans le JWT ; l'introduire au récit 07 reviendrait à modifier le contrat de token alors que des tokens circulent déjà. La décision appartient au récit qui définit les claims humains, même si son exploitation attend 07.
 
 ## Hors lot
