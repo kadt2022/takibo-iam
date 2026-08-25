@@ -50,6 +50,7 @@ import static org.mockito.Mockito.when;
 class TenantResolutionFilterTest {
 
     private static final String CLIENT_ID = "busa-finance";
+    private static final String PARAM_CLIENT_ID = "client_id";
     private static final UUID ORG_ID = UUID.fromString("674b889c-4d4e-47bd-bdf6-972dc84f1b49");
     private static final UUID SPACE_ID = UUID.fromString("8932f9bc-0af0-4c64-94c8-abb0150c348b");
     private static final TenantContext TENANT = new TenantContext(ORG_ID, SPACE_ID);
@@ -92,7 +93,7 @@ class TenantResolutionFilterTest {
         when(tenantResolver.resolve(CLIENT_ID)).thenReturn(TENANT);
 
         MockHttpServletRequest request = tokenRequest();
-        request.setParameter("client_id", CLIENT_ID);
+        request.setParameter(PARAM_CLIENT_ID, CLIENT_ID);
 
         filter().doFilter(request, new MockHttpServletResponse(), chain);
 
@@ -123,7 +124,7 @@ class TenantResolutionFilterTest {
         when(tenantResolver.resolve(CLIENT_ID)).thenReturn(TENANT);
 
         MockHttpServletRequest request = authorizeRequest();
-        request.setParameter("client_id", CLIENT_ID);
+        request.setParameter(PARAM_CLIENT_ID, CLIENT_ID);
 
         filter().doFilter(request, new MockHttpServletResponse(), chain);
 
@@ -164,7 +165,7 @@ class TenantResolutionFilterTest {
         when(tenantResolver.resolve(CLIENT_ID)).thenReturn(TENANT);
 
         MockHttpServletRequest request = uriRequest("/.well-known/openid-configuration");
-        request.setParameter("client_id", CLIENT_ID);
+        request.setParameter(PARAM_CLIENT_ID, CLIENT_ID);
 
         filter().doFilter(request, new MockHttpServletResponse(), chain);
 
@@ -188,7 +189,7 @@ class TenantResolutionFilterTest {
         when(tenantResolver.resolve(CLIENT_ID)).thenReturn(TENANT);
 
         MockHttpServletRequest request = uriRequest("/userinfo");
-        request.setParameter("client_id", CLIENT_ID);
+        request.setParameter(PARAM_CLIENT_ID, CLIENT_ID);
 
         filter().doFilter(request, new MockHttpServletResponse(), chain);
 
@@ -216,7 +217,7 @@ class TenantResolutionFilterTest {
         when(tenantResolver.resolve(CLIENT_ID)).thenReturn(TENANT);
 
         MockHttpServletRequest request = uriRequest("/oauth2/revoke");
-        request.setParameter("client_id", CLIENT_ID);
+        request.setParameter(PARAM_CLIENT_ID, CLIENT_ID);
 
         filter().doFilter(request, new MockHttpServletResponse(), chain);
 
@@ -233,7 +234,7 @@ class TenantResolutionFilterTest {
         givenExceptionIsHandled();
 
         MockHttpServletRequest request = tokenRequest();
-        request.setParameter("client_id", CLIENT_ID);
+        request.setParameter(PARAM_CLIENT_ID, CLIENT_ID);
 
         filter().doFilter(request, new MockHttpServletResponse(), chain);
 
@@ -249,7 +250,7 @@ class TenantResolutionFilterTest {
         givenExceptionIsHandled();
 
         MockHttpServletRequest request = tokenRequest();
-        request.setParameter("client_id", CLIENT_ID);
+        request.setParameter(PARAM_CLIENT_ID, CLIENT_ID);
 
         filter().doFilter(request, new MockHttpServletResponse(), chain);
 
@@ -266,7 +267,7 @@ class TenantResolutionFilterTest {
                 .thenReturn(null);
 
         MockHttpServletRequest request = tokenRequest();
-        request.setParameter("client_id", CLIENT_ID);
+        request.setParameter(PARAM_CLIENT_ID, CLIENT_ID);
 
         assertThatThrownBy(() -> filter().doFilter(request, new MockHttpServletResponse(), chain))
                 .isInstanceOf(TakiboInvalidClientException.class);
@@ -280,7 +281,7 @@ class TenantResolutionFilterTest {
         when(tenantResolver.resolve(CLIENT_ID)).thenReturn(TENANT);
 
         MockHttpServletRequest request = tokenRequest();
-        request.setParameter("client_id", CLIENT_ID);
+        request.setParameter(PARAM_CLIENT_ID, CLIENT_ID);
 
         filter().doFilter(request, new MockHttpServletResponse(), chain);
 
@@ -295,7 +296,7 @@ class TenantResolutionFilterTest {
         givenExceptionIsHandled();
 
         MockHttpServletRequest request = tokenRequest();
-        request.setParameter("client_id", CLIENT_ID);
+        request.setParameter(PARAM_CLIENT_ID, CLIENT_ID);
 
         filter().doFilter(request, new MockHttpServletResponse(), chain);
 

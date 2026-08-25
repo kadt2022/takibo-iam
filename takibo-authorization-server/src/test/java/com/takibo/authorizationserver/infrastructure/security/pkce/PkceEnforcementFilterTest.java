@@ -51,6 +51,10 @@ class PkceEnforcementFilterTest {
     private static final String CLIENT_ID = "busa-finance";
     private static final UUID ORG_ID = UUID.fromString("674b889c-4d4e-47bd-bdf6-972dc84f1b49");
     private static final UUID SPACE_ID = UUID.fromString("8932f9bc-0af0-4c64-94c8-abb0150c348b");
+    private static final String PARAM_CLIENT_ID = "client_id";
+    private static final String GRANT_AUTHORIZATION_CODE = "authorization_code";
+    private static final String PARAM_CHALLENGE_METHOD = "code_challenge_method";
+    private static final String ERROR_CHALLENGE_REQUIRED = "code_challenge required";
     private static final String CHALLENGE = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
 
     @Mock private OAuth2ClientLookupRepository repository;
@@ -139,7 +143,7 @@ class PkceEnforcementFilterTest {
     @Test
     void given_authorization_code_token_without_client_id_when_filter_then_invalid_client()
             throws Exception {
-        MockHttpServletRequest request = tokenRequest("authorization_code");
+        MockHttpServletRequest request = tokenRequest(GRANT_AUTHORIZATION_CODE);
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         filter().doFilter(request, response, chain);
@@ -152,7 +156,7 @@ class PkceEnforcementFilterTest {
     @Test
     void given_missing_tenant_context_when_filter_then_invalid_request() throws Exception {
         MockHttpServletRequest request = authorizeRequest();
-        request.setParameter("client_id", CLIENT_ID);
+        request.setParameter(PARAM_CLIENT_ID, CLIENT_ID);
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         filter().doFilter(request, response, chain);
@@ -169,7 +173,7 @@ class PkceEnforcementFilterTest {
                 .thenReturn(Optional.empty());
 
         MockHttpServletRequest request = authorizeRequest();
-        request.setParameter("client_id", CLIENT_ID);
+        request.setParameter(PARAM_CLIENT_ID, CLIENT_ID);
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         filter().doFilter(request, response, chain);
@@ -186,7 +190,7 @@ class PkceEnforcementFilterTest {
         givenClient(false, OAuth2ClientLookupEntity.ClientType.CONFIDENTIAL);
 
         MockHttpServletRequest request = authorizeRequest();
-        request.setParameter("client_id", CLIENT_ID);
+        request.setParameter(PARAM_CLIENT_ID, CLIENT_ID);
 
         filter().doFilter(request, new MockHttpServletResponse(), chain);
 
@@ -202,13 +206,13 @@ class PkceEnforcementFilterTest {
         givenClient(false, OAuth2ClientLookupEntity.ClientType.PUBLIC);
 
         MockHttpServletRequest request = authorizeRequest();
-        request.setParameter("client_id", CLIENT_ID);
+        request.setParameter(PARAM_CLIENT_ID, CLIENT_ID);
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         filter().doFilter(request, response, chain);
 
         verify(errorWriter).writeInvalidRequest(
-                eq("code_challenge required"), eq(request), eq(response));
+                eq(ERROR_CHALLENGE_REQUIRED), eq(request), eq(response));
         verify(chain, never()).doFilter(any(), any());
     }
 
@@ -219,13 +223,13 @@ class PkceEnforcementFilterTest {
         givenClient(true, OAuth2ClientLookupEntity.ClientType.CONFIDENTIAL);
 
         MockHttpServletRequest request = authorizeRequest();
-        request.setParameter("client_id", CLIENT_ID);
+        request.setParameter(PARAM_CLIENT_ID, CLIENT_ID);
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         filter().doFilter(request, response, chain);
 
         verify(errorWriter).writeInvalidRequest(
-                eq("code_challenge required"), eq(request), eq(response));
+                eq(ERROR_CHALLENGE_REQUIRED), eq(request), eq(response));
         verify(chain, never()).doFilter(any(), any());
     }
 
@@ -235,9 +239,9 @@ class PkceEnforcementFilterTest {
         givenClient(true, OAuth2ClientLookupEntity.ClientType.PUBLIC);
 
         MockHttpServletRequest request = authorizeRequest();
-        request.setParameter("client_id", CLIENT_ID);
+        request.setParameter(PARAM_CLIENT_ID, CLIENT_ID);
         request.setParameter("code_challenge", CHALLENGE);
-        request.setParameter("code_challenge_method", "plain");
+        request.setParameter(PARAM_CHALLENGE_METHOD, "plain");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         filter().doFilter(request, response, chain);
@@ -254,14 +258,14 @@ class PkceEnforcementFilterTest {
         givenClient(false, OAuth2ClientLookupEntity.ClientType.CONFIDENTIAL);
 
         MockHttpServletRequest request = authorizeRequest();
-        request.setParameter("client_id", CLIENT_ID);
-        request.setParameter("code_challenge_method", "S256");
+        request.setParameter(PARAM_CLIENT_ID, CLIENT_ID);
+        request.setParameter(PARAM_CHALLENGE_METHOD, "S256");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         filter().doFilter(request, response, chain);
 
         verify(errorWriter).writeInvalidRequest(
-                eq("code_challenge required"), eq(request), eq(response));
+                eq(ERROR_CHALLENGE_REQUIRED), eq(request), eq(response));
         verify(chain, never()).doFilter(any(), any());
     }
 
@@ -271,9 +275,9 @@ class PkceEnforcementFilterTest {
         givenClient(true, OAuth2ClientLookupEntity.ClientType.PUBLIC);
 
         MockHttpServletRequest request = authorizeRequest();
-        request.setParameter("client_id", CLIENT_ID);
+        request.setParameter(PARAM_CLIENT_ID, CLIENT_ID);
         request.setParameter("code_challenge", CHALLENGE);
-        request.setParameter("code_challenge_method", "S256");
+        request.setParameter(PARAM_CHALLENGE_METHOD, "S256");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         filter().doFilter(request, response, chain);
@@ -289,7 +293,7 @@ class PkceEnforcementFilterTest {
         givenClient(false, OAuth2ClientLookupEntity.ClientType.CONFIDENTIAL);
 
         MockHttpServletRequest request = authorizeRequest();
-        request.setParameter("client_id", CLIENT_ID);
+        request.setParameter(PARAM_CLIENT_ID, CLIENT_ID);
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         filter().doFilter(request, response, chain);
@@ -306,8 +310,8 @@ class PkceEnforcementFilterTest {
         givenTenantContext();
         givenClient(true, OAuth2ClientLookupEntity.ClientType.PUBLIC);
 
-        MockHttpServletRequest request = tokenRequest("authorization_code");
-        request.setParameter("client_id", CLIENT_ID);
+        MockHttpServletRequest request = tokenRequest(GRANT_AUTHORIZATION_CODE);
+        request.setParameter(PARAM_CLIENT_ID, CLIENT_ID);
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         filter().doFilter(request, response, chain);
@@ -323,8 +327,8 @@ class PkceEnforcementFilterTest {
         givenTenantContext();
         givenClient(true, OAuth2ClientLookupEntity.ClientType.PUBLIC);
 
-        MockHttpServletRequest request = tokenRequest("authorization_code");
-        request.setParameter("client_id", CLIENT_ID);
+        MockHttpServletRequest request = tokenRequest(GRANT_AUTHORIZATION_CODE);
+        request.setParameter(PARAM_CLIENT_ID, CLIENT_ID);
         request.setParameter("code_verifier", "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
@@ -340,8 +344,8 @@ class PkceEnforcementFilterTest {
         givenTenantContext();
         givenClient(false, OAuth2ClientLookupEntity.ClientType.CONFIDENTIAL);
 
-        MockHttpServletRequest request = tokenRequest("authorization_code");
-        request.setParameter("client_id", CLIENT_ID);
+        MockHttpServletRequest request = tokenRequest(GRANT_AUTHORIZATION_CODE);
+        request.setParameter(PARAM_CLIENT_ID, CLIENT_ID);
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         filter().doFilter(request, response, chain);

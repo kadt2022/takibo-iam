@@ -68,6 +68,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 @EnabledIf("dockerIsAvailable")
 class ClientCredentialsBaselineIntegrationTest extends TasPostgresBaseline {
 
+    private static final String SCOPE_API_READ = "api.read";
+    private static final String ERROR_INVALID_CLIENT = "invalid_client";
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final HttpClient HTTP = HttpClient.newHttpClient();
 
@@ -93,7 +95,7 @@ class ClientCredentialsBaselineIntegrationTest extends TasPostgresBaseline {
     @Test
     void given_platform_client_when_token_requested_then_signed_jwt_carries_no_tenant() {
         HttpResponse<String> response = requestToken(
-                TasBaselineDataset.PLATFORM_CLIENT_ID, platformClientSecret, "api.read");
+                TasBaselineDataset.PLATFORM_CLIENT_ID, platformClientSecret, SCOPE_API_READ);
 
         assertThat(response.statusCode()).isEqualTo(200);
         Jwt jwt = jwtDecoder.decode(accessToken(response));
@@ -167,7 +169,7 @@ class ClientCredentialsBaselineIntegrationTest extends TasPostgresBaseline {
         requestToken(TasBaselineDataset.SPACE_CLIENT_ID,
                 TasBaselineDataset.SPACE_CLIENT_SECRET,
                 TasBaselineDataset.SPACE_CLIENT_SCOPE);
-        requestToken(TasBaselineDataset.PLATFORM_CLIENT_ID, platformClientSecret, "api.read");
+        requestToken(TasBaselineDataset.PLATFORM_CLIENT_ID, platformClientSecret, SCOPE_API_READ);
 
         assertThat(dataset.countAuthorizationRows()).isZero();
     }
@@ -181,15 +183,15 @@ class ClientCredentialsBaselineIntegrationTest extends TasPostgresBaseline {
                 TasBaselineDataset.SPACE_CLIENT_SCOPE);
 
         assertThat(response.statusCode()).isEqualTo(401);
-        assertThat(error(response)).isEqualTo("invalid_client");
+        assertThat(error(response)).isEqualTo(ERROR_INVALID_CLIENT);
     }
 
     @Test
     void given_unknown_client_when_token_requested_then_invalid_client() {
-        HttpResponse<String> response = requestToken("no-such-client", "whatever", "api.read");
+        HttpResponse<String> response = requestToken("no-such-client", "whatever", SCOPE_API_READ);
 
         assertThat(response.statusCode()).isEqualTo(401);
-        assertThat(error(response)).isEqualTo("invalid_client");
+        assertThat(error(response)).isEqualTo(ERROR_INVALID_CLIENT);
     }
 
     @Test
@@ -201,7 +203,7 @@ class ClientCredentialsBaselineIntegrationTest extends TasPostgresBaseline {
                 TasBaselineDataset.SPACE_CLIENT_ID, "not-the-secret",
                 TasBaselineDataset.SPACE_CLIENT_SCOPE);
         HttpResponse<String> unknownClient =
-                requestToken("no-such-client", "whatever", "api.read");
+                requestToken("no-such-client", "whatever", SCOPE_API_READ);
 
         assertThat(wrongSecret.body()).isEqualTo(unknownClient.body());
         assertThat(body(wrongSecret).has("error_description")).isFalse();
@@ -225,10 +227,10 @@ class ClientCredentialsBaselineIntegrationTest extends TasPostgresBaseline {
                 passwordEncoder.encode("grantless-secret"));
 
         HttpResponse<String> response = requestToken(
-                "baseline-grantless-client", "grantless-secret", "api.read");
+                "baseline-grantless-client", "grantless-secret", SCOPE_API_READ);
 
         assertThat(response.statusCode()).isEqualTo(401);
-        assertThat(error(response)).isEqualTo("invalid_client");
+        assertThat(error(response)).isEqualTo(ERROR_INVALID_CLIENT);
     }
 
     @Test
@@ -260,7 +262,7 @@ class ClientCredentialsBaselineIntegrationTest extends TasPostgresBaseline {
                 "authorization_code");
 
         assertThat(response.statusCode()).isEqualTo(401);
-        assertThat(error(response)).isEqualTo("invalid_client");
+        assertThat(error(response)).isEqualTo(ERROR_INVALID_CLIENT);
         assertThat(errorDescription(response)).isEqualTo("Client not found");
         // Signature de OAuth2HttpErrorWriter : le refus vient bien du filtre Takibo,
         // et non de Spring Authorization Server.

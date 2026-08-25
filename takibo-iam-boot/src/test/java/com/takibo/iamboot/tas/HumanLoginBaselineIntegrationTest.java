@@ -52,6 +52,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @EnabledIf("dockerIsAvailable")
 class HumanLoginBaselineIntegrationTest extends TasPostgresBaseline {
 
+    private static final String FIELD_ACCESS_TOKEN = "accessToken";
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final HttpClient HTTP = HttpClient.newHttpClient();
 
@@ -100,7 +101,7 @@ class HumanLoginBaselineIntegrationTest extends TasPostgresBaseline {
                 TasBaselineDataset.ACCOUNT_PASSWORD,
                 null);
 
-        Jwt jwt = jwtDecoder.decode(body(response).path("accessToken").asText());
+        Jwt jwt = jwtDecoder.decode(body(response).path(FIELD_ACCESS_TOKEN).asText());
 
         assertThat(jwt.getSubject()).isEqualTo(TasBaselineDataset.ACCOUNT_ID.toString());
         assertThat(jwt.getClaimAsString("subject_type")).isEqualTo("HUMAN");
@@ -126,7 +127,7 @@ class HumanLoginBaselineIntegrationTest extends TasPostgresBaseline {
                 TasBaselineDataset.ACCOUNT_PASSWORD,
                 null);
 
-        Jwt jwt = jwtDecoder.decode(body(response).path("accessToken").asText());
+        Jwt jwt = jwtDecoder.decode(body(response).path(FIELD_ACCESS_TOKEN).asText());
 
         assertThat(jwt.getClaimAsStringList("roles")).isEmpty();
         assertThat(jwt.getClaimAsStringList("groups")).isEmpty();
@@ -143,7 +144,7 @@ class HumanLoginBaselineIntegrationTest extends TasPostgresBaseline {
                 TasBaselineDataset.ACCOUNT_PASSWORD,
                 null);
 
-        Jwt jwt = jwtDecoder.decode(body(response).path("accessToken").asText());
+        Jwt jwt = jwtDecoder.decode(body(response).path(FIELD_ACCESS_TOKEN).asText());
 
         assertThat(jwt.getHeaders().get("kid")).isNotNull();
         assertThat(jwt.getExpiresAt()).isAfter(jwt.getIssuedAt());
@@ -251,7 +252,7 @@ class HumanLoginBaselineIntegrationTest extends TasPostgresBaseline {
 
     private static void assertRefused(HttpResponse<String> response) {
         assertThat(response.statusCode()).isEqualTo(401);
-        assertThat(body(response).path("accessToken").asText()).isEmpty();
+        assertThat(body(response).path(FIELD_ACCESS_TOKEN).asText()).isEmpty();
     }
 
     // ---------- Appel HTTP ----------

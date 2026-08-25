@@ -22,6 +22,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ClientIdExtractorTest {
 
     private static final String CLIENT_ID = "busa-finance";
+    private static final String AUTHORIZATION_HEADER = "Authorization";
+    private static final String PARAM_CLIENT_ID = "client_id";
+    private static final String BASIC_PREFIX = "Basic ";
+    private static final String SECRET = "secret";
+    private static final String FROM_PARAMETER = "from-parameter";
+    private static final String FROM_BASIC = "from-basic";
 
     private final ClientIdExtractor extractor = new ClientIdExtractor();
 
@@ -30,7 +36,7 @@ class ClientIdExtractorTest {
     @Test
     void given_client_id_parameter_when_extract_for_authorize_then_returns_it() {
         MockHttpServletRequest request = new MockHttpServletRequest();
-        request.setParameter("client_id", CLIENT_ID);
+        request.setParameter(PARAM_CLIENT_ID, CLIENT_ID);
 
         assertThat(extractor.extractForAuthorize(request)).isEqualTo(CLIENT_ID);
     }
@@ -43,7 +49,7 @@ class ClientIdExtractorTest {
     @Test
     void given_blank_client_id_parameter_when_extract_for_authorize_then_returns_null() {
         MockHttpServletRequest request = new MockHttpServletRequest();
-        request.setParameter("client_id", "   ");
+        request.setParameter(PARAM_CLIENT_ID, "   ");
 
         assertThat(extractor.extractForAuthorize(request)).isNull();
     }
@@ -51,7 +57,7 @@ class ClientIdExtractorTest {
     @Test
     void given_basic_auth_only_when_extract_for_authorize_then_ignores_header() {
         MockHttpServletRequest request = new MockHttpServletRequest();
-        request.addHeader("Authorization", basic(CLIENT_ID, "secret"));
+        request.addHeader(AUTHORIZATION_HEADER, basic(CLIENT_ID, SECRET));
 
         assertThat(extractor.extractForAuthorize(request)).isNull();
     }
@@ -61,16 +67,16 @@ class ClientIdExtractorTest {
     @Test
     void given_basic_auth_and_parameter_when_extract_for_token_then_basic_auth_wins() {
         MockHttpServletRequest request = new MockHttpServletRequest();
-        request.addHeader("Authorization", basic("from-basic", "secret"));
-        request.setParameter("client_id", "from-parameter");
+        request.addHeader(AUTHORIZATION_HEADER, basic(FROM_BASIC, SECRET));
+        request.setParameter(PARAM_CLIENT_ID, FROM_PARAMETER);
 
-        assertThat(extractor.extractForToken(request)).isEqualTo("from-basic");
+        assertThat(extractor.extractForToken(request)).isEqualTo(FROM_BASIC);
     }
 
     @Test
     void given_parameter_only_when_extract_for_token_then_falls_back_to_parameter() {
         MockHttpServletRequest request = new MockHttpServletRequest();
-        request.setParameter("client_id", CLIENT_ID);
+        request.setParameter(PARAM_CLIENT_ID, CLIENT_ID);
 
         assertThat(extractor.extractForToken(request)).isEqualTo(CLIENT_ID);
     }
@@ -85,16 +91,16 @@ class ClientIdExtractorTest {
     @Test
     void given_basic_auth_and_parameter_when_extract_default_then_parameter_wins() {
         MockHttpServletRequest request = new MockHttpServletRequest();
-        request.addHeader("Authorization", basic("from-basic", "secret"));
-        request.setParameter("client_id", "from-parameter");
+        request.addHeader(AUTHORIZATION_HEADER, basic(FROM_BASIC, SECRET));
+        request.setParameter(PARAM_CLIENT_ID, FROM_PARAMETER);
 
-        assertThat(extractor.extractDefault(request)).isEqualTo("from-parameter");
+        assertThat(extractor.extractDefault(request)).isEqualTo(FROM_PARAMETER);
     }
 
     @Test
     void given_basic_auth_only_when_extract_default_then_falls_back_to_header() {
         MockHttpServletRequest request = new MockHttpServletRequest();
-        request.addHeader("Authorization", basic(CLIENT_ID, "secret"));
+        request.addHeader(AUTHORIZATION_HEADER, basic(CLIENT_ID, SECRET));
 
         assertThat(extractor.extractDefault(request)).isEqualTo(CLIENT_ID);
     }
@@ -109,7 +115,7 @@ class ClientIdExtractorTest {
     @Test
     void given_client_id_parameter_when_extract_hints_then_returns_it() {
         MockHttpServletRequest request = new MockHttpServletRequest();
-        request.setParameter("client_id", CLIENT_ID);
+        request.setParameter(PARAM_CLIENT_ID, CLIENT_ID);
 
         assertThat(extractor.extractForDiscoveryHint(request)).isEqualTo(CLIENT_ID);
         assertThat(extractor.extractForUserInfoHint(request)).isEqualTo(CLIENT_ID);
@@ -128,7 +134,7 @@ class ClientIdExtractorTest {
     @Test
     void given_non_basic_scheme_when_extract_for_token_then_returns_null() {
         MockHttpServletRequest request = new MockHttpServletRequest();
-        request.addHeader("Authorization", "Bearer some-token");
+        request.addHeader(AUTHORIZATION_HEADER, "Bearer some-token");
 
         assertThat(extractor.extractForToken(request)).isNull();
     }
@@ -136,7 +142,7 @@ class ClientIdExtractorTest {
     @Test
     void given_undecodable_base64_when_extract_for_token_then_returns_null() {
         MockHttpServletRequest request = new MockHttpServletRequest();
-        request.addHeader("Authorization", "Basic ***not-base64***");
+        request.addHeader(AUTHORIZATION_HEADER, "Basic ***not-base64***");
 
         assertThat(extractor.extractForToken(request)).isNull();
     }
@@ -144,7 +150,7 @@ class ClientIdExtractorTest {
     @Test
     void given_basic_auth_without_colon_when_extract_for_token_then_returns_null() {
         MockHttpServletRequest request = new MockHttpServletRequest();
-        request.addHeader("Authorization", "Basic " + encode("no-colon-at-all"));
+        request.addHeader(AUTHORIZATION_HEADER, BASIC_PREFIX + encode("no-colon-at-all"));
 
         assertThat(extractor.extractForToken(request)).isNull();
     }
@@ -152,7 +158,7 @@ class ClientIdExtractorTest {
     @Test
     void given_basic_auth_with_empty_client_id_when_extract_for_token_then_returns_null() {
         MockHttpServletRequest request = new MockHttpServletRequest();
-        request.addHeader("Authorization", "Basic " + encode(":secret-only"));
+        request.addHeader(AUTHORIZATION_HEADER, BASIC_PREFIX + encode(":secret-only"));
 
         assertThat(extractor.extractForToken(request)).isNull();
     }
@@ -160,7 +166,7 @@ class ClientIdExtractorTest {
     @Test
     void given_basic_auth_with_empty_secret_when_extract_for_token_then_returns_client_id() {
         MockHttpServletRequest request = new MockHttpServletRequest();
-        request.addHeader("Authorization", "Basic " + encode(CLIENT_ID + ":"));
+        request.addHeader(AUTHORIZATION_HEADER, BASIC_PREFIX + encode(CLIENT_ID + ":"));
 
         assertThat(extractor.extractForToken(request)).isEqualTo(CLIENT_ID);
     }
@@ -168,13 +174,13 @@ class ClientIdExtractorTest {
     @Test
     void given_secret_containing_colon_when_extract_for_token_then_splits_on_first_colon() {
         MockHttpServletRequest request = new MockHttpServletRequest();
-        request.addHeader("Authorization", "Basic " + encode(CLIENT_ID + ":pa:ss:word"));
+        request.addHeader(AUTHORIZATION_HEADER, BASIC_PREFIX + encode(CLIENT_ID + ":pa:ss:word"));
 
         assertThat(extractor.extractForToken(request)).isEqualTo(CLIENT_ID);
     }
 
     private static String basic(String clientId, String secret) {
-        return "Basic " + encode(clientId + ":" + secret);
+        return BASIC_PREFIX + encode(clientId + ":" + secret);
     }
 
     private static String encode(String raw) {

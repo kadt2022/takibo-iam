@@ -36,7 +36,11 @@ abstract class TasPostgresBaseline {
     static boolean dockerIsAvailable() {
         try {
             return DockerClientFactory.instance().isDockerAvailable();
-        } catch (Throwable ignored) {
+        } catch (RuntimeException | LinkageError ignored) {
+            // Docker absent ou mal configure : l'initialisation de Testcontainers echoue
+            // soit par une exception, soit par une erreur de chargement de classe.
+            // Volontairement plus etroit que Throwable : une erreur de la JVM, une
+            // interruption ou un depassement de pile doivent remonter.
             return false;
         }
     }
