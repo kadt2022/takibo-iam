@@ -19,8 +19,10 @@ import java.util.UUID;
 @Entity
 @Table(
         name = "tas_signing_keys",
+        // Le kid est unique globalement, et non par organisation : le JWKS est un endpoint
+        // unique, deux cles homonymes y seraient indistinguables a la verification.
         uniqueConstraints = {
-                @UniqueConstraint(name = "uk_tas_sk_org_kid", columnNames = {"org_id", "kid"})
+                @UniqueConstraint(name = "uk_tas_sk_kid_global", columnNames = {"kid"})
         },
         indexes = {
                 @Index(name = "idx_tas_sk_org", columnList = "org_id"),
@@ -34,7 +36,8 @@ public class TasSigningKeyEntity {
     @Column(name = "id", nullable = false)
     private UUID id;
 
-    @Column(name = "org_id", nullable = false)
+    /** {@code null} = clé de plateforme, seule portée utilisée tant que TAS reste single-issuer. */
+    @Column(name = "org_id")
     private UUID orgId;
 
     @Column(name = "kid", nullable = false, length = 64)

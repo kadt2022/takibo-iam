@@ -116,3 +116,10 @@ node_modules/
 /takibo-authorization-server/ERROR_RESPONSE_STRATEGY.md
 /docs/rapport-analyse-takibo-dependances-2026-03-07.md
 /takibo-authorization-server/recit.md
+
+# Documents de travail conserves en local : analyses et brouillons de PR, par
+# opposition aux recits qui, eux, sont versionnes et relus.
+/docs/rapport-analyse-tis-core-doctrine-takibo-2026-06-02.md
+/docs/rapport-ci-graphe-dependances-takibo-iam.md
+/docs/backlog/SEC-TMS-04_Refuser_Configurations_OAuth2_Invalides.md
+/docs/recits/PR-IAM-31-body.md
