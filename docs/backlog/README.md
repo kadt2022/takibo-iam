@@ -12,6 +12,11 @@ pas.
 | RBAC v2 | `RBAC-` | tableau [État](#état) ci-dessous |
 | Nouveaux grant types OAuth 2.0 | `TAS-GRANTS-` | [README-TAS-GRANTS.md](README-TAS-GRANTS.md) |
 | Durcissement TMS et sécurité | `SEC-TMS-`, `TMS-` | [liste](#durcissement-tms-et-sécurité) ci-dessous |
+| Identité et inscription d'organisation | `IAM-`, `RECIT-ORG-` | [liste](#identité-et-inscription-dorganisation) ci-dessous |
+
+Les documents de travail — analyses, brouillons de corps de PR — ne sont pas versionnés :
+`.gitignore` les exclut nommément, document par document. Seuls les récits, les contrats et
+les plans le sont, parce qu'ils sont relus.
 
 ---
 
@@ -86,5 +91,27 @@ backlog. Ils ne partagent pas de séquencement : chacun se prend indépendamment
 | [SEC-TMS-01](SEC-TMS-01-fermer-elevation-privileges-signup.md) | Fermer l'élévation de privilèges au signup |
 | [SEC-TMS-02](SEC-TMS-02-passer-routes-tms-default-deny.md) | Passer les routes TMS en default-deny |
 | [SEC-TMS-03](SEC-TMS-03-restreindre-actuator.md) | Restreindre Actuator |
+| [SEC-TMS-04](SEC-TMS-04-traduire-les-erreurs-de-configuration-client.md) | Traduire les erreurs de configuration client au lieu de renvoyer 500 |
 | [TMS-OAUTH-01](TMS-OAUTH-01-durcir-configuration-clients-oauth2.md) | Durcir la configuration des clients OAuth2 |
 | [TMS-VAL-01](TMS-VAL-01-validation-rest-contracts.md) | Validation des contrats REST |
+| [TMS-CLIENT-READ-01](TAKIBO_Recit_TMS_CLIENT_READ_01.md) | Lire les clients OAuth2 sans réexposer leurs secrets |
+
+Outillage de vérification associé :
+[TAKIBO_Plan_Collection_Postman_Canonique.md](TAKIBO_Plan_Collection_Postman_Canonique.md).
+
+---
+
+## Identité et inscription d'organisation
+
+Comment une organisation entre dans TAKIBO, et comment son premier compte s'authentifie.
+`IAM-31` est le socle : l'organisation identifie le compte, le space situe l'action.
+
+| Récit | Titre | Statut |
+| --- | --- | --- |
+| [IAM-31](../terminer/IAM-31-authentification-humaine-organisationnelle.md) | Authentification humaine de portée organisationnelle | **TERMINÉ** (PR #31, 2026-07-12) |
+| [ORG-REG-01](RECIT-ORG-REG-01-demande-inscription-FINAL-v3.md) | Créer une demande publique d'inscription d'organisation | à faire |
+| [ORG-REG-02](RECIT-ORG-REG-02-verification-provisioning-FINAL-sans-userId.md) | Vérifier le courriel et provisionner l'organisation fondatrice | à faire |
+| [ORG-SPACE-01](RECIT-ORG-SPACE-01-onboarding-premier-space-FINAL-userId.md) | Onboarding sans Space, puis création volontaire du premier Space | à faire |
+
+Contrat de référence des trois récits d'inscription :
+[TAKIBO-REST-Organization-Registration-Contract.md](TAKIBO-REST-Organization-Registration-Contract.md).
