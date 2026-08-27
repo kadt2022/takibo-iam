@@ -86,3 +86,30 @@ CREATE UNIQUE INDEX uk_tas_sk_platform_issuer_active
 CREATE UNIQUE INDEX uk_tas_sk_org_issuer_active
   ON tas_signing_keys (org_id)
   WHERE is_issuer = TRUE AND status = 'ACTIVE' AND org_id IS NOT NULL;
+
+-- ------------------------------------------------------------------------
+-- 4) Rétablir la vérité dans la base
+-- ------------------------------------------------------------------------
+-- La migration d'origine V202601091233 porte en commentaires de source
+-- « 1 issuer ACTIVE per org » et une contrainte uk_tas_sk_org_kid qui n'existent plus.
+-- Ces lignes ne peuvent pas être corrigées : modifier une migration déjà appliquée
+-- changerait son empreinte et ferait échouer validate-on-migrate. La description
+-- exacte est donc portée par la base elle-même, où elle reste consultable.
+
+COMMENT ON TABLE tas_signing_keys IS
+  'Cles de signature des JWT emis par TAS. org_id NULL = cle de plateforme, seule portee '
+  'utilisee tant que TAS est mono-tenant (TAS-GRANTS-02A). Les commentaires de source de la '
+  'migration V202601091233 decrivent l''etat anterieur et ne font plus foi.';
+
+COMMENT ON INDEX uk_tas_sk_kid_global IS
+  'kid unique a l''echelle de l''installation : /oauth2/jwks est un endpoint unique, deux '
+  'cles homonymes y seraient indistinguables a la verification. Remplace uk_tas_sk_org_kid.';
+
+COMMENT ON INDEX uk_tas_sk_platform_issuer_active IS
+  'Au plus une cle de plateforme emettrice active. Indexe (org_id IS NULL), vrai pour toutes '
+  'les lignes retenues par le filtre : PostgreSQL tenant chaque NULL pour distinct, un index '
+  'sur org_id seul n''aurait rien empeche.';
+
+COMMENT ON INDEX uk_tas_sk_org_issuer_active IS
+  'Au plus une cle emettrice active par organisation, si le multi-issuer est decide un jour. '
+  'Sans objet tant que seules des cles de plateforme existent.';

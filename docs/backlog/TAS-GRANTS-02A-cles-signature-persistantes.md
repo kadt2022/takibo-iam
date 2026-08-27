@@ -31,6 +31,34 @@ silence et le JWKS aurait exposé deux émetteurs. L'unicité est donc scindée 
 partiels, et `kid` devient globalement unique puisqu'un JWKS unique ne peut pas exposer deux
 clés homonymes.
 
+## Décision actée — format du chiffre : versionné et identifié
+
+```text
+v1$<keyId>$<base64(iv || chiffre || tag)>
+```
+
+Trois parties, chacune répondant à un manque qui serait irrattrapable une fois des secrets
+stockés.
+
+**La version** permet au format d'évoluer. Sans elle, changer d'algorithme ou de taille d'IV
+rendrait illisible tout ce qui a déjà été écrit : rien ne distinguerait un ancien chiffre
+d'un nouveau. Une version inconnue est refusée plutôt que lue avec les règles d'aujourd'hui.
+
+**L'identifiant de clé** permet à la clé de *chiffrement* de tourner — distincte de la clé de
+signature, qui est l'objet du reste du récit. Sans lui, on ignorerait quelle clé a scellé
+quelle ligne : il faudrait tout rechiffrer d'un seul tenant, ou ne jamais en changer. Avec
+lui, l'ancienne clé reste acceptée en lecture pendant que la nouvelle chiffre, et les lignes
+migrent à leur rythme. Il sert aussi après coup : si une clé fuit, l'identifiant dit
+exactement quelles lignes sont concernées.
+
+**L'IV tiré au hasard à chaque appel** rend la sortie autoportante et non déterministe : sans
+cela, l'égalité de deux chiffres trahirait l'égalité de deux secrets.
+
+Le séparateur `$` est hors de l'alphabet base64 et interdit dans un identifiant de clé
+(`[A-Za-z0-9_-]{1,64}`), donc le découpage est sans ambiguïté. Deux clés partageant un
+identifiant sont refusées à la construction : leurs chiffres deviendraient indéchiffrables
+pour l'une des deux, sans qu'on sache laquelle.
+
 ## Périmètre
 
 - Remplacer `DevJwkSourceConfiguration` hors profil de développement par un `JWKSource` adossé à `tas_signing_keys`.

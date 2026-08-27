@@ -10,21 +10,38 @@ import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * Implementation AES-GCM du {@link SecretCipher}.
  * <p>
- * GCM est choisi pour son authentification integree : toute alteration du chiffre est
- * detectee au dechiffrement plutot que de produire un clair corrompu. Un mode sans
- * authentification, comme CBC, rendrait une cle privee silencieusement fausse — et une
- * signature invalide sans diagnostic.
- * <p>
- * Format de sortie : {@code base64(iv || chiffre || tag)}. Le vecteur d'initialisation est
- * tire au hasard a chaque appel et prefixe au resultat. Deux consequences voulues : la sortie
- * est autoportante, et deux chiffrements du meme clair different — sans quoi l'egalite de
- * deux chiffres trahirait l'egalite de deux secrets.
- * <p>
- * La cle n'est jamais journalisee, ni incluse dans un message d'erreur.
+ * GCM est choisi pour son authentification integree : toute alteration du chiffre est detectee
+ * au dechiffrement plutot que de produire un clair corrompu. Un mode sans authentification,
+ * comme CBC, rendrait une cle privee silencieusement fausse — et une signature invalide sans
+ * diagnostic.
+ *
+ * <h2>Format du chiffre</h2>
+ * <pre>{@code v1$<keyId>$<base64(iv || chiffre || tag)>}</pre>
+ * Trois parties, et chacune repond a un manque precis.
+ * <ul>
+ *   <li><b>La version</b> permet au format d'evoluer. Sans elle, changer d'algorithme ou de
+ *       taille d'IV rendrait illisible tout ce qui a deja ete stocke : rien ne distinguerait
+ *       un ancien chiffre d'un nouveau.</li>
+ *   <li><b>L'identifiant de cle</b> permet a la cle de chiffrement de tourner. Sans lui, on
+ *       ignorerait quelle cle a scelle quelle ligne — il faudrait tout rechiffrer d'un seul
+ *       tenant, ou ne jamais changer de cle. Avec lui, l'ancienne reste acceptee en lecture
+ *       pendant que la nouvelle chiffre.</li>
+ *   <li><b>L'IV, tire au hasard a chaque appel</b>, rend la sortie autoportante et non
+ *       deterministe : sans cela, l'egalite de deux chiffres trahirait l'egalite de deux
+ *       secrets.</li>
+ * </ul>
+ * Le separateur {@code $} est hors de l'alphabet base64 et interdit dans un identifiant de
+ * cle : le decoupage est donc sans ambiguite.
+ *
+ * <h2>Echecs</h2>
+ * Tout echec de dechiffrement porte le meme message, quelle qu'en soit la cause. La cle n'est
+ * jamais journalisee ni incluse dans un message d'erreur.
  */
 public class AesGcmSecretCipher implements SecretCipher {
 
@@ -32,31 +49,55 @@ public class AesGcmSecretCipher implements SecretCipher {
     private static final String ALGORITHM = "AES";
     private static final int IV_LENGTH_BYTES = 12;
     private static final int TAG_LENGTH_BITS = 128;
-    private static final int REQUIRED_KEY_LENGTH_BYTES = 32;
+
+    /** Version du format produit aujourd'hui, et seule version acceptee en lecture. */
+    static final String FORMAT_VERSION = "v1";
+    static final String FORMAT_SEPARATOR = "$";
+    private static final int FORMAT_PART_COUNT = 3;
 
     /**
-     * Message unique de tout echec de dechiffrement. Voir {@link #decrypt(String)} : la cause
-     * exacte ne doit pas transparaitre.
+     * Message unique de tout echec de dechiffrement : chiffre absent, mal forme, de version
+     * inconnue, scelle par une cle inconnue, tronque, altere. Distinguer ces cas donnerait a
+     * qui sonde un oracle sur la structure de son entree. La cause reelle reste chainee.
      */
     private static final String DECRYPT_FAILED = "SECRET_CIPHER_DECRYPT_FAILED";
 
-    private final SecretKeySpec key;
+    private final SecretCipherKey activeKey;
+    private final Map<String, SecretKeySpec> keysById = new LinkedHashMap<>();
     private final SecureRandom random = new SecureRandom();
 
     /**
-     * @param key cle brute de <b>exactement</b> 32 octets (AES-256)
-     * @throws IllegalArgumentException si la longueur differe
+     * @param activeKey       cle qui chiffre, et qui dechiffre ce qu'elle a scelle
+     * @param acceptedForRead cles retirees, encore acceptees en lecture le temps que les
+     *                        lignes qu'elles ont scellees soient rechiffrees
      */
-    public AesGcmSecretCipher(byte[] key) {
-        // Exactement 32, pas « au moins 32 ». JCE n'accepte que 16, 24 ou 32 octets : une cle
-        // de 33 octets construirait l'objet sans broncher, puis ferait echouer chaque
-        // chiffrement avec InvalidKeyException. Une configuration fautive doit tomber ici,
-        // au demarrage, pas au premier secret a proteger.
-        if (key == null || key.length != REQUIRED_KEY_LENGTH_BYTES) {
-            throw new IllegalArgumentException(
-                    "SECRET_CIPHER_KEY_MUST_BE_" + REQUIRED_KEY_LENGTH_BYTES + "_BYTES");
+    public AesGcmSecretCipher(SecretCipherKey activeKey, SecretCipherKey... acceptedForRead) {
+        if (activeKey == null) {
+            throw new IllegalArgumentException("SECRET_CIPHER_REQUIRES_AN_ACTIVE_KEY");
         }
-        this.key = new SecretKeySpec(key, ALGORITHM);
+        this.activeKey = activeKey;
+        register(activeKey);
+        for (SecretCipherKey key : acceptedForRead) {
+            if (key == null) {
+                throw new IllegalArgumentException("SECRET_CIPHER_REQUIRES_AN_ACTIVE_KEY");
+            }
+            register(key);
+        }
+    }
+
+    private void register(SecretCipherKey key) {
+        SecretKeySpec previous =
+                keysById.put(key.id(), new SecretKeySpec(key.material(), ALGORITHM));
+        if (previous != null) {
+            // Deux matieres sous le meme identifiant : le chiffre deviendrait indechiffrable
+            // pour l'une des deux, sans qu'on sache laquelle.
+            throw new IllegalArgumentException("SECRET_CIPHER_DUPLICATE_KEY_ID: " + key.id());
+        }
+    }
+
+    /** Identifiant inscrit dans les chiffres produits maintenant. */
+    public String activeKeyId() {
+        return activeKey.id();
     }
 
     @Override
@@ -69,34 +110,40 @@ public class AesGcmSecretCipher implements SecretCipher {
             random.nextBytes(iv);
 
             Cipher cipher = Cipher.getInstance(TRANSFORMATION);
-            cipher.init(Cipher.ENCRYPT_MODE, key, new GCMParameterSpec(TAG_LENGTH_BITS, iv));
+            cipher.init(Cipher.ENCRYPT_MODE, keysById.get(activeKey.id()),
+                    new GCMParameterSpec(TAG_LENGTH_BITS, iv));
             byte[] sealed = cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
 
-            byte[] output = new byte[iv.length + sealed.length];
-            System.arraycopy(iv, 0, output, 0, iv.length);
-            System.arraycopy(sealed, 0, output, iv.length, sealed.length);
-            return Base64.getEncoder().encodeToString(output);
+            byte[] payload = new byte[iv.length + sealed.length];
+            System.arraycopy(iv, 0, payload, 0, iv.length);
+            System.arraycopy(sealed, 0, payload, iv.length, sealed.length);
+
+            return FORMAT_VERSION + FORMAT_SEPARATOR
+                    + activeKey.id() + FORMAT_SEPARATOR
+                    + Base64.getEncoder().encodeToString(payload);
         } catch (Exception e) {
             // Le message ne porte ni le clair ni la cle.
             throw new IllegalStateException("SECRET_CIPHER_ENCRYPT_FAILED", e);
         }
     }
 
-    /**
-     * Tout echec porte le meme message, quelle qu'en soit la cause : chiffre absent, illisible,
-     * tronque, altere, ou produit avec une autre cle. Distinguer ces cas donnerait a qui sonde
-     * un oracle sur la structure de l'entree — il saurait si son chiffre forge est bien forme
-     * avant meme de s'attaquer a la cle. La cause reelle reste disponible dans l'exception
-     * chainee, pour le diagnostic serveur.
-     */
     @Override
     public String decrypt(String ciphertext) {
         if (ciphertext == null || ciphertext.isBlank()) {
             throw new SecretDecryptionException(DECRYPT_FAILED);
         }
+        String[] parts = ciphertext.split("\\" + FORMAT_SEPARATOR, -1);
+        if (parts.length != FORMAT_PART_COUNT || !FORMAT_VERSION.equals(parts[0])) {
+            throw new SecretDecryptionException(DECRYPT_FAILED);
+        }
+        SecretKeySpec key = keysById.get(parts[1]);
+        if (key == null) {
+            throw new SecretDecryptionException(DECRYPT_FAILED);
+        }
+
         byte[] decoded;
         try {
-            decoded = Base64.getDecoder().decode(ciphertext);
+            decoded = Base64.getDecoder().decode(parts[2]);
         } catch (IllegalArgumentException e) {
             throw new SecretDecryptionException(DECRYPT_FAILED, e);
         }
