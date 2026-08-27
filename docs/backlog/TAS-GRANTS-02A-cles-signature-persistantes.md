@@ -8,6 +8,29 @@
 
 En tant qu’équipe sécurité, nous voulons que TAS utilise des clés de signature persistantes et rotatives afin qu’un redémarrage ou un déploiement n’invalide pas les JWT encore valides.
 
+## Décision actée — portée des clés : mono-tenant
+
+TAS signe avec **une clé de plateforme**, pas une par organisation.
+
+`TakiboAuthorizationServerConfiguration` appelle `.issuer(...)`, ce qui force explicitement
+une configuration mono-tenant côté Spring Authorization Server ; `/oauth2/jwks` est un
+endpoint global unique ; et les tokens humains et machine partagent le même `JwtEncoder`.
+Passer en multi-issuer changerait le claim `iss` de tous les JWT en circulation et
+obligerait chaque resource server à résoudre un JWKS par organisation — hors de portée de
+ce récit, et contraire au besoin immédiat.
+
+Le schéma d'origine était pourtant org-scopé de bout en bout, avec `org_id NOT NULL`.
+Plutôt que de loger la clé de plateforme dans une organisation fictive, **la portée devient
+explicite : `org_id NULL` signifie « clé de plateforme »**. Des clés org-scopées pourront
+coexister le jour où le multi-issuer sera décidé, sans migration de données.
+
+Ce choix a un prix, payé dans la migration `V202608270001__tas__platform_signing_key_scope` :
+PostgreSQL considère les `NULL` comme distincts, donc l'index partiel d'origine porté par
+`(org_id)` n'aurait plus rien empêché — deux clés de plateforme actives auraient coexisté en
+silence et le JWKS aurait exposé deux émetteurs. L'unicité est donc scindée en deux index
+partiels, et `kid` devient globalement unique puisqu'un JWKS unique ne peut pas exposer deux
+clés homonymes.
+
 ## Périmètre
 
 - Remplacer `DevJwkSourceConfiguration` hors profil de développement par un `JWKSource` adossé à `tas_signing_keys`.
