@@ -3,12 +3,16 @@ package com.takibo.authorizationserver.infrastructure.keys;
 import com.takibo.authorizationserver.domain.keys.port.SecretCipher;
 import com.takibo.authorizationserver.domain.keys.port.SecretDecryptionException;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.Base64;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
@@ -138,37 +142,73 @@ class AesGcmSecretCipherTest {
                 .hasMessageContaining("SECRET_CIPHER_REQUIRES_PLAINTEXT");
     }
 
-    // ---------- Force de la cle ----------
+    // ---------- Longueur de cle ----------
 
     @Test
-    void given_a_key_shorter_than_aes_256_then_the_cipher_is_refused_at_construction() {
-        byte[] tooShort = new byte[16];
+    void given_a_key_of_exactly_32_bytes_then_the_cipher_is_built() {
+        assertThatCode(() -> new AesGcmSecretCipher(new byte[32])).doesNotThrowAnyException();
+    }
 
-        assertThatThrownBy(() -> new AesGcmSecretCipher(tooShort))
+    @ParameterizedTest(name = "cle de {0} octets refusee")
+    @ValueSource(ints = {0, 1, 16, 24, 31, 33, 48, 64})
+    void given_any_other_key_length_then_the_cipher_is_refused_at_construction(int length) {
+        // Exactement 32, et pas « au moins 32 ». JCE n'accepte que 16, 24 ou 32 octets : une
+        // cle de 33 construirait l'objet sans broncher puis ferait echouer chaque
+        // chiffrement. 16 et 24 sont valides pour JCE mais refuses ici, TAS imposant AES-256.
+        assertThatThrownBy(() -> new AesGcmSecretCipher(new byte[length]))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("SECRET_CIPHER_KEY_TOO_SHORT");
+                .hasMessageContaining("SECRET_CIPHER_KEY_MUST_BE_32_BYTES");
     }
 
     @Test
     void given_no_key_then_the_cipher_is_refused_at_construction() {
         assertThatThrownBy(() -> new AesGcmSecretCipher(null))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("SECRET_CIPHER_KEY_TOO_SHORT");
+                .hasMessageContaining("SECRET_CIPHER_KEY_MUST_BE_32_BYTES");
+    }
+
+    @Test
+    void given_an_oversized_key_then_it_is_refused_before_any_encryption_is_attempted() {
+        // Le defaut que ce controle ferme : sans lui, l'objet se construit et l'echec
+        // n'apparait qu'au premier secret a proteger, deguise en erreur de chiffrement.
+        assertThatThrownBy(() -> new AesGcmSecretCipher(new byte[33]))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageNotContainingAny("ENCRYPT_FAILED");
     }
 
     // ---------- Indistinction des echecs ----------
 
     @Test
     void given_every_failure_cause_then_the_message_never_varies() {
-        // Altere, tronque, illisible ou chiffre ailleurs : un sondeur n'apprend rien.
+        // Les cinq causes, et non deux qui empruntent la meme branche : chiffre vide,
+        // illisible, tronque, altere, ou produit avec une autre cle. Distinguer ces cas
+        // donnerait a qui sonde un oracle sur la structure de son entree.
         SecretCipher other = new AesGcmSecretCipher(aKey(2));
+
         byte[] raw = Base64.getDecoder().decode(cipher.encrypt(A_PRIVATE_KEY));
         raw[raw.length - 1] ^= 0x01;
-
         String tampered = Base64.getEncoder().encodeToString(raw);
+
+        String blank = "   ";
+        String notBase64 = "*** pas du base64 ***";
+        String truncated = Base64.getEncoder().encodeToString(new byte[]{1, 2, 3});
         String foreign = other.encrypt(A_PRIVATE_KEY);
 
-        assertThat(messageOf(tampered)).isEqualTo(messageOf(foreign));
+        assertThat(List.of(
+                messageOf(blank),
+                messageOf(notBase64),
+                messageOf(truncated),
+                messageOf(tampered),
+                messageOf(foreign)))
+                .containsOnly("SECRET_CIPHER_DECRYPT_FAILED");
+    }
+
+    @Test
+    void given_a_failure_then_the_underlying_cause_remains_available_for_diagnosis() {
+        // Le message est muet vers l'exterieur ; la cause reste chainee pour l'exploitant.
+        assertThatThrownBy(() -> cipher.decrypt("*** pas du base64 ***"))
+                .isInstanceOf(SecretDecryptionException.class)
+                .hasCauseInstanceOf(IllegalArgumentException.class);
     }
 
     private String messageOf(String ciphertext) {
