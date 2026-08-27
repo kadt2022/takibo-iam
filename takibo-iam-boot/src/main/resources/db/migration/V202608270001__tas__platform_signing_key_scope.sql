@@ -1,11 +1,15 @@
 -- ════════════════════════════════════════════════════════════════════════
--- TAS-GRANTS-02A — Portée des clés de signature : mono-tenant assumé
+-- TAS-GRANTS-02A — Portée des clés de signature : single-issuer assumé
 -- ════════════════════════════════════════════════════════════════════════
 --
 -- Décision. TAS signe avec UNE clé de plateforme, pas une par organisation.
 --
+-- Le mot compte : TAKIBO reste MULTI-TENANT au sens métier — organisations, spaces,
+-- frontières situées dans chaque token. Ce qui est unique, c'est l'ÉMETTEUR : une clé de
+-- signature, un `iss`, un JWKS. « single-issuer », donc, et non « mono-tenant ».
+--
 --   * TakiboAuthorizationServerConfiguration appelle .issuer(...), ce qui force
---     explicitement une configuration mono-tenant côté Spring Authorization Server ;
+--     explicitement une configuration single-issuer côté Spring Authorization Server ;
 --   * /oauth2/jwks est un endpoint global unique ;
 --   * les tokens humains et machine partagent le même JwtEncoder.
 --
@@ -59,7 +63,7 @@ ALTER TABLE tas_signing_keys
 
 COMMENT ON COLUMN tas_signing_keys.org_id IS
   'Organisation propriétaire de la clé. NULL = clé de plateforme, seule portée utilisée '
-  'tant que TAS est mono-tenant (TAS-GRANTS-02A).';
+  'tant que TAS reste single-issuer (TAS-GRANTS-02A).';
 
 -- ------------------------------------------------------------------------
 -- 2) kid globalement unique
@@ -98,7 +102,7 @@ CREATE UNIQUE INDEX uk_tas_sk_org_issuer_active
 
 COMMENT ON TABLE tas_signing_keys IS
   'Cles de signature des JWT emis par TAS. org_id NULL = cle de plateforme, seule portee '
-  'utilisee tant que TAS est mono-tenant (TAS-GRANTS-02A). Les commentaires de source de la '
+  'utilisee tant que TAS reste single-issuer (TAS-GRANTS-02A). Les commentaires de source de la '
   'migration V202601091233 decrivent l''etat anterieur et ne font plus foi.';
 
 COMMENT ON INDEX uk_tas_sk_kid_global IS
@@ -113,3 +117,12 @@ COMMENT ON INDEX uk_tas_sk_platform_issuer_active IS
 COMMENT ON INDEX uk_tas_sk_org_issuer_active IS
   'Au plus une cle emettrice active par organisation, si le multi-issuer est decide un jour. '
   'Sans objet tant que seules des cles de plateforme existent.';
+
+-- Le commentaire historique de is_issuer annonce « only 1 ACTIVE per org », ce qui n'est plus
+-- vrai depuis que la clé de plateforme existe : la contrainte est désormais scindée entre
+-- uk_tas_sk_platform_issuer_active et uk_tas_sk_org_issuer_active.
+COMMENT ON COLUMN tas_signing_keys.is_issuer IS
+  'TRUE = cette cle signe les nouveaux tokens ; FALSE = elle ne sert plus qu''a verifier. '
+  'Au plus une emettrice ACTIVE de plateforme (org_id NULL), et au plus une par organisation '
+  'si le multi-issuer est decide un jour. Remplace le commentaire d''origine, qui annoncait '
+  'une seule emettrice active par organisation.';

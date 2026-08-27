@@ -8,12 +8,17 @@
 
 En tant qu’équipe sécurité, nous voulons que TAS utilise des clés de signature persistantes et rotatives afin qu’un redémarrage ou un déploiement n’invalide pas les JWT encore valides.
 
-## Décision actée — portée des clés : mono-tenant
+## Décision actée — portée des clés : single-issuer
 
 TAS signe avec **une clé de plateforme**, pas une par organisation.
 
+Le mot compte. TAKIBO **reste multi-tenant au sens métier** — organisations, spaces,
+frontières situées dans chaque token. Ce qui est unique, c'est l'**émetteur** : une clé de
+signature, un `iss`, un JWKS. Dire « mono-tenant » laisserait croire que TAS ne sert qu'un
+client, ce qui est faux et masquerait la vraie décision.
+
 `TakiboAuthorizationServerConfiguration` appelle `.issuer(...)`, ce qui force explicitement
-une configuration mono-tenant côté Spring Authorization Server ; `/oauth2/jwks` est un
+une configuration single-issuer côté Spring Authorization Server ; `/oauth2/jwks` est un
 endpoint global unique ; et les tokens humains et machine partagent le même `JwtEncoder`.
 Passer en multi-issuer changerait le claim `iss` de tous les JWT en circulation et
 obligerait chaque resource server à résoudre un JWKS par organisation — hors de portée de
@@ -67,7 +72,7 @@ pour l'une des deux, sans qu'on sache laquelle.
 - Définir la rotation : création d’une nouvelle clé, activation atomique, période de chevauchement, retrait après expiration du dernier JWT signé par l’ancienne clé.
 - Conserver la génération éphémère uniquement dans un profil de développement explicitement activé.
 - Préparer un port de stockage permettant plus tard un KMS/HSM sans changer le domaine TAS.
-- **Trancher la portée des clés : mono-tenant ou multi-issuer.** `tas_signing_keys` est entièrement org-scopée — `org_id NOT NULL`, `uk_tas_sk_org_kid UNIQUE (org_id, kid)`, et un index unique partiel qui garantit un émetteur actif **par organisation**. Or `TakiboAuthorizationServerConfiguration` appelle `.issuer(...)`, ce qui force explicitement une configuration mono-tenant côté Spring Authorization Server, et `/oauth2/jwks` est un endpoint global unique. Le schéma a donc été conçu pour un modèle que la configuration ferme.
+- **Trancher la portée des clés : single-issuer ou multi-issuer.** `tas_signing_keys` est entièrement org-scopée — `org_id NOT NULL`, `uk_tas_sk_org_kid UNIQUE (org_id, kid)`, et un index unique partiel qui garantit un émetteur actif **par organisation**. Or `TakiboAuthorizationServerConfiguration` appelle `.issuer(...)`, ce qui force explicitement une configuration single-issuer côté Spring Authorization Server, et `/oauth2/jwks` est un endpoint global unique. Le schéma a donc été conçu pour un modèle que la configuration ferme.
 - **Porter le chiffrement au repos pour tout le lot**, pas seulement pour la matière privée des clés : définir le port que TAS-GRANTS-02 consommera pour les valeurs de codes et de tokens.
 
 ## Critères d’acceptation
@@ -80,7 +85,7 @@ pour l'une des deux, sans qu'on sache laquelle.
 - [ ] En profil non-dev, l’absence de clé active provoque un démarrage fail-closed avec un diagnostic exploitable.
 - [ ] Les dates `not_before` et `expires_at`, le statut et `is_issuer` sont appliqués.
 - [ ] `client_credentials` PLATFORM et SPACE reste vérifiable avant et après redémarrage/rotation.
-- [ ] La portée des clés est tranchée et écrite : soit mono-tenant, et `tas_signing_keys.org_id` accueille la clé de plateforme sans organisation fabriquée ; soit multi-issuer, et le retrait de `.issuer(...)` ainsi que le changement d'URL d'issuer sont assumés avec leurs conséquences sur les JWT en circulation et la configuration des resource servers. Aucune organisation fictive n'est créée pour loger une clé globale.
+- [ ] La portée des clés est tranchée et écrite : soit single-issuer, et `tas_signing_keys.org_id` accueille la clé de plateforme sans organisation fabriquée ; soit multi-issuer, et le retrait de `.issuer(...)` ainsi que le changement d'URL d'issuer sont assumés avec leurs conséquences sur les JWT en circulation et la configuration des resource servers. Aucune organisation fictive n'est créée pour loger une clé globale.
 - [ ] Le port de chiffrement au repos est défini et documenté pour TAS-GRANTS-02 ; aucun secret de chiffrement n'est figé dans la configuration.
 - [ ] Le parcours humain `/api/v1/auth/login` reste vérifiable avant et après redémarrage : les tokens humains et machine partagent la même clé, propriété que ce récit ne doit pas rompre.
 

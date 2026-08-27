@@ -1,6 +1,7 @@
 package com.takibo.authorizationserver.infrastructure.keys;
 
 import com.takibo.authorizationserver.domain.keys.port.SecretCipher;
+import com.takibo.authorizationserver.domain.keys.port.SecretContext;
 import com.takibo.authorizationserver.domain.keys.port.SecretDecryptionException;
 
 import javax.crypto.Cipher;
@@ -38,6 +39,19 @@ import java.util.Map;
  * </ul>
  * Le separateur {@code $} est hors de l'alphabet base64 et interdit dans un identifiant de
  * cle : le decoupage est donc sans ambiguite.
+ *
+ * <h2>Ce que le tag couvre</h2>
+ * L'enveloppe {@code v1$<keyId>$} est en clair, mais elle n'est pas pour autant modifiable :
+ * elle est liee au chiffre comme donnee authentifiee additionnelle, avec le
+ * {@link SecretContext}. AES-GCM authentifie alors {@code v1$<keyId>$<type>$<recordId>} en
+ * plus du clair.
+ * <p>
+ * Sans cela, deux failles resteraient ouvertes. Reecrire le {@code keyId} de l'enveloppe
+ * passerait inapercu des lors que deux cles partagent une matiere. Et surtout, un chiffre
+ * valide resterait valide <b>partout</b> : on pourrait recopier la matiere privee chiffree
+ * d'une cle dans la ligne d'une autre, ou glisser un token chiffre dans la colonne d'une cle
+ * de signature. GCM authentifie ce qu'il scelle, jamais l'endroit ou on le range — l'AAD s'en
+ * charge.
  *
  * <h2>Echecs</h2>
  * Tout echec de dechiffrement porte le meme message, quelle qu'en soit la cause. La cle n'est
@@ -101,7 +115,10 @@ public class AesGcmSecretCipher implements SecretCipher {
     }
 
     @Override
-    public String encrypt(String plaintext) {
+    public String encrypt(SecretContext context, String plaintext) {
+        if (context == null) {
+            throw new IllegalArgumentException("SECRET_CIPHER_REQUIRES_CONTEXT");
+        }
         if (plaintext == null) {
             throw new IllegalArgumentException("SECRET_CIPHER_REQUIRES_PLAINTEXT");
         }
@@ -112,6 +129,7 @@ public class AesGcmSecretCipher implements SecretCipher {
             Cipher cipher = Cipher.getInstance(TRANSFORMATION);
             cipher.init(Cipher.ENCRYPT_MODE, keysById.get(activeKey.id()),
                     new GCMParameterSpec(TAG_LENGTH_BITS, iv));
+            cipher.updateAAD(associatedData(activeKey.id(), context));
             byte[] sealed = cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
 
             byte[] payload = new byte[iv.length + sealed.length];
@@ -128,7 +146,10 @@ public class AesGcmSecretCipher implements SecretCipher {
     }
 
     @Override
-    public String decrypt(String ciphertext) {
+    public String decrypt(SecretContext context, String ciphertext) {
+        if (context == null) {
+            throw new IllegalArgumentException("SECRET_CIPHER_REQUIRES_CONTEXT");
+        }
         if (ciphertext == null || ciphertext.isBlank()) {
             throw new SecretDecryptionException(DECRYPT_FAILED);
         }
@@ -156,9 +177,33 @@ public class AesGcmSecretCipher implements SecretCipher {
 
             Cipher cipher = Cipher.getInstance(TRANSFORMATION);
             cipher.init(Cipher.DECRYPT_MODE, key, new GCMParameterSpec(TAG_LENGTH_BITS, iv));
+            // L'AAD est reconstruite depuis l'enveloppe lue et le contexte fourni par
+            // l'appelant. Toute divergence — keyId reecrit, chiffre deplace vers un autre
+            // enregistrement ou un autre usage — donne une AAD differente, et le tag GCM
+            // refuse. C'est ce qui lie le chiffre a sa place.
+            cipher.updateAAD(associatedData(parts[1], context));
             return new String(cipher.doFinal(sealed), StandardCharsets.UTF_8);
         } catch (Exception e) {
             throw new SecretDecryptionException(DECRYPT_FAILED, e);
         }
+    }
+
+    /**
+     * Donnee authentifiee additionnelle : {@code v1$<keyId>$<type>$<recordId>}.
+     * <p>
+     * Elle n'est pas chiffree et n'est pas stockee — l'enveloppe porte deja la version et le
+     * {@code keyId}, l'appelant reconstruit le contexte. Elle est en revanche <b>couverte par
+     * le tag</b>, donc immuable de fait : la modifier invalide le chiffre.
+     * <p>
+     * Aucun champ ne peut contenir le separateur, ce que garantissent {@link SecretCipherKey}
+     * et {@link SecretContext}. Deux contextes distincts ne peuvent donc pas produire la meme
+     * AAD.
+     */
+    private static byte[] associatedData(String keyId, SecretContext context) {
+        return (FORMAT_VERSION + FORMAT_SEPARATOR
+                + keyId + FORMAT_SEPARATOR
+                + context.type() + FORMAT_SEPARATOR
+                + context.recordId())
+                .getBytes(StandardCharsets.UTF_8);
     }
 }

@@ -36,7 +36,7 @@ public class TasSigningKeyEntity {
     @Column(name = "id", nullable = false)
     private UUID id;
 
-    /** {@code null} = clé de plateforme, seule portée utilisée tant que TAS est mono-tenant. */
+    /** {@code null} = clé de plateforme, seule portée utilisée tant que TAS reste single-issuer. */
     @Column(name = "org_id")
     private UUID orgId;
 

@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * Prouve la portée des clés de signature décidée par TAS-GRANTS-02A.
  * <p>
- * TAS signe avec <b>une</b> clé de plateforme : {@code .issuer(...)} force le mono-tenant
+ * TAS signe avec <b>une</b> clé de plateforme : {@code .issuer(...)} force le single-issuer
  * côté Spring Authorization Server, {@code /oauth2/jwks} est un endpoint unique, et les
  * tokens humains et machine partagent le même encodeur. Le schéma d'origine était pourtant
  * org-scopé de bout en bout, avec {@code org_id NOT NULL}.
@@ -127,7 +127,7 @@ class SigningKeyScopeConstraintsIntegrationTest extends TasPostgresBaseline {
 
     @Test
     void given_an_active_platform_issuer_then_an_organization_issuer_remains_possible() {
-        // Les deux portees coexistent : le mono-tenant d'aujourd'hui ne ferme pas la porte.
+        // Les deux portees coexistent : le single-issuer d'aujourd'hui ne ferme pas la porte.
         insertKey(null, "platform-kid-1", true, "ACTIVE");
 
         assertThatCode(() -> insertKey(TasBaselineDataset.ORG_ID, "org-kid-1", true, "ACTIVE"))
