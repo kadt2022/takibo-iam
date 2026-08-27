@@ -1,12 +1,28 @@
-# Backlog RBAC v2
+# Backlog
+
+Ce dossier contient **tous les récits ouverts**, quel que soit leur lot. Un récit terminé
+part dans [`../terminer`](../terminer), sans changer de nom. Il n'existe pas d'autre
+emplacement : le préfixe du nom de fichier distingue les lots, l'arborescence ne les sépare
+pas.
+
+## Lots
+
+| Lot | Préfixe | Index |
+| --- | --- | --- |
+| RBAC v2 | `RBAC-` | tableau [État](#état) ci-dessous |
+| Nouveaux grant types OAuth 2.0 | `TAS-GRANTS-` | [README-TAS-GRANTS.md](README-TAS-GRANTS.md) |
+| Durcissement TMS et sécurité | `SEC-TMS-`, `TMS-` | [liste](#durcissement-tms-et-sécurité) ci-dessous |
+
+---
+
+## RBAC v2
 
 Découpage exécutable de la [doctrine RBAC v2 (ADR 0003)](../adr/0003-doctrine-rbac-v2.md).
 
 Le plan d'ensemble, les principes de séquencement et les pièges à éviter restent dans
 [TAKIBO_Plan_Ordre_Implementation_RBAC_v2.md](TAKIBO_Plan_Ordre_Implementation_RBAC_v2.md).
-Ce dossier en est la décomposition en récits livrables.
 
-## Nomenclature
+### Nomenclature
 
 ```text
 RBAC-NN-<slug-kebab>.md
@@ -26,7 +42,7 @@ avec `git mv` de `docs/backlog` vers `docs/terminer`, puis mettre à jour la lig
 correspondante du tableau ci-dessous. Une PR ouverte ou des tests locaux incomplets ne
 suffisent pas à clôturer un récit.
 
-## État
+### État
 
 | Récit | Titre | Statut | Risque | Dépend de |
 | --- | --- | --- | --- | --- |
@@ -41,12 +57,12 @@ suffisent pas à clôturer un récit.
 | [RBAC-08](RBAC-08-audit-situe-et-intervention-plateforme.md) | Audit situé et intervention plateforme | à faire | élevé | RBAC-06 |
 | [RBAC-09](RBAC-09-migration-interface-nettoyage.md) | Migrations, interface et suppression de l'ancien modèle | à faire | élevé | RBAC-07, RBAC-08 |
 
-## Règle de livraison
+### Règle de livraison
 
 > Une PR introduit une capacité cohérente, testable et réversible. Aucune PR ne mélange
 > catalogue, migration massive, tokens, contrôleurs et interface.
 
-## Ordre
+### Ordre
 
 ```text
 RBAC-00  (sécurité, préalable — indépendant de la doctrine)
@@ -57,3 +73,18 @@ RBAC-01 → RBAC-02 → RBAC-03 → RBAC-04 → RBAC-05 → RBAC-06
                                                             ↓
                                                         RBAC-09
 ```
+
+---
+
+## Durcissement TMS et sécurité
+
+Récits sans lot numéroté, regroupés ici depuis `docs/recits` lors de la consolidation du
+backlog. Ils ne partagent pas de séquencement : chacun se prend indépendamment.
+
+| Récit | Sujet |
+| --- | --- |
+| [SEC-TMS-01](SEC-TMS-01-fermer-elevation-privileges-signup.md) | Fermer l'élévation de privilèges au signup |
+| [SEC-TMS-02](SEC-TMS-02-passer-routes-tms-default-deny.md) | Passer les routes TMS en default-deny |
+| [SEC-TMS-03](SEC-TMS-03-restreindre-actuator.md) | Restreindre Actuator |
+| [TMS-OAUTH-01](TMS-OAUTH-01-durcir-configuration-clients-oauth2.md) | Durcir la configuration des clients OAuth2 |
+| [TMS-VAL-01](TMS-VAL-01-validation-rest-contracts.md) | Validation des contrats REST |
