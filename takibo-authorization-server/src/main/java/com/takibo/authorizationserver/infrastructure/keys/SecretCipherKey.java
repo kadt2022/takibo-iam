@@ -18,7 +18,9 @@ import java.util.regex.Pattern;
  * @param id       identifiant stable, {@code [A-Za-z0-9_-]{1,64}}. Jamais reutilise pour une
  *                 autre matiere : deux cles de meme identifiant rendraient le chiffre
  *                 indechiffrable.
- * @param material matiere brute, exactement 32 octets (AES-256)
+ * @param material matiere brute, exactement 32 octets (AES-256). Dans un meme trousseau,
+ *                 elle ne peut pas etre reutilisee sous un autre identifiant : une rotation
+ *                 doit changer la cle, pas seulement son etiquette.
  */
 public record SecretCipherKey(String id, byte[] material) {
 

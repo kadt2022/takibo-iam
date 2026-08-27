@@ -105,22 +105,21 @@ class AesGcmSecretCipherTest {
 
     @Test
     void given_two_keys_sharing_material_when_the_key_identifier_is_rewritten_then_it_is_refused() {
-        // Le cas precis que l'absence d'AAD laissait passer. Deux identifiants, une seule
-        // matiere : sans liaison de l'enveloppe, reecrire le keyId donnerait un chiffre
-        // parfaitement dechiffrable, puisque la matiere designee est la meme.
+        // Deux chiffreurs separes permettent de prouver que le keyId appartient bien a l'AAD,
+        // sans autoriser un faux trousseau qui reutiliserait la meme matiere.
         byte[] shared = material(7);
-        SecretCipherKey alpha = new SecretCipherKey("alpha", shared);
-        SecretCipherKey beta = new SecretCipherKey("beta", shared);
-        AesGcmSecretCipher bothKeys = new AesGcmSecretCipher(alpha, beta);
+        AesGcmSecretCipher alphaCipher =
+                new AesGcmSecretCipher(new SecretCipherKey("alpha", shared));
+        AesGcmSecretCipher betaCipher =
+                new AesGcmSecretCipher(new SecretCipherKey("beta", shared));
 
-        String sealedUnderAlpha = bothKeys.encrypt(CONTEXT, A_PRIVATE_KEY);
+        String sealedUnderAlpha = alphaCipher.encrypt(CONTEXT, A_PRIVATE_KEY);
         String relabelledAsBeta = sealedUnderAlpha.replaceFirst("\\$alpha\\$", "\\$beta\\$");
 
         assertThat(relabelledAsBeta).startsWith("v1$beta$");
-        assertThatThrownBy(() -> bothKeys.decrypt(CONTEXT, relabelledAsBeta))
+        assertThatThrownBy(() -> betaCipher.decrypt(CONTEXT, relabelledAsBeta))
                 .isInstanceOf(SecretDecryptionException.class);
-        // Et l'original reste lisible : seule l'enveloppe a ete touchee.
-        assertThat(bothKeys.decrypt(CONTEXT, sealedUnderAlpha)).isEqualTo(A_PRIVATE_KEY);
+        assertThat(alphaCipher.decrypt(CONTEXT, sealedUnderAlpha)).isEqualTo(A_PRIVATE_KEY);
     }
 
     @Test
@@ -191,6 +190,17 @@ class AesGcmSecretCipherTest {
         assertThatThrownBy(() -> new AesGcmSecretCipher(ACTIVE, homonym))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("SECRET_CIPHER_DUPLICATE_KEY_ID");
+    }
+
+    @Test
+    void given_two_identifiers_sharing_material_then_the_cipher_is_refused_at_construction() {
+        byte[] shared = material(11);
+
+        assertThatThrownBy(() -> new AesGcmSecretCipher(
+                new SecretCipherKey("old-key", shared),
+                new SecretCipherKey("new-key", shared)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("SECRET_CIPHER_DUPLICATE_KEY_MATERIAL");
     }
 
     @Test

@@ -8,6 +8,7 @@ import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.Base64;
@@ -100,12 +101,30 @@ public class AesGcmSecretCipher implements SecretCipher {
     }
 
     private void register(SecretCipherKey key) {
-        SecretKeySpec previous =
-                keysById.put(key.id(), new SecretKeySpec(key.material(), ALGORITHM));
-        if (previous != null) {
+        if (keysById.containsKey(key.id())) {
             // Deux matieres sous le meme identifiant : le chiffre deviendrait indechiffrable
             // pour l'une des deux, sans qu'on sache laquelle.
             throw new IllegalArgumentException("SECRET_CIPHER_DUPLICATE_KEY_ID: " + key.id());
+        }
+
+        byte[] candidateMaterial = key.material();
+        try {
+            for (SecretKeySpec registered : keysById.values()) {
+                byte[] registeredMaterial = registered.getEncoded();
+                try {
+                    if (MessageDigest.isEqual(registeredMaterial, candidateMaterial)) {
+                        // Changer seulement l'etiquette n'est pas une rotation. Cela rendrait
+                        // aussi fausse l'attribution des chiffres touches si la matiere fuit.
+                        throw new IllegalArgumentException(
+                                "SECRET_CIPHER_DUPLICATE_KEY_MATERIAL");
+                    }
+                } finally {
+                    Arrays.fill(registeredMaterial, (byte) 0);
+                }
+            }
+            keysById.put(key.id(), new SecretKeySpec(candidateMaterial, ALGORITHM));
+        } finally {
+            Arrays.fill(candidateMaterial, (byte) 0);
         }
     }
 
