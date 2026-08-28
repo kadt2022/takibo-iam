@@ -198,11 +198,17 @@ class SigningKeyRotationIntegrationTest extends TasPostgresBaseline {
         try {
             for (int i = 0; i < rotationCount; i++) {
                 pool.submit(() -> {
+                    ready.countDown();
                     try {
-                        ready.countDown();
                         go.await();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        failures.incrementAndGet();
+                        return;
+                    }
+                    try {
                         rotationService().rotate(Duration.ofMinutes(10));
-                    } catch (Exception e) {
+                    } catch (RuntimeException e) {
                         failures.incrementAndGet();
                     }
                 });
