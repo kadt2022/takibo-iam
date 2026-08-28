@@ -249,7 +249,7 @@ class PersistentJwkSourceTest {
 
         TasSigningKey toDomain() {
             return new TasSigningKey(id, null, kid, "RS256", "RSA", "sig", issuerFlag, status,
-                    publicJwkJson, privateKeyEncrypted, null, null, null, null);
+                    publicJwkJson, privateKeyEncrypted, null, null, null, null, null);
         }
     }
 

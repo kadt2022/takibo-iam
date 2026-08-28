@@ -6,8 +6,10 @@ import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
 import com.takibo.authorizationserver.domain.keys.SigningKeyRotationService;
 import com.takibo.authorizationserver.domain.keys.port.SecretCipher;
+import com.takibo.authorizationserver.domain.keys.port.SigningKeyMaterialGenerator;
 import com.takibo.authorizationserver.domain.keys.port.SigningKeyRepository;
 import com.takibo.authorizationserver.domain.keys.port.SigningKeyWriter;
+import com.takibo.authorizationserver.infrastructure.keys.RsaSigningKeyGenerator;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -42,6 +44,7 @@ class SigningKeysConfigurationTest {
     @Mock private SigningKeyRepository signingKeyRepository;
     @Mock private SigningKeyWriter signingKeyWriter;
     @Mock private SecretCipher secretCipher;
+    @Mock private SigningKeyMaterialGenerator signingKeyMaterialGenerator;
 
     private final SigningKeysConfiguration configuration = new SigningKeysConfiguration();
     private final Clock clock = Clock.systemUTC();
@@ -82,11 +85,18 @@ class SigningKeysConfigurationTest {
     }
 
     @Test
-    void given_writer_cipher_and_clock_then_the_rotation_service_is_built() {
-        SigningKeyRotationService service =
-                configuration.signingKeyRotationService(signingKeyWriter, secretCipher, clock);
+    void given_a_generator_writer_cipher_and_clock_then_the_rotation_service_is_built() {
+        SigningKeyRotationService service = configuration.signingKeyRotationService(
+                signingKeyMaterialGenerator, signingKeyWriter, secretCipher, clock);
 
         assertThat(service).isNotNull();
+    }
+
+    @Test
+    void given_no_dependency_then_the_material_generator_bean_is_an_rsa_adapter() {
+        SigningKeyMaterialGenerator generator = configuration.signingKeyMaterialGenerator();
+
+        assertThat(generator).isInstanceOf(RsaSigningKeyGenerator.class);
     }
 
     @Test

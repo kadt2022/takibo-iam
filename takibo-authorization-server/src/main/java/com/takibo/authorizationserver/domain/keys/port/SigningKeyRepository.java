@@ -19,7 +19,8 @@ import java.util.Optional;
  * continuer d'accepter ceux d'une cle compromise.
  * <p>
  * L'instant est un parametre, jamais lu de l'horloge par l'implementation : c'est ce qui rend
- * les fenetres {@code not_before} et {@code expires_at} verifiables par test.
+ * les fenetres {@code not_before}, {@code expires_at} et {@code publish_until} verifiables
+ * par test.
  */
 public interface SigningKeyRepository {
 

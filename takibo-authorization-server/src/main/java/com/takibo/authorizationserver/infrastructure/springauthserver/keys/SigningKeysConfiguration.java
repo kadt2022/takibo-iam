@@ -5,10 +5,12 @@ import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
 import com.takibo.authorizationserver.domain.keys.SigningKeyRotationService;
 import com.takibo.authorizationserver.domain.keys.port.SecretCipher;
+import com.takibo.authorizationserver.domain.keys.port.SigningKeyMaterialGenerator;
 import com.takibo.authorizationserver.domain.keys.port.SigningKeyRepository;
 import com.takibo.authorizationserver.domain.keys.port.SigningKeyWriter;
 import com.takibo.authorizationserver.infrastructure.keys.AesGcmSecretCipher;
 import com.takibo.authorizationserver.infrastructure.keys.PersistentJwkSource;
+import com.takibo.authorizationserver.infrastructure.keys.RsaSigningKeyGenerator;
 import com.takibo.authorizationserver.infrastructure.keys.SecretCipherKey;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -74,16 +76,28 @@ public class SigningKeysConfiguration {
     }
 
     /**
+     * RSA local aujourd'hui ; seul ce bean change le jour où la génération vient d'un KMS ou
+     * d'un HSM — {@code SigningKeyRotationService} ne connaît que le port.
+     */
+    @Bean
+    public SigningKeyMaterialGenerator signingKeyMaterialGenerator() {
+        return new RsaSigningKeyGenerator();
+    }
+
+    /**
      * Absent en profil éphémère : la rotation n'a de sens que pour des clés persistées, et
      * l'exposer quand même laisserait croire qu'elle survivrait à un redémarrage.
      */
     @Bean
     @ConditionalOnProperty(name = "takibo.tas.keys.ephemeral", havingValue = "false",
             matchIfMissing = true)
-    public SigningKeyRotationService signingKeyRotationService(SigningKeyWriter signingKeyWriter,
-                                                               SecretCipher secretCipher,
-                                                               Clock clock) {
-        return new SigningKeyRotationService(signingKeyWriter, secretCipher, clock);
+    public SigningKeyRotationService signingKeyRotationService(
+            SigningKeyMaterialGenerator signingKeyMaterialGenerator,
+            SigningKeyWriter signingKeyWriter,
+            SecretCipher secretCipher,
+            Clock clock) {
+        return new SigningKeyRotationService(
+                signingKeyMaterialGenerator, signingKeyWriter, secretCipher, clock);
     }
 
     @Bean

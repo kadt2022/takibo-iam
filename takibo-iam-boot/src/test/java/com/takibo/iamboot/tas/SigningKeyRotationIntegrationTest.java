@@ -34,18 +34,22 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Rotation des clés de signature, de bout en bout sur PostgreSQL réel (TAS-GRANTS-02A).
+ * Amorçage et rotation des clés de signature, de bout en bout sur PostgreSQL réel
+ * (TAS-GRANTS-02A).
  * <p>
  * Trois preuves, chacune correspondant à un critère d'acceptation du récit :
  * <ul>
- *   <li><b>redémarrage</b> — un JWT signé par une instance survit à la reconstruction complète
- *       de la chaîne de signature, sans qu'aucun état en mémoire n'ait été transmis ;</li>
+ *   <li><b>absence de cache en mémoire</b> — un JWT signé par une chaîne se vérifie par une
+ *       chaîne fraîchement reconstruite, sans qu'aucun état ne soit transmis entre les deux.
+ *       Cette classe ne prouve <b>pas</b> la survie à un redémarrage de processus : les deux
+ *       chaînes tournent dans la même JVM, le même contexte Spring, la même connexion. Cette
+ *       preuve-là — fermeture complète du contexte, nouveau contexte, JWT toujours vérifiable
+ *       — vit dans {@code SigningKeyRestartAcceptanceTest} ;</li>
  *   <li><b>chevauchement</b> — après rotation, une chaîne fraîchement construite signe avec la
  *       clé neuve, et l'ancienne reste vérifiable ;</li>
  *   <li><b>concurrence</b> — plusieurs rotations lancées en même temps laissent exactement une
@@ -84,19 +88,19 @@ class SigningKeyRotationIntegrationTest extends TasPostgresBaseline {
         new TasBaselineDataset(jdbc, passwordEncoder).reset();
     }
 
-    // ---------- Redemarrage ----------
+    // ---------- Absence de cache en memoire ----------
 
     @Test
     void given_a_token_signed_before_a_fresh_signing_chain_then_it_still_verifies_after() {
         SigningKeyRotationService rotation = rotationService();
-        rotation.rotate(Duration.ofMinutes(10));
+        rotation.initializeFirstIssuer();
 
         SigningChain beforeRestart = signingChain();
         String token = beforeRestart.sign();
 
         // Aucune donnee ne traverse cette ligne : chaque champ est reconstruit a partir des
-        // memes collaborateurs sans etat partage, ce qu'un redemarrage de processus ferait
-        // exactement de la meme facon.
+        // memes collaborateurs sans etat partage. Cela ne prouve pas la survie a un
+        // redemarrage de processus — voir SigningKeyRestartAcceptanceTest pour cette preuve.
         SigningChain afterRestart = signingChain();
 
         Jwt decoded = afterRestart.decode(token);
@@ -105,7 +109,7 @@ class SigningKeyRotationIntegrationTest extends TasPostgresBaseline {
 
     @Test
     void given_two_independent_chains_then_both_trust_the_same_active_key() {
-        rotationService().rotate(Duration.ofMinutes(10));
+        rotationService().initializeFirstIssuer();
 
         SigningChain first = signingChain();
         SigningChain second = signingChain();
@@ -123,7 +127,7 @@ class SigningKeyRotationIntegrationTest extends TasPostgresBaseline {
     @Test
     void given_a_rotation_then_a_fresh_chain_signs_with_the_new_key_while_the_old_still_verifies() {
         SigningKeyRotationService rotation = rotationService();
-        String firstKid = rotation.rotate(Duration.ofMinutes(10));
+        String firstKid = rotation.initializeFirstIssuer();
 
         SigningChain beforeRotation = signingChain();
         String tokenFromFirstKey = beforeRotation.sign();
@@ -145,7 +149,7 @@ class SigningKeyRotationIntegrationTest extends TasPostgresBaseline {
     @Test
     void given_a_rotation_then_the_jwks_exposes_both_public_keys() throws Exception {
         SigningKeyRotationService rotation = rotationService();
-        String firstKid = rotation.rotate(Duration.ofMinutes(10));
+        String firstKid = rotation.initializeFirstIssuer();
         String secondKid = rotation.rotate(Duration.ofMinutes(10));
 
         JWKSource<SecurityContext> jwkSource =
@@ -161,16 +165,19 @@ class SigningKeyRotationIntegrationTest extends TasPostgresBaseline {
     }
 
     @Test
-    void given_an_old_key_past_its_retirement_deadline_then_it_stops_being_published() {
+    void given_an_old_key_past_its_publish_until_then_it_stops_being_published() {
         // Le "retrait apres expiration" du recit : aucune action supplementaire n'est
-        // necessaire, findPublishable filtre deja sur expires_at.
+        // necessaire, findPublishable filtre deja sur publish_until.
         //
-        // La duree de grace passee a rotate() borne la cle que CET APPEL retire, pas celle
-        // qu'il active : la premiere rotation (amorcage) n'a rien a retirer, c'est la
-        // seconde qui retire la premiere cle, avec une echeance immediate.
+        // rotate() exige desormais un chevauchement strictement positif — plus de
+        // Duration.ZERO pour simuler une echeance deja passee. On avance donc directement la
+        // colonne en base, ce qu'un vrai depassement de delai produirait de toute facon.
         SigningKeyRotationService rotation = rotationService();
-        String firstKid = rotation.rotate(Duration.ofMinutes(10));
-        rotation.rotate(Duration.ZERO);
+        String firstKid = rotation.initializeFirstIssuer();
+        rotation.rotate(Duration.ofMinutes(10));
+
+        jdbc.update("UPDATE tas_signing_keys SET publish_until = ? WHERE kid = ?",
+                clock.instant().minusSeconds(1).atOffset(java.time.ZoneOffset.UTC), firstKid);
 
         List<String> publishable = signingKeys.findPublishable(clock.instant()).stream()
                 .map(k -> k.kid())
@@ -186,10 +193,10 @@ class SigningKeyRotationIntegrationTest extends TasPostgresBaseline {
     @Test
     void given_concurrent_rotations_then_exactly_one_active_platform_issuer_remains()
             throws InterruptedException {
-        // Une premiere rotation sequentielle amorce l'installation, pour que les appels
-        // concurrents disputent la rotation d'une emettrice EXISTANTE plutot que l'amorcage
-        // d'une table vide — c'est le scenario que le critere du recit vise.
-        rotationService().rotate(Duration.ofMinutes(10));
+        // Un amorcage sequentiel installe l'emettrice, pour que les appels concurrents
+        // disputent la rotation d'une emettrice EXISTANTE plutot que l'amorcage d'une table
+        // vide — c'est le scenario que le critere du recit vise.
+        rotationService().initializeFirstIssuer();
 
         int rotationCount = 8;
         ExecutorService pool = Executors.newFixedThreadPool(rotationCount);
@@ -253,9 +260,9 @@ class SigningKeyRotationIntegrationTest extends TasPostgresBaseline {
         // Rotations sequentielles, sans contention : verifie que la chaine retiree par chaque
         // rotation est bien identifiable individuellement, pas seulement en nombre.
         SigningKeyRotationService rotation = rotationService();
-        Set<String> kids = IntStream.range(0, 4)
-                .mapToObj(i -> rotation.rotate(Duration.ofMinutes(10)))
-                .collect(Collectors.toSet());
+        Set<String> kids = new java.util.LinkedHashSet<>();
+        kids.add(rotation.initializeFirstIssuer());
+        IntStream.range(0, 3).forEach(i -> kids.add(rotation.rotate(Duration.ofMinutes(10))));
 
         assertThat(kids).hasSize(4);
 
@@ -275,7 +282,9 @@ class SigningKeyRotationIntegrationTest extends TasPostgresBaseline {
     }
 
     private SigningKeyRotationService rotationService() {
-        return new SigningKeyRotationService(signingKeyWriter, cipher, clock);
+        return new SigningKeyRotationService(
+                new com.takibo.authorizationserver.infrastructure.keys.RsaSigningKeyGenerator(),
+                signingKeyWriter, cipher, clock);
     }
 
     private SigningChain signingChain() {

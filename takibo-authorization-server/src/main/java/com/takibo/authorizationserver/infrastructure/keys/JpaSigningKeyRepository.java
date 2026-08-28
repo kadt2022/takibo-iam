@@ -54,6 +54,21 @@ public class JpaSigningKeyRepository implements SigningKeyRepository, SigningKey
     }
 
     /**
+     * Insertion seule : aucune émettrice ne doit exister avant cet appel. Si une existe déjà,
+     * cette insertion porte {@code is_issuer = TRUE} et {@code status = ACTIVE}, donc l'index
+     * unique partiel de plateforme la refuse — sans vérification préalable, qui laisserait une
+     * fenêtre de course entre la lecture et l'écriture.
+     */
+    @Override
+    @Transactional
+    public void activateFirstIssuer(NewSigningKey newKey) {
+        if (newKey == null) {
+            throw new IllegalArgumentException("SIGNING_KEY_ACTIVATION_REQUIRES_A_NEW_KEY");
+        }
+        keys.save(newIssuerEntity(newKey));
+    }
+
+    /**
      * Retirer puis activer dans la même transaction : c'est ce qui garantit qu'aucun instant
      * n'existe où ni l'ancienne ni la nouvelle clé ne signe, et que l'échec de l'une des deux
      * opérations annule l'autre plutôt que de laisser l'installation à moitié tournée.
@@ -64,9 +79,16 @@ public class JpaSigningKeyRepository implements SigningKeyRepository, SigningKey
         if (newKey == null) {
             throw new IllegalArgumentException("SIGNING_KEY_ACTIVATION_REQUIRES_A_NEW_KEY");
         }
-        OffsetDateTime expiresAt = atOffset(retiredKeyExpiresAt);
+        OffsetDateTime publishUntil = atOffset(retiredKeyExpiresAt);
 
-        int retired = keys.retireCurrentPlatformIssuer(expiresAt);
+        int retired = keys.retireCurrentPlatformIssuer(publishUntil);
+        if (retired == 0) {
+            // Rien à retirer : cet appel suppose une émettrice existante. L'amorçage d'une
+            // installation vide passe par activateFirstIssuer, jamais par ici — le confondre
+            // aurait pour seul signal un chevauchement inutilement exigé pour rien.
+            throw new IllegalStateException(
+                    "SIGNING_KEY_ROTATION_REQUIRES_AN_EXISTING_ACTIVE_ISSUER");
+        }
         if (retired > 1) {
             // Ne devrait jamais arriver : l'index unique partiel garantit au plus une
             // émettrice de plateforme active à la fois. Si cette invariante était un jour
@@ -76,7 +98,11 @@ public class JpaSigningKeyRepository implements SigningKeyRepository, SigningKey
                     "MORE_THAN_ONE_PLATFORM_ISSUER_WAS_RETIRED: " + retired);
         }
 
-        TasSigningKeyEntity entity = TasSigningKeyEntity.builder()
+        keys.save(newIssuerEntity(newKey));
+    }
+
+    private static TasSigningKeyEntity newIssuerEntity(NewSigningKey newKey) {
+        return TasSigningKeyEntity.builder()
                 .id(UUID.randomUUID())
                 .orgId(null)
                 .kid(newKey.kid())
@@ -88,7 +114,6 @@ public class JpaSigningKeyRepository implements SigningKeyRepository, SigningKey
                 .publicJwkJson(newKey.publicJwkJson())
                 .privateKeyEncrypted(newKey.privateKeyEncrypted())
                 .build();
-        keys.save(entity);
     }
 
     private static OffsetDateTime atOffset(Instant at) {
@@ -112,6 +137,7 @@ public class JpaSigningKeyRepository implements SigningKeyRepository, SigningKey
                 entity.getPrivateKeyEncrypted(),
                 entity.getNotBefore(),
                 entity.getExpiresAt(),
+                entity.getPublishUntil(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt());
     }

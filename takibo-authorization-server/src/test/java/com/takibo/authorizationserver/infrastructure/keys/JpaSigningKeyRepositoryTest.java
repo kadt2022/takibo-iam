@@ -22,6 +22,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -99,10 +100,45 @@ class JpaSigningKeyRepositoryTest {
                 .hasMessageContaining("SIGNING_KEY_LOOKUP_REQUIRES_AN_INSTANT");
     }
 
-    // ---------- Ecriture ----------
+    // ---------- Ecriture : amorcage ----------
+
+    @Test
+    void given_a_new_key_then_first_issuer_activation_persists_it_without_retiring_anything() {
+        NewSigningKey newKey = aNewSigningKey();
+
+        repository().activateFirstIssuer(newKey);
+
+        ArgumentCaptor<TasSigningKeyEntity> captor = ArgumentCaptor.forClass(TasSigningKeyEntity.class);
+        verify(jpa).save(captor.capture());
+        verify(jpa, never()).retireCurrentPlatformIssuer(any());
+
+        TasSigningKeyEntity saved = captor.getValue();
+        assertThat(saved.getId()).isNotNull();
+        assertThat(saved.getOrgId()).isNull();
+        assertThat(saved.getKid()).isEqualTo("kid-new");
+        assertThat(saved.getAlg()).isEqualTo("RS256");
+        assertThat(saved.getKty()).isEqualTo("RSA");
+        assertThat(saved.getKeyUse()).isEqualTo("sig");
+        assertThat(saved.isIssuer()).isTrue();
+        assertThat(saved.getStatus()).isEqualTo(KeyStatus.ACTIVE);
+        assertThat(saved.getPublicJwkJson()).isEqualTo(newKey.publicJwkJson());
+        assertThat(saved.getPrivateKeyEncrypted()).isEqualTo(newKey.privateKeyEncrypted());
+    }
+
+    @Test
+    void given_no_new_key_then_first_issuer_activation_is_refused() {
+        JpaSigningKeyRepository repo = repository();
+
+        assertThatThrownBy(() -> repo.activateFirstIssuer(null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("SIGNING_KEY_ACTIVATION_REQUIRES_A_NEW_KEY");
+    }
+
+    // ---------- Ecriture : rotation ----------
 
     @Test
     void given_a_new_key_then_it_is_persisted_as_an_active_platform_issuer() {
+        when(jpa.retireCurrentPlatformIssuer(any())).thenReturn(1);
         NewSigningKey newKey = aNewSigningKey();
 
         repository().activateNewIssuer(newKey, AT);
@@ -124,7 +160,9 @@ class JpaSigningKeyRepositoryTest {
     }
 
     @Test
-    void given_a_new_key_then_the_current_issuer_is_retired_with_the_given_expiry() {
+    void given_a_new_key_then_the_current_issuer_is_retired_with_the_given_publish_until() {
+        when(jpa.retireCurrentPlatformIssuer(any())).thenReturn(1);
+
         repository().activateNewIssuer(aNewSigningKey(), AT);
 
         verify(jpa).retireCurrentPlatformIssuer(AT.atOffset(ZoneOffset.UTC));
@@ -132,6 +170,7 @@ class JpaSigningKeyRepositoryTest {
 
     @Test
     void given_two_distinct_activations_then_each_produces_a_distinct_persisted_identifier() {
+        when(jpa.retireCurrentPlatformIssuer(any())).thenReturn(1);
         JpaSigningKeyRepository repo = repository();
 
         repo.activateNewIssuer(aNewSigningKey(), AT);
@@ -177,8 +216,22 @@ class JpaSigningKeyRepositoryTest {
     }
 
     @Test
-    void given_zero_or_one_issuer_retired_then_activation_proceeds() {
+    void given_no_issuer_retired_then_rotation_is_refused() {
+        // La rotation suppose une emettrice existante ; l'amorcage d'une installation vide
+        // passe par activateFirstIssuer, jamais par ici.
         when(jpa.retireCurrentPlatformIssuer(any())).thenReturn(0);
+        JpaSigningKeyRepository repo = repository();
+        NewSigningKey newKey = aNewSigningKey();
+
+        assertThatThrownBy(() -> repo.activateNewIssuer(newKey, AT))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("SIGNING_KEY_ROTATION_REQUIRES_AN_EXISTING_ACTIVE_ISSUER");
+        verify(jpa, never()).save(any());
+    }
+
+    @Test
+    void given_exactly_one_issuer_retired_then_rotation_proceeds() {
+        when(jpa.retireCurrentPlatformIssuer(any())).thenReturn(1);
         repository().activateNewIssuer(aNewSigningKey(), AT);
         verify(jpa).save(any());
     }
