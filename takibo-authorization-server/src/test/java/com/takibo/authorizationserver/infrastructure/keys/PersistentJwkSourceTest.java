@@ -110,6 +110,20 @@ class PersistentJwkSourceTest {
                 .containsExactly("kid-issuer");
     }
 
+    @Test
+    void given_a_stale_issuer_snapshot_then_get_still_derives_the_signer_from_publishable_alone() {
+        // Revue Codex : deux requetes separees (l'emettrice, puis les cles publiables)
+        // s'exposaient a une rotation commise entre les deux. Meme si le depot renvoyait un
+        // etat perime pour findActivePlatformIssuer, get() ne l'interroge plus — l'emettrice
+        // est desormais designee depuis la meme liste que celle qui est publiee.
+        Row staleIssuer = row("kid-old", true, KeyStatus.RETIRED);
+        Row newIssuer = row("kid-new", true, KeyStatus.ACTIVE);
+        PersistentJwkSource source = sourceOf(staleIssuer, List.of(newIssuer, staleIssuer));
+
+        assertThat(source.get(ALL, null).stream().filter(JWK::isPrivate).map(JWK::getKeyID))
+                .containsExactly("kid-new");
+    }
+
     // ---------- Fail-closed au demarrage ----------
 
     @Test
@@ -150,6 +164,21 @@ class PersistentJwkSourceTest {
 
         assertThatCode(sourceOf(issuer, List.of(issuer))::afterPropertiesSet)
                 .doesNotThrowAnyException();
+    }
+
+    @Test
+    void given_a_publishable_non_issuer_key_with_private_parameters_then_startup_refuses() {
+        // Revue Codex : sans ceci, seule l'emettrice etait validee au demarrage. Une cle
+        // simplement publiee (retiree ou co-emettrice) avec un JWK public incoherent ne se
+        // revelait qu'a la premiere requete JWKS ou au premier decodage qui la rencontrait.
+        Row issuer = row("kid-issuer", true, KeyStatus.ACTIVE);
+        Row leaky = row("kid-leaky", false, KeyStatus.ACTIVE);
+        leaky.publicJwkJson = jsonOf(leaky.key);
+        PersistentJwkSource source = sourceOf(issuer, List.of(issuer, leaky));
+
+        assertThatThrownBy(source::afterPropertiesSet)
+                .isInstanceOf(SigningKeyUnavailableException.class)
+                .hasMessageContaining("PUBLIC_JWK_CONTAINS_PRIVATE_PARAMETERS");
     }
 
     // ---------- La cle qui signe est celle qu'on annonce ----------

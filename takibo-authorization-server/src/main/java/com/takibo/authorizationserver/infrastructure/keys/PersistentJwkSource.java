@@ -6,6 +6,7 @@ import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
 import com.nimbusds.jose.util.JSONObjectUtils;
+import com.takibo.authorizationserver.domain.keys.model.KeyStatus;
 import com.takibo.authorizationserver.domain.keys.model.TasSigningKey;
 import com.takibo.authorizationserver.domain.keys.port.SecretCipher;
 import com.takibo.authorizationserver.domain.keys.port.SecretContext;
@@ -68,24 +69,42 @@ public class PersistentJwkSource implements JWKSource<SecurityContext>, Initiali
 
     /**
      * Fail-closed au demarrage, et non a la premiere requete : le contexte refuse de se
-     * charger si TAS ne peut pas signer.
+     * charger si TAS ne peut pas signer, ou si une cle qu'il publierait est illisible.
+     * <p>
+     * Toutes les cles publiables sont validees ici, pas seulement l'emettrice : une matiere
+     * privee dechiffrable mais un JWK public incoherent sur une cle retiree ne se
+     * decouvrirait sinon qu'a la premiere requete JWKS ou au premier decodage qui la
+     * rencontre, transformant un demarrage cense echouer net en panne de service en
+     * production.
      */
     @Override
     public void afterPropertiesSet() {
         Instant now = clock.instant();
-        TasSigningKey issuer = signingKeys.findActivePlatformIssuer(now)
+        List<TasSigningKey> publishable = signingKeys.findPublishable(now);
+        TasSigningKey issuer = activeIssuerAmong(publishable)
                 .orElseThrow(() -> new SigningKeyUnavailableException(
                         "NO_ACTIVE_PLATFORM_SIGNING_KEY: TAS cannot issue tokens"));
-        // Force le dechiffrement et le controle de coherence maintenant.
-        signingJwkOf(issuer);
+
+        for (TasSigningKey key : publishable) {
+            if (key.id().equals(issuer.id())) {
+                signingJwkOf(key);
+            } else {
+                publicJwkOf(key);
+            }
+        }
     }
 
     @Override
     public List<JWK> get(JWKSelector selector, SecurityContext context) {
         Instant now = clock.instant();
 
+        // Une seule lecture : deux requetes separees s'exposeraient a une rotation qui
+        // commettrait entre les deux, l'une voyant l'ancien etat et l'autre le nouveau. La
+        // condition de findActivePlatformIssuer est un sous-ensemble de celle de
+        // findPublishable, l'emettrice active — si elle existe — figure donc toujours dans
+        // cette liste.
         List<TasSigningKey> publishable = signingKeys.findPublishable(now);
-        Optional<UUID> issuerId = signingKeys.findActivePlatformIssuer(now).map(TasSigningKey::id);
+        Optional<UUID> issuerId = activeIssuerAmong(publishable).map(TasSigningKey::id);
 
         List<JWK> jwks = new ArrayList<>(publishable.size());
         for (TasSigningKey key : publishable) {
@@ -96,6 +115,17 @@ public class PersistentJwkSource implements JWKSource<SecurityContext>, Initiali
         // Volontairement sans exception si la liste est vide : la verification des JWT deja
         // emis ne doit pas dependre de l'existence d'une emettrice. Signer, si.
         return selector.select(new JWKSet(jwks));
+    }
+
+    /**
+     * L'emettrice active parmi des cles deja lues, sans nouvelle requete. Le schema garantit
+     * qu'il n'y en a jamais plus d'une — index partiel {@code uk_tas_sk_platform_issuer_active}.
+     */
+    private static Optional<TasSigningKey> activeIssuerAmong(List<TasSigningKey> keys) {
+        return keys.stream()
+                .filter(TasSigningKey::issuer)
+                .filter(key -> key.status() == KeyStatus.ACTIVE)
+                .findFirst();
     }
 
     /** La cle emettrice, avec sa matiere privee, confrontee a ce que le JWKS annonce. */
