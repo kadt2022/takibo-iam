@@ -13,7 +13,6 @@ pas.
 | Nouveaux grant types OAuth 2.0 | `TAS-GRANTS-` | [README-TAS-GRANTS.md](README-TAS-GRANTS.md) |
 | Durcissement TMS et sécurité | `SEC-TMS-`, `TMS-` | [liste](#durcissement-tms-et-sécurité) ci-dessous |
 | Identité et inscription d'organisation | `IAM-`, `RECIT-ORG-` | [liste](#identité-et-inscription-dorganisation) ci-dessous |
-| Installation et bootstrap TAKIBO | `TAKIBO-INSTALL-` | [liste](#installation-et-bootstrap-takibo) ci-dessous |
 
 Les documents de travail — analyses, brouillons de corps de PR — ne sont pas versionnés :
 `.gitignore` les exclut nommément, document par document. Seuls les récits, les contrats et
@@ -116,16 +115,3 @@ Comment une organisation entre dans TAKIBO, et comment son premier compte s'auth
 
 Contrat de référence des trois récits d'inscription :
 [TAKIBO-REST-Organization-Registration-Contract.md](TAKIBO-REST-Organization-Registration-Contract.md).
-
----
-
-## Installation et bootstrap TAKIBO
-
-Le cœur TAKIBO n'importe aucune API de plateforme de déploiement — pas d'OpenShift, pas de
-Kubernetes, pas de Helm, pas de Docker. Il exprime un contrat générique de configuration et
-refuse de démarrer si ce contrat n'est pas satisfait. Ces récits couvrent ce qui aide une
-organisation à le satisfaire, sans jamais faire entrer une plateforme dans le cœur.
-
-| Récit | Titre | Statut |
-| --- | --- | --- |
-| [TAKIBO-INSTALL-KEYS-01](TAKIBO-INSTALL-KEYS-01-bootstrap-cryptographique-portable.md) | Bootstrap cryptographique portable | à faire |
