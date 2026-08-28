@@ -5,15 +5,19 @@ import com.nimbusds.jose.jwk.JWKSelector;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
+import com.nimbusds.jose.util.JSONObjectUtils;
 import com.takibo.authorizationserver.domain.keys.model.TasSigningKey;
 import com.takibo.authorizationserver.domain.keys.port.SecretCipher;
 import com.takibo.authorizationserver.domain.keys.port.SecretContext;
 import com.takibo.authorizationserver.domain.keys.port.SigningKeyRepository;
+import org.springframework.beans.factory.InitializingBean;
 
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Source de cles adossee a {@code tas_signing_keys} (TAS-GRANTS-02A).
@@ -21,32 +25,36 @@ import java.util.List;
  * Remplace la generation ephemere, qui regenerait une paire RSA a chaque demarrage et
  * invalidait donc tous les JWT en circulation a chaque deploiement.
  *
- * <h2>Ce que chaque cle expose</h2>
- * <ul>
- *   <li><b>L'emettrice</b> sort avec sa matiere privee, dechiffree a la demande. Elle seule
- *       peut signer.</li>
- *   <li><b>Les autres</b> — retirees, ou actives sans etre emettrices — sortent en public
- *       seul. Elles verifient les JWT deja emis, sans jamais pouvoir en produire.</li>
- * </ul>
- * Cette asymetrie n'est pas qu'une precaution : c'est elle qui rend la rotation possible.
- * {@code NimbusJwtEncoder} leve une exception des que plusieurs cles repondent au selecteur,
- * et son filtre RSA ne discrimine pas sur la presence de matiere privee. Pendant un
- * chevauchement, c'est donc au {@code jwkSelector} de l'encodeur de retenir celle qui porte
- * une partie privee — voir {@code SigningKeysConfiguration}.
+ * <h2>Une seule cle porte la matiere privee</h2>
+ * Celle que {@link SigningKeyRepository#findActivePlatformIssuer(Instant)} designe, reconnue
+ * par son <b>identite</b>. Toutes les autres sortent en public seul : elles verifient les JWT
+ * deja emis sans jamais pouvoir en produire.
+ * <p>
+ * La distinction est subtile et elle est le coeur de la rotation. Le drapeau
+ * {@code is_issuer} ne suffit pas : une cle <b>retiree conserve {@code is_issuer = true}</b>,
+ * puisqu'elle a bel et bien emis. Pendant un chevauchement, l'ancienne et la nouvelle le
+ * portent donc toutes deux. S'y fier sortirait deux cles privees, et
+ * {@code NimbusJwtEncoder} — qui refuse toute ambiguite — cesserait de signer. C'est le
+ * statut, croise avec la fenetre temporelle, qui departage ; le drapeau seul ne dit que
+ * « a vocation a emettre ».
+ *
+ * <h2>Ce qui est verifie au demarrage</h2>
+ * L'absence de cle emettrice, une matiere privee indechiffrable ou un JWK incoherent
+ * empechent le demarrage. Les decouvrir a la premiere demande de token produirait des refus
+ * incomprehensibles en service ; mieux vaut un demarrage refuse avec un diagnostic net.
  *
  * <h2>Forme du secret stocke</h2>
  * {@code private_key_encrypted} contient le <b>JWK complet</b> serialise puis chiffre, et non
  * un PEM : le dechiffrement rend une cle directement utilisable, sans reconstruction ni
  * hypothese sur l'encodage. {@code public_jwk_json} reste la seule source de ce que le JWKS
- * publie.
+ * publie — et les deux sont confrontes, sans quoi TAS pourrait signer avec une cle
+ * differente de celle qu'il annonce.
  *
  * <h2>Pas de cache, volontairement</h2>
  * Chaque appel relit la base. Un cache exigerait une invalidation, donc une conception, et
  * celle-ci appartient a la tranche de rotation : c'est elle qui sait quand les cles changent.
- * Le cout est une requete indexee et un dechiffrement AES de quelques kilo-octets ; le
- * mesurer avant de l'optimiser.
  */
-public class PersistentJwkSource implements JWKSource<SecurityContext> {
+public class PersistentJwkSource implements JWKSource<SecurityContext>, InitializingBean {
 
     private final SigningKeyRepository signingKeys;
     private final SecretCipher cipher;
@@ -58,44 +66,87 @@ public class PersistentJwkSource implements JWKSource<SecurityContext> {
         this.clock = clock;
     }
 
+    /**
+     * Fail-closed au demarrage, et non a la premiere requete : le contexte refuse de se
+     * charger si TAS ne peut pas signer.
+     */
+    @Override
+    public void afterPropertiesSet() {
+        Instant now = clock.instant();
+        TasSigningKey issuer = signingKeys.findActivePlatformIssuer(now)
+                .orElseThrow(() -> new SigningKeyUnavailableException(
+                        "NO_ACTIVE_PLATFORM_SIGNING_KEY: TAS cannot issue tokens"));
+        // Force le dechiffrement et le controle de coherence maintenant.
+        signingJwkOf(issuer);
+    }
+
     @Override
     public List<JWK> get(JWKSelector selector, SecurityContext context) {
         Instant now = clock.instant();
-        List<TasSigningKey> publishable = signingKeys.findPublishable(now);
 
-        if (publishable.isEmpty()) {
-            // Ni signature ni verification possibles. Le dire ici plutot que de rendre une
-            // liste vide, que l'appelant traduirait en « aucune cle ne correspond ».
-            throw new SigningKeyUnavailableException("NO_PUBLISHABLE_SIGNING_KEY");
-        }
+        List<TasSigningKey> publishable = signingKeys.findPublishable(now);
+        Optional<UUID> issuerId = signingKeys.findActivePlatformIssuer(now).map(TasSigningKey::id);
 
         List<JWK> jwks = new ArrayList<>(publishable.size());
         for (TasSigningKey key : publishable) {
-            jwks.add(key.issuer() ? withPrivateMaterial(key) : publicOnly(key));
+            // L'identite, pas le drapeau : une cle retiree conserve is_issuer = true.
+            boolean signs = issuerId.filter(id -> id.equals(key.id())).isPresent();
+            jwks.add(signs ? signingJwkOf(key) : publicJwkOf(key));
         }
+        // Volontairement sans exception si la liste est vide : la verification des JWT deja
+        // emis ne doit pas dependre de l'existence d'une emettrice. Signer, si.
         return selector.select(new JWKSet(jwks));
     }
 
-    private JWK withPrivateMaterial(TasSigningKey key) {
+    /** La cle emettrice, avec sa matiere privee, confrontee a ce que le JWKS annonce. */
+    private JWK signingJwkOf(TasSigningKey key) {
         if (key.privateKeyEncrypted() == null || key.privateKeyEncrypted().isBlank()) {
-            // Une emettrice sans matiere privee ne peut pas signer. Fail-closed : mieux vaut
-            // un demarrage refuse qu'un endpoint de token qui echoue a la premiere requete.
-            throw new SigningKeyUnavailableException("ISSUER_KEY_HAS_NO_PRIVATE_MATERIAL");
+            throw new SigningKeyUnavailableException(
+                    "ISSUER_KEY_HAS_NO_PRIVATE_MATERIAL: " + key.kid());
         }
-        String jwkJson = cipher.decrypt(
-                SecretContext.signingKeyMaterial(key.kid()), key.privateKeyEncrypted());
-        return parse(jwkJson);
+        JWK privateJwk = parse(cipher.decrypt(
+                SecretContext.signingKeyMaterial(key.kid()), key.privateKeyEncrypted()));
+        if (!privateJwk.isPrivate()) {
+            throw new SigningKeyUnavailableException(
+                    "ISSUER_KEY_MATERIAL_IS_NOT_A_PRIVATE_JWK: " + key.kid());
+        }
+        assertAnnouncesWhatItSigns(key, privateJwk);
+        return privateJwk;
     }
 
-    private JWK publicOnly(TasSigningKey key) {
-        return parse(toJson(key));
+    private JWK publicJwkOf(TasSigningKey key) {
+        JWK jwk = parse(publicJson(key));
+        if (jwk.isPrivate()) {
+            // public_jwk_json ne doit jamais contenir de parametre prive : il est publie tel
+            // quel par l'endpoint JWKS.
+            throw new SigningKeyUnavailableException(
+                    "PUBLIC_JWK_CONTAINS_PRIVATE_PARAMETERS: " + key.kid());
+        }
+        return jwk;
     }
 
-    private static String toJson(TasSigningKey key) {
+    /**
+     * La cle qui signe doit etre exactement celle que le JWKS publie.
+     * <p>
+     * Sans ce controle, une divergence entre {@code private_key_encrypted} et
+     * {@code public_jwk_json} passerait inapercue : TAS signerait avec une cle et en
+     * annoncerait une autre, rendant chaque token invalide pour tous ses consommateurs. La
+     * comparaison porte sur la partie publique complete, ce qui couvre la matiere ainsi que
+     * {@code kid}, {@code kty}, {@code alg} et {@code use}.
+     */
+    private void assertAnnouncesWhatItSigns(TasSigningKey key, JWK privateJwk) {
+        JWK announced = parse(publicJson(key));
+        if (!privateJwk.toPublicJWK().equals(announced)) {
+            throw new SigningKeyUnavailableException(
+                    "ISSUER_KEY_DOES_NOT_MATCH_ITS_PUBLISHED_JWK: " + key.kid());
+        }
+    }
+
+    private static String publicJson(TasSigningKey key) {
         if (key.publicJwkJson() == null || key.publicJwkJson().isEmpty()) {
-            throw new SigningKeyUnavailableException("SIGNING_KEY_HAS_NO_PUBLIC_JWK");
+            throw new SigningKeyUnavailableException("SIGNING_KEY_HAS_NO_PUBLIC_JWK: " + key.kid());
         }
-        return com.nimbusds.jose.util.JSONObjectUtils.toJSONString(key.publicJwkJson());
+        return JSONObjectUtils.toJSONString(key.publicJwkJson());
     }
 
     private static JWK parse(String json) {

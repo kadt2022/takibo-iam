@@ -251,6 +251,11 @@ jobs:
 
     env:
       TAKIBO_DEV_POSTMAN_SECRET: ${{ secrets.TAKIBO_DEV_POSTMAN_SECRET }}
+      # Clés jetables pour le BVT uniquement. Il démarre l'application une fois et joue une
+      # collection Postman : il ne vérifie pas que les clés survivent à un redémarrage, ce
+      # que couvrent les tests d'intégration sur PostgreSQL. Fournir ici de vrais secrets de
+      # chiffrement leur donnerait une surface d'exposition sans rien prouver de plus.
+      TAKIBO_TAS_EPHEMERAL_KEYS: "true"
 
     services:
       postgres:
