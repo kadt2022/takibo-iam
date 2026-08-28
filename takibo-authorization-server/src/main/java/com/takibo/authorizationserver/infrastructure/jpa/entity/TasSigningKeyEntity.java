@@ -27,7 +27,8 @@ import java.util.UUID;
         indexes = {
                 @Index(name = "idx_tas_sk_org", columnList = "org_id"),
                 @Index(name = "idx_tas_sk_org_status", columnList = "org_id, status"),
-                @Index(name = "idx_tas_sk_org_expires", columnList = "org_id, expires_at")
+                @Index(name = "idx_tas_sk_org_expires", columnList = "org_id, expires_at"),
+                @Index(name = "idx_tas_sk_org_publish_until", columnList = "org_id, publish_until")
         }
 )
 public class TasSigningKeyEntity {
@@ -71,6 +72,10 @@ public class TasSigningKeyEntity {
 
     @Column(name = "expires_at")
     private OffsetDateTime expiresAt;
+
+    /** Fin de publication JWKS d'une clé retirée — distincte de {@link #expiresAt}. */
+    @Column(name = "publish_until")
+    private OffsetDateTime publishUntil;
 
     @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
     private OffsetDateTime createdAt;

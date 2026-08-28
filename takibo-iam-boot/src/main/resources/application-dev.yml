@@ -14,3 +14,8 @@ takibo:
           from: security@takibu-iam.com
           recipients:
             - dev-team@takibu.com
+  tas:
+    keys:
+      # Poste de developpement : cle jetable, chaque redemarrage deconnecte tout le monde.
+      # Acceptable ici, jamais en service.
+      ephemeral: true

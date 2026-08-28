@@ -71,6 +71,22 @@ security:
 takibo:
   tas:
     issuer: http://localhost:8081
+    keys:
+      # Fail-closed par defaut. Sans cle de chiffrement, TAS refuse de demarrer plutot que
+      # de proteger des secrets avec une valeur devinable : un defaut integre serait un
+      # secret publie dans le depot.
+      #
+      # TAKIBO_TAS_CIPHER_KEY : 32 octets encodes en base64.
+      # TAKIBO_TAS_CIPHER_KEY_ID : identifiant stable, [A-Za-z0-9_-], inscrit dans chaque
+      #   chiffre. Ne jamais le reutiliser pour une autre matiere.
+      #
+      # La generation ephemere exige un opt-in explicite et n'a sa place qu'en
+      # developpement ou en test : elle regenere une paire a chaque demarrage, donc
+      # invalide tous les JWT en circulation a chaque deploiement.
+      ephemeral: ${TAKIBO_TAS_EPHEMERAL_KEYS:false}
+      cipher:
+        active-key-id: ${TAKIBO_TAS_CIPHER_KEY_ID:}
+        active-key: ${TAKIBO_TAS_CIPHER_KEY:}
   guard:
     space:
       whitelist:
