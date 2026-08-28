@@ -22,3 +22,8 @@ takibo:
   outbox:
     processor:
       scheduling-enabled: false
+  tas:
+    keys:
+      # Cles jetables : les tests qui verifient la persistance des cles la reactivent
+      # explicitement et sement leur propre cle.
+      ephemeral: true

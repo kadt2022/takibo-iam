@@ -64,6 +64,31 @@ Le séparateur `$` est hors de l'alphabet base64 et interdit dans un identifiant
 identifiant sont refusées à la construction : leurs chiffres deviendraient indéchiffrables
 pour l'une des deux, sans qu'on sache laquelle.
 
+## Décision actée — amorçage distinct de la rotation, génération portée par le domaine
+
+Revue de PR #54 (Capitaine Pi). Trois clarifications, actées dans le code :
+
+**Génération derrière un port de domaine.** `SigningKeyRotationService` appartenait au
+domaine mais importait directement le générateur RSA et le JWK Nimbus — une inversion de
+l'architecture hexagonale qui aurait compliqué le remplacement futur de RSA local par un KMS
+ou un HSM. `SigningKeyMaterialGenerator` est désormais le seul point d'entrée de la matière
+neuve dans le domaine ; `RsaSigningKeyGenerator` l'implémente en infrastructure et traduit
+immédiatement vers le type de domaine `GeneratedSigningKeyMaterial`, sans laisser Nimbus
+franchir la frontière.
+
+**`initializeFirstIssuer()` distinct de `rotate(Duration)`.** L'ancienne opération unique
+acceptait un chevauchement nul, ce qui aurait retiré l'ancienne émettrice avant l'expiration
+des JWT encore valides qu'elle a signés. `rotate(Duration)` exige désormais un chevauchement
+strictement positif ; l'amorçage d'une installation sans émettrice passe par
+`initializeFirstIssuer()`, qui n'a rien à retirer et échoue — au lieu de retirer
+silencieusement — si une émettrice existe déjà.
+
+**`publish_until` distinct de `expires_at`.** La même colonne bornait à la fois la période de
+validité d'une clé (cryptopériode) et la durée pendant laquelle une clé retirée reste publiée
+pour la vérification — deux échéances qui ne coïncident pas nécessairement. `publish_until`
+porte désormais seule la fin de publication, écrite uniquement par la rotation ; `expires_at`
+reste réservée à une future politique de cryptopériode, non utilisée aujourd'hui.
+
 ## Périmètre
 
 - Remplacer `DevJwkSourceConfiguration` hors profil de développement par un `JWKSource` adossé à `tas_signing_keys`.
@@ -83,7 +108,7 @@ pour l'une des deux, sans qu'on sache laquelle.
 - [ ] Après rotation, TAS signe avec la nouvelle clé et publie encore l’ancienne clé publique pendant la période de chevauchement.
 - [ ] Une clé privée n’apparaît jamais dans le JWKS, les logs, les métriques ou une erreur.
 - [ ] En profil non-dev, l’absence de clé active provoque un démarrage fail-closed avec un diagnostic exploitable.
-- [ ] Les dates `not_before` et `expires_at`, le statut et `is_issuer` sont appliqués.
+- [ ] Les dates `not_before`, `expires_at` et `publish_until`, le statut et `is_issuer` sont appliqués.
 - [ ] `client_credentials` PLATFORM et SPACE reste vérifiable avant et après redémarrage/rotation.
 - [ ] La portée des clés est tranchée et écrite : soit single-issuer, et `tas_signing_keys.org_id` accueille la clé de plateforme sans organisation fabriquée ; soit multi-issuer, et le retrait de `.issuer(...)` ainsi que le changement d'URL d'issuer sont assumés avec leurs conséquences sur les JWT en circulation et la configuration des resource servers. Aucune organisation fictive n'est créée pour loger une clé globale.
 - [ ] Le port de chiffrement au repos est défini et documenté pour TAS-GRANTS-02 ; aucun secret de chiffrement n'est figé dans la configuration.
@@ -91,7 +116,7 @@ pour l'une des deux, sans qu'on sache laquelle.
 
 ## Tests attendus
 
-- Test d’intégration PostgreSQL : émission, redémarrage du contexte et vérification du JWT initial.
+- Test d’intégration PostgreSQL : émission, fermeture complète du contexte Spring, démarrage d’un second contexte indépendant et vérification du JWT initial.
 - Rotation avec chevauchement de deux clés et validation des deux signatures.
 - Concurrence lors de l’activation et respect de l’unicité de l’émetteur actif.
 - Clé absente, expirée, pas encore valide ou corrompue.
