@@ -3,8 +3,10 @@ package com.takibo.authorizationserver.infrastructure.springauthserver.keys;
 import com.nimbusds.jose.jwk.JWK;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
+import com.takibo.authorizationserver.domain.keys.SigningKeyRotationService;
 import com.takibo.authorizationserver.domain.keys.port.SecretCipher;
 import com.takibo.authorizationserver.domain.keys.port.SigningKeyRepository;
+import com.takibo.authorizationserver.domain.keys.port.SigningKeyWriter;
 import com.takibo.authorizationserver.infrastructure.keys.AesGcmSecretCipher;
 import com.takibo.authorizationserver.infrastructure.keys.PersistentJwkSource;
 import com.takibo.authorizationserver.infrastructure.keys.SecretCipherKey;
@@ -69,6 +71,19 @@ public class SigningKeysConfiguration {
             // Le message ne reproduit jamais la valeur fournie.
             throw new IllegalStateException("SECRET_CIPHER_KEY_IS_NOT_VALID_BASE64", e);
         }
+    }
+
+    /**
+     * Absent en profil éphémère : la rotation n'a de sens que pour des clés persistées, et
+     * l'exposer quand même laisserait croire qu'elle survivrait à un redémarrage.
+     */
+    @Bean
+    @ConditionalOnProperty(name = "takibo.tas.keys.ephemeral", havingValue = "false",
+            matchIfMissing = true)
+    public SigningKeyRotationService signingKeyRotationService(SigningKeyWriter signingKeyWriter,
+                                                               SecretCipher secretCipher,
+                                                               Clock clock) {
+        return new SigningKeyRotationService(signingKeyWriter, secretCipher, clock);
     }
 
     @Bean

@@ -1,7 +1,10 @@
 package com.takibo.authorizationserver.infrastructure.keys;
 
+import com.takibo.authorizationserver.domain.keys.model.KeyStatus;
+import com.takibo.authorizationserver.domain.keys.model.NewSigningKey;
 import com.takibo.authorizationserver.domain.keys.model.TasSigningKey;
 import com.takibo.authorizationserver.domain.keys.port.SigningKeyRepository;
+import com.takibo.authorizationserver.domain.keys.port.SigningKeyWriter;
 import com.takibo.authorizationserver.infrastructure.jpa.entity.TasSigningKeyEntity;
 import com.takibo.authorizationserver.infrastructure.jpa.repository.TasSigningKeyJpaRepository;
 import org.springframework.stereotype.Repository;
@@ -12,20 +15,25 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
- * Adaptateur JPA du {@link SigningKeyRepository}.
+ * Adaptateur JPA de la lecture ({@link SigningKeyRepository}) et de la rotation
+ * ({@link SigningKeyWriter}) des clés de signature.
  * <p>
- * Traduit l'entite en enregistrement de domaine, et rien de plus : aucune regle de selection
- * ici, elles vivent dans les requetes, ecrites une seule fois. Le jour ou les cles viendront
- * d'un KMS, seul cet adaptateur change.
+ * Un seul adaptateur pour les deux ports : ils portent sur la même table, et rien dans leur
+ * traduction entité-domaine ne diffère selon qu'on lit ou qu'on écrit. Les règles de sélection
+ * vivent dans les requêtes, écrites une seule fois ; celles d'activation vivent dans
+ * {@code retireCurrentPlatformIssuer}, commentée là où elle est définie. Le jour où les clés
+ * viendront d'un KMS, seul cet adaptateur change.
  * <p>
- * La matiere privee chiffree traverse telle quelle : la dechiffrer est le role du
- * {@code JWKSource}, qui seul connait le contexte a fournir au chiffreur.
+ * La matière privée chiffrée traverse telle quelle dans les deux sens : ni la déchiffrer ni la
+ * chiffrer n'est le rôle de cet adaptateur — {@code PersistentJwkSource} fait la première,
+ * {@link com.takibo.authorizationserver.domain.keys.SigningKeyRotationService} la seconde.
  */
 @Repository
 @Transactional(readOnly = true)
-public class JpaSigningKeyRepository implements SigningKeyRepository {
+public class JpaSigningKeyRepository implements SigningKeyRepository, SigningKeyWriter {
 
     private final TasSigningKeyJpaRepository keys;
 
@@ -43,6 +51,36 @@ public class JpaSigningKeyRepository implements SigningKeyRepository {
         return keys.findPublishable(atOffset(at)).stream()
                 .map(JpaSigningKeyRepository::toDomain)
                 .toList();
+    }
+
+    /**
+     * Retirer puis activer dans la même transaction : c'est ce qui garantit qu'aucun instant
+     * n'existe où ni l'ancienne ni la nouvelle clé ne signe, et que l'échec de l'une des deux
+     * opérations annule l'autre plutôt que de laisser l'installation à moitié tournée.
+     */
+    @Override
+    @Transactional
+    public void activateNewIssuer(NewSigningKey newKey, Instant retiredKeyExpiresAt) {
+        if (newKey == null) {
+            throw new IllegalArgumentException("SIGNING_KEY_ACTIVATION_REQUIRES_A_NEW_KEY");
+        }
+        OffsetDateTime expiresAt = atOffset(retiredKeyExpiresAt);
+
+        keys.retireCurrentPlatformIssuer(expiresAt);
+
+        TasSigningKeyEntity entity = TasSigningKeyEntity.builder()
+                .id(UUID.randomUUID())
+                .orgId(null)
+                .kid(newKey.kid())
+                .alg(newKey.alg())
+                .kty(newKey.kty())
+                .keyUse(newKey.keyUse())
+                .issuer(true)
+                .status(KeyStatus.ACTIVE)
+                .publicJwkJson(newKey.publicJwkJson())
+                .privateKeyEncrypted(newKey.privateKeyEncrypted())
+                .build();
+        keys.save(entity);
     }
 
     private static OffsetDateTime atOffset(Instant at) {
