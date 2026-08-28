@@ -27,6 +27,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * Câblage des beans de {@link SigningKeysConfiguration} (TAS-GRANTS-02A), appelés
@@ -89,7 +90,7 @@ class SigningKeysConfigurationTest {
     }
 
     @Test
-    void given_a_jwk_source_then_the_decoder_bean_is_built() throws Exception {
+    void given_a_jwk_source_then_the_decoder_bean_is_built() {
         JWKSource<SecurityContext> jwkSource = ephemeralSource();
 
         JwtDecoder decoder = configuration.jwtDecoder(jwkSource);
@@ -104,7 +105,7 @@ class SigningKeysConfigurationTest {
             throws Exception {
         JWK privateJwk = anRsaJwk();
         JWKSource<SecurityContext> source = mock(JWKSource.class);
-        org.mockito.Mockito.when(source.get(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+        when(source.get(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
                 .thenReturn(List.of(privateJwk));
 
         JwtEncoder encoder = configuration.jwtEncoder(source);
@@ -123,20 +124,22 @@ class SigningKeysConfigurationTest {
     }
 
     @Test
-    void given_a_source_with_no_private_key_then_signing_is_refused() throws Exception {
+    void given_a_source_with_no_private_key_then_signing_is_refused() {
         // NimbusJwtEncoder court-circuite le selecteur personnalise des qu'un seul candidat
         // correspond a l'algorithme : deux cles publiques, jamais une seule, sont necessaires
         // pour que theOneThatCanSign soit reellement invoque.
-        JWK firstPublicOnly = anRsaJwk().toPublicJWK();
-        JWK secondPublicOnly = anRsaJwk().toPublicJWK();
-        assertThatThrownBy(() -> selectSigningKey(List.of(firstPublicOnly, secondPublicOnly)))
+        List<JWK> candidates = List.of(anRsaJwk().toPublicJWK(), anRsaJwk().toPublicJWK());
+
+        assertThatThrownBy(() -> selectSigningKey(candidates))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("EXPECTED_EXACTLY_ONE_SIGNING_KEY_BUT_FOUND_0");
     }
 
     @Test
-    void given_a_source_with_two_private_keys_then_signing_is_refused() throws Exception {
-        assertThatThrownBy(() -> selectSigningKey(List.of(anRsaJwk(), anRsaJwk())))
+    void given_a_source_with_two_private_keys_then_signing_is_refused() {
+        List<JWK> candidates = List.of(anRsaJwk(), anRsaJwk());
+
+        assertThatThrownBy(() -> selectSigningKey(candidates))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("EXPECTED_EXACTLY_ONE_SIGNING_KEY_BUT_FOUND_2");
     }
@@ -144,7 +147,7 @@ class SigningKeysConfigurationTest {
     /** Invoque le selecteur prive via l'unique point d'entree public : encoder un jeton. */
     private void selectSigningKey(List<JWK> candidates) throws Exception {
         JWKSource<SecurityContext> source = mock(JWKSource.class);
-        org.mockito.Mockito.when(source.get(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+        when(source.get(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
                 .thenReturn(candidates);
         JwtEncoder encoder = configuration.jwtEncoder(source);
         var claims = org.springframework.security.oauth2.jwt.JwtClaimsSet.builder()
@@ -155,19 +158,23 @@ class SigningKeysConfigurationTest {
         encoder.encode(org.springframework.security.oauth2.jwt.JwtEncoderParameters.from(claims));
     }
 
-    private static JWKSource<SecurityContext> ephemeralSource() throws Exception {
+    private static JWKSource<SecurityContext> ephemeralSource() {
         JWK jwk = anRsaJwk();
         return new com.nimbusds.jose.jwk.source.ImmutableJWKSet<>(
                 new com.nimbusds.jose.jwk.JWKSet(jwk));
     }
 
-    private static JWK anRsaJwk() throws Exception {
-        KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
-        generator.initialize(2048);
-        KeyPair pair = generator.generateKeyPair();
-        return new RSAKey.Builder((RSAPublicKey) pair.getPublic())
-                .privateKey((RSAPrivateKey) pair.getPrivate())
-                .keyID(UUID.randomUUID().toString())
-                .build();
+    private static JWK anRsaJwk() {
+        try {
+            KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
+            generator.initialize(2048);
+            KeyPair pair = generator.generateKeyPair();
+            return new RSAKey.Builder((RSAPublicKey) pair.getPublic())
+                    .privateKey((RSAPrivateKey) pair.getPrivate())
+                    .keyID(UUID.randomUUID().toString())
+                    .build();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException("RSA_ALGORITHM_UNAVAILABLE_IN_TEST_JVM", e);
+        }
     }
 }

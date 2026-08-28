@@ -84,7 +84,7 @@ class PersistentJwkSourceTest {
                 JwtClaimsSet.builder().subject("un-sujet")
                         .issuedAt(NOW).expiresAt(NOW.plusSeconds(300)).build()));
 
-        assertThat(jwt.getHeaders().get("kid")).isEqualTo("kid-new");
+        assertThat(jwt.getHeaders()).containsEntry("kid", "kid-new");
     }
 
     @Test

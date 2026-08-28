@@ -24,56 +24,72 @@ class NewSigningKeyTest {
 
     @Test
     void given_a_blank_kid_then_the_key_is_refused() {
-        assertThatThrownBy(() -> aKey().kid(" ").build())
+        Builder builder = aKey().kid(" ");
+
+        assertThatThrownBy(builder::build)
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("NEW_SIGNING_KEY_REQUIRES_KID");
     }
 
     @Test
     void given_no_kid_then_the_key_is_refused() {
-        assertThatThrownBy(() -> aKey().kid(null).build())
+        Builder builder = aKey().kid(null);
+
+        assertThatThrownBy(builder::build)
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("NEW_SIGNING_KEY_REQUIRES_KID");
     }
 
     @Test
     void given_a_blank_alg_then_the_key_is_refused() {
-        assertThatThrownBy(() -> aKey().alg("").build())
+        Builder builder = aKey().alg("");
+
+        assertThatThrownBy(builder::build)
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("NEW_SIGNING_KEY_REQUIRES_ALG");
     }
 
     @Test
     void given_a_blank_kty_then_the_key_is_refused() {
-        assertThatThrownBy(() -> aKey().kty("").build())
+        Builder builder = aKey().kty("");
+
+        assertThatThrownBy(builder::build)
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("NEW_SIGNING_KEY_REQUIRES_KTY");
     }
 
     @Test
     void given_a_blank_key_use_then_the_key_is_refused() {
-        assertThatThrownBy(() -> aKey().keyUse("").build())
+        Builder builder = aKey().keyUse("");
+
+        assertThatThrownBy(builder::build)
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("NEW_SIGNING_KEY_REQUIRES_KEY_USE");
     }
 
     @Test
     void given_a_blank_encrypted_material_then_the_key_is_refused() {
-        assertThatThrownBy(() -> aKey().privateKeyEncrypted("").build())
+        Builder builder = aKey().privateKeyEncrypted("");
+
+        assertThatThrownBy(builder::build)
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("NEW_SIGNING_KEY_REQUIRES_ENCRYPTED_MATERIAL");
     }
 
     @Test
     void given_no_public_jwk_then_the_key_is_refused() {
-        assertThatThrownBy(() -> aKey().publicJwkJson(null).build())
+        Builder builder = aKey().publicJwkJson(null);
+
+        assertThatThrownBy(builder::build)
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("NEW_SIGNING_KEY_REQUIRES_PUBLIC_JWK");
     }
 
     @Test
     void given_an_empty_public_jwk_then_the_key_is_refused() {
-        assertThatThrownBy(() -> aKey().publicJwkJson(Map.of()).build())
+        Builder builder = aKey().publicJwkJson(Map.of());
+
+        assertThatThrownBy(builder::build)
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("NEW_SIGNING_KEY_REQUIRES_PUBLIC_JWK");
     }

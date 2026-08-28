@@ -22,7 +22,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -89,10 +89,12 @@ class JpaSigningKeyRepositoryTest {
 
     @Test
     void given_no_instant_then_read_operations_are_refused() {
-        assertThatThrownBy(() -> repository().findActivePlatformIssuer(null))
+        JpaSigningKeyRepository repo = repository();
+
+        assertThatThrownBy(() -> repo.findActivePlatformIssuer(null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("SIGNING_KEY_LOOKUP_REQUIRES_AN_INSTANT");
-        assertThatThrownBy(() -> repository().findPublishable(null))
+        assertThatThrownBy(() -> repo.findPublishable(null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("SIGNING_KEY_LOOKUP_REQUIRES_AN_INSTANT");
     }
@@ -125,7 +127,7 @@ class JpaSigningKeyRepositoryTest {
     void given_a_new_key_then_the_current_issuer_is_retired_with_the_given_expiry() {
         repository().activateNewIssuer(aNewSigningKey(), AT);
 
-        verify(jpa).retireCurrentPlatformIssuer(eq(AT.atOffset(ZoneOffset.UTC)));
+        verify(jpa).retireCurrentPlatformIssuer(AT.atOffset(ZoneOffset.UTC));
     }
 
     @Test
@@ -136,7 +138,7 @@ class JpaSigningKeyRepositoryTest {
         repo.activateNewIssuer(aNewSigningKey(), AT);
 
         ArgumentCaptor<TasSigningKeyEntity> captor = ArgumentCaptor.forClass(TasSigningKeyEntity.class);
-        verify(jpa, org.mockito.Mockito.times(2)).save(captor.capture());
+        verify(jpa, times(2)).save(captor.capture());
 
         List<TasSigningKeyEntity> saved = captor.getAllValues();
         assertThat(saved.get(0).getId()).isNotEqualTo(saved.get(1).getId());
@@ -144,14 +146,19 @@ class JpaSigningKeyRepositoryTest {
 
     @Test
     void given_no_new_key_then_activation_is_refused() {
-        assertThatThrownBy(() -> repository().activateNewIssuer(null, AT))
+        JpaSigningKeyRepository repo = repository();
+
+        assertThatThrownBy(() -> repo.activateNewIssuer(null, AT))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("SIGNING_KEY_ACTIVATION_REQUIRES_A_NEW_KEY");
     }
 
     @Test
     void given_no_retirement_instant_then_activation_is_refused() {
-        assertThatThrownBy(() -> repository().activateNewIssuer(aNewSigningKey(), null))
+        JpaSigningKeyRepository repo = repository();
+        NewSigningKey newKey = aNewSigningKey();
+
+        assertThatThrownBy(() -> repo.activateNewIssuer(newKey, null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("SIGNING_KEY_LOOKUP_REQUIRES_AN_INSTANT");
     }
@@ -161,8 +168,10 @@ class JpaSigningKeyRepositoryTest {
         // Ne devrait jamais arriver : garde-fou si l'invariant de l'index unique etait un
         // jour contourne. Mieux vaut echouer ici qu'activer une cle sur une base incoherente.
         when(jpa.retireCurrentPlatformIssuer(any())).thenReturn(2);
+        JpaSigningKeyRepository repo = repository();
+        NewSigningKey newKey = aNewSigningKey();
 
-        assertThatThrownBy(() -> repository().activateNewIssuer(aNewSigningKey(), AT))
+        assertThatThrownBy(() -> repo.activateNewIssuer(newKey, AT))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("MORE_THAN_ONE_PLATFORM_ISSUER_WAS_RETIRED");
     }

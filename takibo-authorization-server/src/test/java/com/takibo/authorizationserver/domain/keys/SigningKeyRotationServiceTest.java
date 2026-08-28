@@ -125,14 +125,18 @@ class SigningKeyRotationServiceTest {
 
     @Test
     void given_no_grace_period_then_rotation_is_refused() {
-        assertThatThrownBy(() -> service().rotate(null))
+        SigningKeyRotationService rotation = service();
+
+        assertThatThrownBy(() -> rotation.rotate(null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("SIGNING_KEY_ROTATION_REQUIRES_A_GRACE_PERIOD");
     }
 
     @Test
     void given_a_negative_grace_period_then_rotation_is_refused() {
-        assertThatThrownBy(() -> service().rotate(Duration.ofSeconds(-1)))
+        SigningKeyRotationService rotation = service();
+
+        assertThatThrownBy(() -> rotation.rotate(Duration.ofSeconds(-1)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("SIGNING_KEY_ROTATION_REQUIRES_A_GRACE_PERIOD");
     }

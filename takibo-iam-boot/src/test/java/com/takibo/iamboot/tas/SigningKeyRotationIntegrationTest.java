@@ -134,12 +134,12 @@ class SigningKeyRotationIntegrationTest extends TasPostgresBaseline {
         SigningChain afterRotation = signingChain();
         String tokenFromSecondKey = afterRotation.sign();
 
-        assertThat(afterRotation.decode(tokenFromSecondKey).getHeaders().get("kid"))
-                .isEqualTo(secondKid);
+        assertThat(afterRotation.decode(tokenFromSecondKey).getHeaders())
+                .containsEntry("kid", secondKid);
         // Le chevauchement : le jeton scelle par l'ancienne cle reste verifiable par une
         // chaine qui ne l'a jamais signe elle-meme.
-        assertThat(afterRotation.decode(tokenFromFirstKey).getHeaders().get("kid"))
-                .isEqualTo(firstKid);
+        assertThat(afterRotation.decode(tokenFromFirstKey).getHeaders())
+                .containsEntry("kid", firstKid);
     }
 
     @Test
@@ -176,7 +176,9 @@ class SigningKeyRotationIntegrationTest extends TasPostgresBaseline {
                 .map(k -> k.kid())
                 .toList();
 
-        assertThat(publishable).doesNotContain(firstKid);
+        // isNotEmpty d'abord : sans elle, doesNotContain passerait aussi si le filtrage avait
+        // tout retire par erreur, ce qui ne prouverait rien sur le retrait cible.
+        assertThat(publishable).isNotEmpty().doesNotContain(firstKid);
     }
 
     // ---------- Concurrence ----------
