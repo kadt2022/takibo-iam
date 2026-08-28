@@ -66,7 +66,15 @@ public class JpaSigningKeyRepository implements SigningKeyRepository, SigningKey
         }
         OffsetDateTime expiresAt = atOffset(retiredKeyExpiresAt);
 
-        keys.retireCurrentPlatformIssuer(expiresAt);
+        int retired = keys.retireCurrentPlatformIssuer(expiresAt);
+        if (retired > 1) {
+            // Ne devrait jamais arriver : l'index unique partiel garantit au plus une
+            // émettrice de plateforme active à la fois. Si cette invariante était un jour
+            // violée par ailleurs, mieux vaut l'échec net ici qu'une rotation qui continue
+            // sur une base déjà incohérente.
+            throw new IllegalStateException(
+                    "MORE_THAN_ONE_PLATFORM_ISSUER_WAS_RETIRED: " + retired);
+        }
 
         TasSigningKeyEntity entity = TasSigningKeyEntity.builder()
                 .id(UUID.randomUUID())

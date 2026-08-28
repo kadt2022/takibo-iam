@@ -102,6 +102,12 @@ public class SigningKeysConfiguration {
      * cle publique et la nouvelle repondraient toutes deux. Retenir celle qui porte une partie
      * privee designe l'emettrice sans ambiguite, puisque la source persistante n'en expose
      * qu'une.
+     * <p>
+     * Ce selecteur n'est toutefois consulte que si <b>plus d'une</b> cle correspond a
+     * l'algorithme demande : {@code NimbusJwtEncoder} court-circuite tout selecteur des qu'un
+     * seul candidat matche. Avec une seule cle publiee et aucune emettrice — retrait sans
+     * nouvelle activation — c'est donc l'erreur generique de Nimbus qui remonte, pas
+     * {@link IllegalStateException} ci-dessous ; l'echec reste net dans les deux cas.
      */
     @Bean
     public JwtEncoder jwtEncoder(JWKSource<SecurityContext> jwkSource) {
