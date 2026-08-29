@@ -10,6 +10,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.context.annotation.Profile;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
@@ -27,15 +28,15 @@ import java.time.Clock;
  * la production, qui n'active aucun des deux.
  * <p>
  * {@link InMemoryPlatformOAuthClientResolver} et {@link JpaResolvedOAuthClientResolver} ne
- * portent pas {@code @Component} : cette configuration est le seul endroit qui les construit,
- * et le seul bean exposé comme {@link ResolvedOAuthClientResolver} est le composite qu'elle
- * assemble. Les enregistrer aussi comme {@code @Component} créerait trois candidats du même
- * type dès qu'un consommateur demanderait ce port par autowiring — deux sources plus le
- * composite — pour une ambiguïté que Spring ne peut pas résoudre seul.
- * <p>
- * Ce bean n'est pas encore consommé par {@code TakiboRegisteredClientRepository}, {@code
- * TenantResolutionFilter} ni {@code PkceEnforcementFilter} — leur bascule est une tranche
- * séparée.
+ * portent pas {@code @Component} : cette configuration est le seul endroit qui les construit.
+ * Cela ne suffit pourtant pas à garantir l'unicité du bean {@link ResolvedOAuthClientResolver} :
+ * les deux sources implémentent aussi cette interface, et Spring type-matche l'autowiring sur
+ * la classe réelle du bean, pas seulement sur le type de retour déclaré de sa méthode
+ * {@code @Bean}. Sans {@link Primary} sur le composite ci-dessous, trois candidats du même
+ * type existent dès qu'un consommateur le demande par autowiring ; ce n'est que la
+ * correspondance fortuite entre le nom du paramètre et le nom du bean qui a évité l'ambiguïté
+ * jusqu'ici — fragile au premier renommage ou au premier consommateur dont le paramètre
+ * porterait un autre nom. {@link Primary} rend le choix explicite et indépendant du nommage.
  */
 @Configuration
 public class ResolvedOAuthClientResolverConfig {
@@ -61,6 +62,7 @@ public class ResolvedOAuthClientResolverConfig {
     }
 
     @Bean
+    @Primary
     public ResolvedOAuthClientResolver resolvedOAuthClientResolver(
             ObjectProvider<InMemoryPlatformOAuthClientResolver> platformResolver,
             JpaResolvedOAuthClientResolver tmsResolver) {

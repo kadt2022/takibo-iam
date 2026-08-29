@@ -9,8 +9,10 @@ import com.takibo.authorizationserver.infrastructure.jpa.repository.OAuth2Client
 import com.takibo.authorizationserver.infrastructure.jpa.repository.OAuth2ClientScopeRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.context.annotation.Primary;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.lang.reflect.Method;
 import java.time.Clock;
 import java.util.Optional;
 
@@ -54,6 +56,19 @@ class ResolvedOAuthClientResolverConfigTest {
                 new ResolvedOAuthClientResolverConfig().resolvedOAuthClientResolver(platformProvider, tms);
 
         assertThat(resolver.resolve("busa-finance")).contains(spaceClient);
+    }
+
+    @Test
+    void given_the_resolvedOAuthClientResolver_bean_method_then_it_is_marked_primary()
+            throws NoSuchMethodException {
+        // Deux beans concrets (InMemoryPlatformOAuthClientResolver, JpaResolvedOAuthClientResolver)
+        // implementent aussi ResolvedOAuthClientResolver : sans @Primary, l'unicite du
+        // composite pour l'autowiring par type ne tiendrait qu'a la coincidence entre le nom
+        // du parametre et le nom du bean.
+        Method beanMethod = ResolvedOAuthClientResolverConfig.class.getMethod(
+                "resolvedOAuthClientResolver", ObjectProvider.class, JpaResolvedOAuthClientResolver.class);
+
+        assertThat(beanMethod.isAnnotationPresent(Primary.class)).isTrue();
     }
 
     @Test

@@ -19,7 +19,7 @@ import java.util.UUID;
  * qui transmet l'empreinte stockee telle quelle a Spring Authorization Server.
  * <p>
  * Le client PLATFORM ne figure pas ici : {@code postman-client} est declare in-memory par
- * {@code InMemoryDevRegisteredClientConfiguration} et n'a, par construction, ni organisation
+ * {@code InMemoryPlatformOAuthClientResolver} et n'a, par construction, ni organisation
  * ni space. Son secret vient de {@code takibo.dev.postman-client.secret}.
  */
 final class TasBaselineDataset {

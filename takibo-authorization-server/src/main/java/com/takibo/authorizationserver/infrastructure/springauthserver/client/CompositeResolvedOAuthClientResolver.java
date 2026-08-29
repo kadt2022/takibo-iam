@@ -10,10 +10,12 @@ import java.util.Optional;
  * Compose plusieurs {@link ResolvedOAuthClientResolver} et les interroge dans l'ordre
  * (TAS-GRANTS-01).
  * <p>
- * Ordre attendu : source PLATFORM (in-memory, dev uniquement) d'abord si présente, puis
- * source TMS (DB-backed). Le premier résultat présent gagne ; miroir de
- * {@link CompositeRegisteredClientRepository}, qui compose de la même façon côté
- * {@code RegisteredClientRepository}.
+ * Ordre attendu : source PLATFORM (in-memory, dev et test) d'abord si présente, puis source
+ * TMS (DB-backed). Le premier résultat présent gagne. C'est désormais l'unique chemin de
+ * résolution de {@code RegisteredClientRepository} au sens large : {@code
+ * TakiboRegisteredClientRepository} le consomme directement, sans composer de son côté avec
+ * un second {@code RegisteredClientRepository} PLATFORM séparé comme le faisait l'ancien
+ * {@code CompositeRegisteredClientRepository} (retiré).
  */
 public class CompositeResolvedOAuthClientResolver implements ResolvedOAuthClientResolver {
 

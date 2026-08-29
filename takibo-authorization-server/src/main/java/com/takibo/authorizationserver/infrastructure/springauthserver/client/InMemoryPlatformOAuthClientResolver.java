@@ -19,12 +19,13 @@ import java.util.UUID;
  * Construite par {@link ResolvedOAuthClientResolverConfig}, réservée aux profils {@code dev}
  * et {@code test} — en dehors, cette source est absente du contexte et seule la source TMS
  * ({@link JpaResolvedOAuthClientResolver}) reste active, conformément au périmètre du récit.
- * Ni celle-ci ni {@link JpaResolvedOAuthClientResolver} ne portent {@code @Component} :
- * seul le composite assemblé par la configuration est exposé comme
- * {@link ResolvedOAuthClientResolver}, pour qu'un seul bean de ce type existe une fois les
- * consommateurs branchés dessus. Mêmes valeurs que l'ancien
- * {@code InMemoryDevRegisteredClientConfiguration} qu'elle vise à remplacer une fois les
- * trois consommateurs branchés sur ce port.
+ * Ni celle-ci ni {@link JpaResolvedOAuthClientResolver} ne portent {@code @Component} : le
+ * composite assemblé par la configuration est marqué {@link org.springframework.context.annotation.Primary},
+ * pour qu'il gagne sans ambiguïté même si les deux sources restent, elles aussi, candidates
+ * par type. Remplace l'ancien {@code InMemoryDevRegisteredClientConfiguration}
+ * (retiré) : {@code postman-client} n'a plus qu'une seule représentation, consommée aussi
+ * bien par {@code TakiboRegisteredClientRepository} que par {@code TenantResolutionFilter}
+ * et {@code PkceEnforcementFilter}.
  */
 public class InMemoryPlatformOAuthClientResolver implements ResolvedOAuthClientResolver {
 

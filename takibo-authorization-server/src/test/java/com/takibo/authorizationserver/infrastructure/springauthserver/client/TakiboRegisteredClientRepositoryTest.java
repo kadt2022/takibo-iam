@@ -3,6 +3,7 @@ package com.takibo.authorizationserver.infrastructure.springauthserver.client;
 import com.takibo.authorizationserver.domain.client.ClientPlan;
 import com.takibo.authorizationserver.domain.client.ClientType;
 import com.takibo.authorizationserver.domain.client.ResolvedOAuthClient;
+import com.takibo.authorizationserver.domain.client.ResolvedOAuthClientContextHolder;
 import com.takibo.authorizationserver.domain.client.ResolvedOAuthClientResolver;
 import com.takibo.authorizationserver.infrastructure.jpa.entity.OAuth2ClientGrantTypeEntity;
 import com.takibo.authorizationserver.infrastructure.jpa.entity.OAuth2ClientLookupEntity;
@@ -12,6 +13,8 @@ import com.takibo.authorizationserver.infrastructure.jpa.repository.OAuth2Client
 import com.takibo.authorizationserver.infrastructure.jpa.repository.OAuth2ClientPostLogoutRedirectUriRepository;
 import com.takibo.authorizationserver.infrastructure.jpa.repository.OAuth2ClientRedirectUriRepository;
 import com.takibo.authorizationserver.infrastructure.jpa.repository.OAuth2ClientScopeRepository;
+import com.takibo.authorizationserver.infrastructure.springauthserver.token.TakiboTokenClaims;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -21,6 +24,7 @@ import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -29,6 +33,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -53,7 +59,92 @@ class TakiboRegisteredClientRepositoryTest {
 
     @InjectMocks private TakiboRegisteredClientRepository repository;
 
-    // ---------- findByClientId : chemin canonique via le resolveur ----------
+    @AfterEach
+    void clearResolvedClientContext() {
+        ResolvedOAuthClientContextHolder.clear();
+    }
+
+    // ---------- findByClientId : une seule resolution par requete ----------
+
+    @Test
+    void given_a_resolved_client_already_in_the_request_context_when_find_by_client_id_then_it_is_reused() {
+        ResolvedOAuthClientContextHolder.set(aClient("busa-finance").build());
+
+        RegisteredClient rc = repository.findByClientId("busa-finance");
+
+        assertThat(rc).isNotNull();
+        assertThat(rc.getClientId()).isEqualTo("busa-finance");
+        // TenantResolutionFilter a deja resolu ce client plus haut dans la chaine : un
+        // second appel au resolveur observerait potentiellement un etat different.
+        verifyNoInteractions(resolvedOAuthClientResolver);
+    }
+
+    @Test
+    void given_a_context_client_with_a_different_client_id_when_find_by_client_id_then_it_resolves_directly() {
+        ResolvedOAuthClientContextHolder.set(aClient("other-client").build());
+        when(resolvedOAuthClientResolver.resolve("busa-finance"))
+                .thenReturn(Optional.of(aClient("busa-finance").build()));
+
+        RegisteredClient rc = repository.findByClientId("busa-finance");
+
+        assertThat(rc).isNotNull();
+        assertThat(rc.getClientId()).isEqualTo("busa-finance");
+        verify(resolvedOAuthClientResolver).resolve("busa-finance");
+    }
+
+    @Test
+    void given_no_resolved_client_in_context_when_find_by_client_id_then_it_resolves_directly() {
+        // Appel hors de la requete filtree : findByClientId reste utilisable seul.
+        when(resolvedOAuthClientResolver.resolve("busa-finance"))
+                .thenReturn(Optional.of(aClient("busa-finance").build()));
+
+        RegisteredClient rc = repository.findByClientId("busa-finance");
+
+        assertThat(rc).isNotNull();
+        verify(resolvedOAuthClientResolver).resolve("busa-finance");
+    }
+
+    // ---------- findByClientId : politique OAuth complete ----------
+
+    @Test
+    void given_a_resolved_client_requiring_consent_then_client_settings_reflect_it() {
+        when(resolvedOAuthClientResolver.resolve("busa-finance")).thenReturn(Optional.of(
+                aClient("busa-finance").requireConsent(true).build()));
+
+        RegisteredClient rc = repository.findByClientId("busa-finance");
+
+        assertThat(rc.getClientSettings().isRequireAuthorizationConsent()).isTrue();
+    }
+
+    @Test
+    void given_resolved_client_ttls_then_token_settings_reflect_them() {
+        when(resolvedOAuthClientResolver.resolve("busa-finance")).thenReturn(Optional.of(
+                aClient("busa-finance")
+                        .accessTokenTtl(Duration.ofMinutes(5))
+                        .refreshTokenTtl(Duration.ofDays(30))
+                        .idTokenTtl(Duration.ofMinutes(10))
+                        .build()));
+
+        RegisteredClient rc = repository.findByClientId("busa-finance");
+
+        assertThat(rc.getTokenSettings().getAccessTokenTimeToLive()).isEqualTo(Duration.ofMinutes(5));
+        assertThat(rc.getTokenSettings().getRefreshTokenTimeToLive()).isEqualTo(Duration.ofDays(30));
+        assertThat((Long) rc.getTokenSettings().getSetting(TakiboTokenClaims.ID_TOKEN_TTL_SECONDS))
+                .isEqualTo(600L);
+    }
+
+    @Test
+    void given_no_consent_or_ttl_set_then_spring_authorization_server_defaults_are_kept() {
+        when(resolvedOAuthClientResolver.resolve("busa-finance"))
+                .thenReturn(Optional.of(aClient("busa-finance").build()));
+
+        RegisteredClient rc = repository.findByClientId("busa-finance");
+
+        assertThat(rc.getClientSettings().isRequireAuthorizationConsent()).isFalse();
+        assertThat(rc.getTokenSettings().getAccessTokenTimeToLive())
+                .isEqualTo(org.springframework.security.oauth2.server.authorization.settings.TokenSettings
+                        .builder().build().getAccessTokenTimeToLive());
+    }
 
     @Test
     void given_resolved_client_when_find_by_client_id_then_maps_to_registered_client_with_scope_bound_settings() {
@@ -186,9 +277,13 @@ class TakiboRegisteredClientRepositoryTest {
         private boolean requireClientSecret = true;
         private String clientSecretHash = "hash";
         private String tokenEndpointAuthMethod = "client_secret_basic";
+        private boolean requireConsent = false;
         private String jwksUri;
         private String jwksJson;
         private String idTokenSignedAlg;
+        private java.time.Duration accessTokenTtl;
+        private java.time.Duration refreshTokenTtl;
+        private java.time.Duration idTokenTtl;
         private Set<String> scopes = Set.of("api.read");
         private Set<String> grantTypes = Set.of("client_credentials");
         private Set<String> redirectUris = Set.of();
@@ -215,6 +310,10 @@ class TakiboRegisteredClientRepositoryTest {
         Builder jwksUri(String v) { jwksUri = v; return this; }
         Builder jwksJson(String v) { jwksJson = v; return this; }
         Builder idTokenSignedAlg(String v) { idTokenSignedAlg = v; return this; }
+        Builder requireConsent(boolean v) { requireConsent = v; return this; }
+        Builder accessTokenTtl(java.time.Duration v) { accessTokenTtl = v; return this; }
+        Builder refreshTokenTtl(java.time.Duration v) { refreshTokenTtl = v; return this; }
+        Builder idTokenTtl(java.time.Duration v) { idTokenTtl = v; return this; }
         Builder scopes(String... v) { scopes = Set.of(v); return this; }
         Builder grantTypes(String... v) { grantTypes = Set.of(v); return this; }
         Builder redirectUris(String... v) { redirectUris = Set.of(v); return this; }
@@ -222,9 +321,9 @@ class TakiboRegisteredClientRepositoryTest {
         ResolvedOAuthClient build() {
             return new ResolvedOAuthClient(
                     ID.toString(), clientId, ClientPlan.SPACE, ORG, SPACE,
-                    clientType, false, false, requireClientSecret, clientSecretHash,
+                    clientType, false, requireConsent, requireClientSecret, clientSecretHash,
                     tokenEndpointAuthMethod, jwksUri, jwksJson, idTokenSignedAlg,
-                    null, null, null, scopes, grantTypes, redirectUris, Set.of());
+                    accessTokenTtl, refreshTokenTtl, idTokenTtl, scopes, grantTypes, redirectUris, Set.of());
         }
     }
 
