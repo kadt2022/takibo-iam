@@ -10,6 +10,7 @@ import com.takibo.authorizationserver.infrastructure.jpa.repository.OAuth2Client
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Primary;
+import org.springframework.context.annotation.Profile;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.lang.reflect.Method;
@@ -69,6 +70,23 @@ class ResolvedOAuthClientResolverConfigTest {
                 "resolvedOAuthClientResolver", ObjectProvider.class, JpaResolvedOAuthClientResolver.class);
 
         assertThat(beanMethod.isAnnotationPresent(Primary.class)).isTrue();
+    }
+
+    @Test
+    void given_the_inMemoryPlatformOAuthClientResolver_bean_method_then_ci_is_among_its_active_profiles()
+            throws NoSuchMethodException {
+        // Regression : le BVT Postman du pipeline demarre l'application sous
+        // SPRING_PROFILES_ACTIVE=ci et authentifie son tout premier scenario en
+        // postman-client. Restreindre ce bean a dev/test seuls le prive de sa source
+        // PLATFORM en CI, sans qu'aucun test Gradle (qui ne tourne jamais sous "ci") ne
+        // le detecte : seul le BVT reel l'a revele en 401 en cascade sur toute la collection.
+        Method beanMethod = ResolvedOAuthClientResolverConfig.class.getMethod(
+                "inMemoryPlatformOAuthClientResolver", PasswordEncoder.class, String.class);
+
+        Profile profile = beanMethod.getAnnotation(Profile.class);
+
+        assertThat(profile).isNotNull();
+        assertThat(profile.value()).contains("ci");
     }
 
     @Test

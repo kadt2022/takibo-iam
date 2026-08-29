@@ -16,9 +16,10 @@ import java.util.UUID;
  * Source PLATFORM in-memory de développement : ne résout que {@code postman-client}
  * (TAS-GRANTS-01).
  * <p>
- * Construite par {@link ResolvedOAuthClientResolverConfig}, réservée aux profils {@code dev}
- * et {@code test} — en dehors, cette source est absente du contexte et seule la source TMS
- * ({@link JpaResolvedOAuthClientResolver}) reste active, conformément au périmètre du récit.
+ * Construite par {@link ResolvedOAuthClientResolverConfig}, réservée aux profils {@code dev},
+ * {@code test} et {@code ci} — en dehors, cette source est absente du contexte et seule la
+ * source TMS ({@link JpaResolvedOAuthClientResolver}) reste active, conformément au périmètre
+ * du récit.
  * Ni celle-ci ni {@link JpaResolvedOAuthClientResolver} ne portent {@code @Component} : le
  * composite assemblé par la configuration est marqué {@link org.springframework.context.annotation.Primary},
  * pour qu'il gagne sans ambiguïté même si les deux sources restent, elles aussi, candidates
