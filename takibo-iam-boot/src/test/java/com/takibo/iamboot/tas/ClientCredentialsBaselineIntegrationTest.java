@@ -40,6 +40,12 @@ import static org.assertj.core.api.Assertions.assertThat;
  * remplaceront la resolution du tenant, la persistance et les clefs de signature ; aucun ne
  * doit changer ce que ce test observe. Une regression ici fait echouer la CI.
  * <p>
+ * Exception assumee : {@code given_authorization_code_grant_when_token_requested_then_client_authenticates_and_spring_rejects_the_code}
+ * observait jusqu'ici un rejet PKCE cause par le resolveur de tenant factice — un faux
+ * positif, pas une propriete du filet. Le recit 01 la remplace, exactement comme prevu par
+ * son critere d'acceptation : « le test negatif tenant/frontiere incoherent, inatteignable
+ * dans le recit 00, est actif et vert dans ce recit ».
+ * <p>
  * Deux clients, deux plans :
  * <ul>
  *   <li><b>PLATFORM</b> — {@code postman-client}, declare in-memory, sans organisation ni
@@ -247,27 +253,25 @@ class ClientCredentialsBaselineIntegrationTest extends TasPostgresBaseline {
     }
 
     @Test
-    void given_authorization_code_grant_when_token_requested_then_pkce_filter_rejects_on_stub_tenant() {
-        // Comportement le plus revelateur du filet, et cible directe du recit 01.
-        // Avec grant_type=authorization_code, PkceEnforcementFilter n'emprunte plus son
-        // court-circuit : il cherche le client dans le tenant rendu par StubTenantResolver,
-        // c'est-a-dire un couple org/space fixe qui n'est pas celui du client. Le client
-        // existe pourtant bien en base.
-        // Resultat : la requete est refusee par le filtre avant meme que Spring Authorization
-        // Server ait pu repondre unauthorized_client. Tout client authorization_code reel
-        // subira ce sort tant que le resolveur factice est en place.
-        HttpResponse<String> response = requestGrant(
+    void given_authorization_code_grant_when_token_requested_then_client_authenticates_and_spring_rejects_the_code() {
+        // Le test negatif « tenant/frontiere incoherent » que le recit 01 rend enfin
+        // atteignable : SPACE_CLIENT_ID est desormais identifie dans son tenant reel, pas
+        // dans un couple org/space fixe sans rapport avec lui. PkceEnforcementFilter ne le
+        // rejette donc plus a tort sur un tenant qui n'est pas le sien — l'authentification du
+        // client reussit. Le refus vient de Spring Authorization Server lui-meme, invalid_grant,
+        // parce qu'aucun code n'a ete emis pour cette requete (TAS-GRANTS-00 ne persiste
+        // aucune autorisation) ; il n'atteint jamais unauthorized_client, mais il n'atteint
+        // plus non plus le faux invalid_client que produisait le resolveur factice.
+        HttpResponse<String> response = post(
                 TasBaselineDataset.SPACE_CLIENT_ID,
                 TasBaselineDataset.SPACE_CLIENT_SECRET,
-                "authorization_code");
+                Map.of(
+                        "grant_type", "authorization_code",
+                        "code", "irrelevant-code",
+                        "redirect_uri", "https://example.test/callback"));
 
-        assertThat(response.statusCode()).isEqualTo(401);
-        assertThat(error(response)).isEqualTo(ERROR_INVALID_CLIENT);
-        assertThat(errorDescription(response)).isEqualTo("Client not found");
-        // Signature de OAuth2HttpErrorWriter : le refus vient bien du filtre Takibo,
-        // et non de Spring Authorization Server.
-        assertThat(header(response, "WWW-Authenticate")).contains("error=\"invalid_client\"");
-        assertThat(header(response, "X-Trace-Id")).isNotBlank();
+        assertThat(response.statusCode()).isEqualTo(400);
+        assertThat(error(response)).isEqualTo("invalid_grant");
     }
 
     // ---------- Appel HTTP ----------
@@ -276,10 +280,6 @@ class ClientCredentialsBaselineIntegrationTest extends TasPostgresBaseline {
         return post(clientId, secret, Map.of(
                 "grant_type", "client_credentials",
                 "scope", scope));
-    }
-
-    private HttpResponse<String> requestGrant(String clientId, String secret, String grantType) {
-        return post(clientId, secret, Map.of("grant_type", grantType));
     }
 
     private HttpResponse<String> post(String clientId, String secret, Map<String, String> form) {
@@ -308,20 +308,12 @@ class ClientCredentialsBaselineIntegrationTest extends TasPostgresBaseline {
                 .collect(Collectors.joining("&"));
     }
 
-    private static String header(HttpResponse<String> response, String name) {
-        return response.headers().firstValue(name).orElse(null);
-    }
-
     private static String accessToken(HttpResponse<String> response) {
         return body(response).path("access_token").asText();
     }
 
     private static String error(HttpResponse<String> response) {
         return body(response).path("error").asText();
-    }
-
-    private static String errorDescription(HttpResponse<String> response) {
-        return body(response).path("error_description").asText();
     }
 
     private static JsonNode body(HttpResponse<String> response) {

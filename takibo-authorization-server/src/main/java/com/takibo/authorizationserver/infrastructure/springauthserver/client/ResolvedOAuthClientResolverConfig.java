@@ -17,8 +17,14 @@ import java.time.Clock;
 
 /**
  * Câble le {@link ResolvedOAuthClientResolver} effectif de TAS (TAS-GRANTS-01) : source
- * PLATFORM (in-memory, profil {@code dev} uniquement) d'abord si présente dans le contexte,
- * puis source TMS ({@code oauth2_clients}).
+ * PLATFORM (in-memory, profils {@code dev} et {@code test} uniquement) d'abord si présente
+ * dans le contexte, puis source TMS ({@code oauth2_clients}).
+ * <p>
+ * {@code test} rejoint {@code dev} pour la même raison qu'ailleurs dans ce module —
+ * {@code takibo.tas.keys.ephemeral} suit la même règle : le filet de sécurité TAS-GRANTS-00
+ * tourne sous le profil {@code test} et s'appuie sur {@code postman-client} pour ses
+ * scénarios PLATFORM. L'exclure de {@code test} n'exclurait que la couverture, jamais
+ * la production, qui n'active aucun des deux.
  * <p>
  * {@link InMemoryPlatformOAuthClientResolver} et {@link JpaResolvedOAuthClientResolver} ne
  * portent pas {@code @Component} : cette configuration est le seul endroit qui les construit,
@@ -35,7 +41,7 @@ import java.time.Clock;
 public class ResolvedOAuthClientResolverConfig {
 
     @Bean
-    @Profile("dev")
+    @Profile({"dev", "test"})
     public InMemoryPlatformOAuthClientResolver inMemoryPlatformOAuthClientResolver(
             PasswordEncoder passwordEncoder,
             @Value("${takibo.dev.postman-client.secret}") String postmanClientSecret) {

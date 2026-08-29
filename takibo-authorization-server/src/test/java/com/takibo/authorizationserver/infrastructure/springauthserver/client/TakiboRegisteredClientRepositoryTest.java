@@ -1,8 +1,11 @@
 package com.takibo.authorizationserver.infrastructure.springauthserver.client;
 
+import com.takibo.authorizationserver.domain.client.ClientPlan;
+import com.takibo.authorizationserver.domain.client.ClientType;
+import com.takibo.authorizationserver.domain.client.ResolvedOAuthClient;
+import com.takibo.authorizationserver.domain.client.ResolvedOAuthClientResolver;
 import com.takibo.authorizationserver.infrastructure.jpa.entity.OAuth2ClientGrantTypeEntity;
 import com.takibo.authorizationserver.infrastructure.jpa.entity.OAuth2ClientLookupEntity;
-import com.takibo.authorizationserver.infrastructure.jpa.entity.OAuth2ClientRedirectUriEntity;
 import com.takibo.authorizationserver.infrastructure.jpa.entity.OAuth2ClientScopeEntity;
 import com.takibo.authorizationserver.infrastructure.jpa.repository.OAuth2ClientGrantTypeRepository;
 import com.takibo.authorizationserver.infrastructure.jpa.repository.OAuth2ClientLookupRepository;
@@ -20,6 +23,7 @@ import org.springframework.security.oauth2.server.authorization.client.Registere
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -27,6 +31,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+/**
+ * {@code findByClientId} : reconstruit le {@link RegisteredClient} uniquement depuis le
+ * {@link ResolvedOAuthClient} rendu par {@link ResolvedOAuthClientResolver} (TAS-GRANTS-01) —
+ * aucun accès direct aux cinq dépôts TMS, contrairement à {@code findById}, que le port ne
+ * peut pas servir (il résout par {@code client_id} public, jamais par identifiant technique).
+ */
 @ExtendWith(MockitoExtension.class)
 class TakiboRegisteredClientRepositoryTest {
 
@@ -39,22 +49,23 @@ class TakiboRegisteredClientRepositoryTest {
     @Mock private OAuth2ClientGrantTypeRepository grantTypes;
     @Mock private OAuth2ClientRedirectUriRepository redirectUris;
     @Mock private OAuth2ClientPostLogoutRedirectUriRepository postLogoutRedirectUris;
+    @Mock private ResolvedOAuthClientResolver resolvedOAuthClientResolver;
 
     @InjectMocks private TakiboRegisteredClientRepository repository;
 
-    @Test
-    void given_db_client_when_find_by_client_id_then_maps_to_registered_client_with_scope_bound_settings() {
-        OAuth2ClientLookupEntity entity = clientEntity("busa-finance", true, "$2a$12$hashvalue");
-        when(clients.findByClientId("busa-finance")).thenReturn(Optional.of(entity));
+    // ---------- findByClientId : chemin canonique via le resolveur ----------
 
-        givenGrantTypes("client_credentials");
-        givenScopes("api.read");
+    @Test
+    void given_resolved_client_when_find_by_client_id_then_maps_to_registered_client_with_scope_bound_settings() {
+        when(resolvedOAuthClientResolver.resolve("busa-finance"))
+                .thenReturn(Optional.of(aClient("busa-finance").build()));
 
         RegisteredClient rc = repository.findByClientId("busa-finance");
 
         assertThat(rc).isNotNull();
+        assertThat(rc.getId()).isEqualTo(ID.toString());
         assertThat(rc.getClientId()).isEqualTo("busa-finance");
-        assertThat(rc.getClientSecret()).isEqualTo("$2a$12$hashvalue");
+        assertThat(rc.getClientSecret()).isEqualTo("hash");
         assertThat(rc.getScopes()).contains("api.read");
         assertThat(rc.getAuthorizationGrantTypes()).contains(AuthorizationGrantType.CLIENT_CREDENTIALS);
         assertThat((String) rc.getClientSettings().getSetting("takibo_scope_level")).isEqualTo("SPACE");
@@ -62,6 +73,80 @@ class TakiboRegisteredClientRepositoryTest {
         assertThat((String) rc.getClientSettings().getSetting("org_id")).isEqualTo(ORG.toString());
         assertThat((String) rc.getClientSettings().getSetting("space_id")).isEqualTo(SPACE.toString());
     }
+
+    @Test
+    void given_public_resolved_client_when_find_by_client_id_then_registered_client_has_no_secret() {
+        when(resolvedOAuthClientResolver.resolve("public-client")).thenReturn(Optional.of(
+                aClient("public-client").publicClient().scopes("openid").build()));
+
+        RegisteredClient rc = repository.findByClientId("public-client");
+
+        assertThat(rc).isNotNull();
+        assertThat(rc.getClientSecret()).isNull();
+        assertThat(rc.getAuthorizationGrantTypes()).contains(AuthorizationGrantType.CLIENT_CREDENTIALS);
+        assertThat(rc.getScopes()).contains("openid");
+    }
+
+    @Test
+    void given_private_key_jwt_resolved_client_when_find_then_maps_verification_key_settings() {
+        when(resolvedOAuthClientResolver.resolve("signed-client")).thenReturn(Optional.of(
+                aClient("signed-client").privateKeyJwt()
+                        .jwksUri("https://keys.example/jwks.json")
+                        .jwksJson("{\"keys\":[]}")
+                        .idTokenSignedAlg("RS256")
+                        .build()));
+
+        RegisteredClient rc = repository.findByClientId("signed-client");
+
+        assertThat(rc).isNotNull();
+        assertThat(rc.getClientSettings().getJwkSetUrl())
+                .isEqualTo("https://keys.example/jwks.json");
+        assertThat((String) rc.getClientSettings().getSetting(
+                TakiboJwtClientAssertionDecoderFactory.JWK_SET_JSON_SETTING))
+                .isEqualTo("{\"keys\":[]}");
+        assertThat(rc.getClientSettings().getTokenEndpointAuthenticationSigningAlgorithm())
+                .isEqualTo(SignatureAlgorithm.RS256);
+        // Confidentiel via private_key_jwt : n'exige aucun secret sans devenir PUBLIC.
+        assertThat(rc.getClientSecret()).isNull();
+    }
+
+    @Test
+    void given_legacy_unsupported_algorithm_when_find_then_does_not_expose_it_to_spring_security() {
+        when(resolvedOAuthClientResolver.resolve("legacy-client")).thenReturn(Optional.of(
+                aClient("legacy-client").privateKeyJwt().idTokenSignedAlg("EdDSA").build()));
+
+        RegisteredClient rc = repository.findByClientId("legacy-client");
+
+        assertThat(rc).isNotNull();
+        assertThat(rc.getClientSettings().getTokenEndpointAuthenticationSigningAlgorithm()).isNull();
+    }
+
+    @Test
+    void given_authorization_code_resolved_client_with_redirect_uris_when_find_then_maps_redirect_uris() {
+        when(resolvedOAuthClientResolver.resolve("web-app")).thenReturn(Optional.of(
+                aClient("web-app")
+                        .grantTypes("authorization_code")
+                        .scopes("openid")
+                        .redirectUris("https://app.takibo.io/callback")
+                        .build()));
+
+        RegisteredClient rc = repository.findByClientId("web-app");
+
+        assertThat(rc).isNotNull();
+        assertThat(rc.getAuthorizationGrantTypes()).contains(AuthorizationGrantType.AUTHORIZATION_CODE);
+        assertThat(rc.getRedirectUris()).contains("https://app.takibo.io/callback");
+    }
+
+    @Test
+    void given_the_resolver_returns_empty_when_find_by_client_id_then_returns_null() {
+        // Client inconnu, sans grant type, secret expire... toutes les raisons de refus se
+        // resument a un Optional.empty() du resolveur : ce depot n'en connait plus le detail.
+        when(resolvedOAuthClientResolver.resolve("nope")).thenReturn(Optional.empty());
+
+        assertThat(repository.findByClientId("nope")).isNull();
+    }
+
+    // ---------- findById : chemin direct, hors du perimetre du resolveur ----------
 
     @Test
     void given_db_client_id_when_find_by_id_then_maps_to_registered_client() {
@@ -78,100 +163,6 @@ class TakiboRegisteredClientRepositoryTest {
     }
 
     @Test
-    void given_public_db_client_when_find_by_client_id_then_registered_client_has_no_secret() {
-        OAuth2ClientLookupEntity entity = clientEntity("public-client", false, null);
-        when(clients.findByClientId("public-client")).thenReturn(Optional.of(entity));
-        givenGrantTypes("client_credentials");
-        givenScopes("openid");
-
-        RegisteredClient rc = repository.findByClientId("public-client");
-
-        assertThat(rc).isNotNull();
-        assertThat(rc.getClientSecret()).isNull();
-        assertThat(rc.getAuthorizationGrantTypes()).contains(AuthorizationGrantType.CLIENT_CREDENTIALS);
-        assertThat(rc.getScopes()).contains("openid");
-    }
-
-    @Test
-    void given_private_key_jwt_client_when_find_then_maps_verification_key_settings() {
-        OAuth2ClientLookupEntity entity = mock(OAuth2ClientLookupEntity.class);
-        when(entity.getId()).thenReturn(ID);
-        when(entity.getClientId()).thenReturn("signed-client");
-        when(entity.getOrgId()).thenReturn(ORG);
-        when(entity.getSpaceId()).thenReturn(SPACE);
-        when(entity.getTokenEndpointAuthMethod()).thenReturn("private_key_jwt");
-        when(entity.getRequireClientSecret()).thenReturn(false);
-        when(entity.getJwksUri()).thenReturn("https://keys.example/jwks.json");
-        when(entity.getJwksJson()).thenReturn("{\"keys\":[]}");
-        when(entity.getIdTokenSignedAlg()).thenReturn("RS256");
-        when(clients.findByClientId("signed-client")).thenReturn(Optional.of(entity));
-        givenGrantTypes("client_credentials");
-        givenScopes("api.read");
-
-        RegisteredClient rc = repository.findByClientId("signed-client");
-
-        assertThat(rc).isNotNull();
-        assertThat(rc.getClientSettings().getJwkSetUrl())
-                .isEqualTo("https://keys.example/jwks.json");
-        assertThat((String) rc.getClientSettings().getSetting(
-                TakiboJwtClientAssertionDecoderFactory.JWK_SET_JSON_SETTING))
-                .isEqualTo("{\"keys\":[]}");
-        assertThat(rc.getClientSettings().getTokenEndpointAuthenticationSigningAlgorithm())
-                .isEqualTo(SignatureAlgorithm.RS256);
-    }
-
-    @Test
-    void given_legacy_unsupported_algorithm_when_find_then_does_not_expose_it_to_spring_security() {
-        OAuth2ClientLookupEntity entity = mock(OAuth2ClientLookupEntity.class);
-        when(entity.getId()).thenReturn(ID);
-        when(entity.getClientId()).thenReturn("legacy-client");
-        when(entity.getOrgId()).thenReturn(ORG);
-        when(entity.getSpaceId()).thenReturn(SPACE);
-        when(entity.getTokenEndpointAuthMethod()).thenReturn("private_key_jwt");
-        when(entity.getIdTokenSignedAlg()).thenReturn("EdDSA");
-        when(clients.findByClientId("legacy-client")).thenReturn(Optional.of(entity));
-        givenGrantTypes("client_credentials");
-        givenScopes("api.read");
-
-        RegisteredClient rc = repository.findByClientId("legacy-client");
-
-        assertThat(rc).isNotNull();
-        assertThat(rc.getClientSettings().getTokenEndpointAuthenticationSigningAlgorithm()).isNull();
-    }
-
-    @Test
-    void given_authorization_code_client_with_redirect_uris_when_find_then_maps_redirect_uris() {
-        OAuth2ClientLookupEntity entity = clientEntity("web-app", true, "$2a$12$hashvalue");
-        when(clients.findByClientId("web-app")).thenReturn(Optional.of(entity));
-        givenGrantTypes("authorization_code");
-        givenScopes("openid");
-        givenRedirectUris("https://app.takibo.io/callback");
-
-        RegisteredClient rc = repository.findByClientId("web-app");
-
-        assertThat(rc).isNotNull();
-        assertThat(rc.getAuthorizationGrantTypes()).contains(AuthorizationGrantType.AUTHORIZATION_CODE);
-        assertThat(rc.getRedirectUris()).contains("https://app.takibo.io/callback");
-    }
-
-    @Test
-    void given_client_without_grant_types_when_find_by_client_id_then_it_is_treated_as_not_found() {
-        OAuth2ClientLookupEntity entity = mock(OAuth2ClientLookupEntity.class);
-        when(entity.getId()).thenReturn(ID);
-        when(entity.getClientId()).thenReturn("broken-client");
-        when(clients.findByClientId("broken-client")).thenReturn(Optional.of(entity));
-        when(grantTypes.findByClientId(ID)).thenReturn(List.of());
-
-        assertThat(repository.findByClientId("broken-client")).isNull();
-    }
-
-    @Test
-    void given_unknown_client_when_find_by_client_id_then_returns_null() {
-        when(clients.findByClientId("nope")).thenReturn(Optional.empty());
-        assertThat(repository.findByClientId("nope")).isNull();
-    }
-
-    @Test
     void given_registered_client_when_save_then_throws_read_only_exception() {
         RegisteredClient client = RegisteredClient.withId(ID.toString())
                 .clientId("busa-finance")
@@ -182,6 +173,62 @@ class TakiboRegisteredClientRepositoryTest {
                 .isInstanceOf(UnsupportedOperationException.class)
                 .hasMessageContaining("management-service");
     }
+
+    // ---------- Fixtures : ResolvedOAuthClient (findByClientId) ----------
+
+    private static Builder aClient(String clientId) {
+        return new Builder(clientId);
+    }
+
+    private static final class Builder {
+        private final String clientId;
+        private ClientType clientType = ClientType.CONFIDENTIAL;
+        private boolean requireClientSecret = true;
+        private String clientSecretHash = "hash";
+        private String tokenEndpointAuthMethod = "client_secret_basic";
+        private String jwksUri;
+        private String jwksJson;
+        private String idTokenSignedAlg;
+        private Set<String> scopes = Set.of("api.read");
+        private Set<String> grantTypes = Set.of("client_credentials");
+        private Set<String> redirectUris = Set.of();
+
+        Builder(String clientId) {
+            this.clientId = clientId;
+        }
+
+        Builder publicClient() {
+            clientType = ClientType.PUBLIC;
+            requireClientSecret = false;
+            clientSecretHash = null;
+            tokenEndpointAuthMethod = "none";
+            return this;
+        }
+
+        Builder privateKeyJwt() {
+            requireClientSecret = false;
+            clientSecretHash = null;
+            tokenEndpointAuthMethod = "private_key_jwt";
+            return this;
+        }
+
+        Builder jwksUri(String v) { jwksUri = v; return this; }
+        Builder jwksJson(String v) { jwksJson = v; return this; }
+        Builder idTokenSignedAlg(String v) { idTokenSignedAlg = v; return this; }
+        Builder scopes(String... v) { scopes = Set.of(v); return this; }
+        Builder grantTypes(String... v) { grantTypes = Set.of(v); return this; }
+        Builder redirectUris(String... v) { redirectUris = Set.of(v); return this; }
+
+        ResolvedOAuthClient build() {
+            return new ResolvedOAuthClient(
+                    ID.toString(), clientId, ClientPlan.SPACE, ORG, SPACE,
+                    clientType, false, false, requireClientSecret, clientSecretHash,
+                    tokenEndpointAuthMethod, jwksUri, jwksJson, idTokenSignedAlg,
+                    null, null, null, scopes, grantTypes, redirectUris, Set.of());
+        }
+    }
+
+    // ---------- Fixtures : OAuth2ClientLookupEntity (findById) ----------
 
     private OAuth2ClientLookupEntity clientEntity(String clientId, boolean requireClientSecret, String secretHash) {
         OAuth2ClientLookupEntity entity = mock(OAuth2ClientLookupEntity.class);
@@ -217,16 +264,5 @@ class TakiboRegisteredClientRepositoryTest {
                 })
                 .toList();
         when(scopes.findByClientId(ID)).thenReturn(clientScopes);
-    }
-
-    private void givenRedirectUris(String... values) {
-        List<OAuth2ClientRedirectUriEntity> uris = List.of(values).stream()
-                .map(value -> {
-                    OAuth2ClientRedirectUriEntity uri = mock(OAuth2ClientRedirectUriEntity.class);
-                    when(uri.getUri()).thenReturn(value);
-                    return uri;
-                })
-                .toList();
-        when(redirectUris.findByClientId(ID)).thenReturn(uris);
     }
 }
