@@ -16,7 +16,7 @@ En tant que TAS, nous voulons résoudre le tenant et la frontière d’un client
 - Introduire un résultat unique `ResolvedOAuthClient`, obtenu par `client_id`, qui porte le client, son plan, sa frontière et sa politique OAuth.
 - Faire consommer ce même résultat par `TakiboRegisteredClientRepository`, `TenantResolutionFilter` et la politique PKCE; supprimer les lookups concurrents.
 - Implémenter ce port avec une composition explicite : source PLATFORM in-memory uniquement en profil dev, puis source TMS; en production, seule la source TMS est active.
-- Prévoir un cache Caffeine court, configurable, de 5 à 15 minutes, invalidé immédiatement par un événement de changement/désactivation de client publié via l’outbox TMS.
+- Concevoir `ResolvedOAuthClientResolver` de sorte qu’un décorateur de cache puisse s’intercaler plus tard entre les consommateurs et le résolveur TMS sans modifier ni les uns ni l’autre — sans construire ce décorateur dans ce récit (voir « Hors périmètre »).
 - Conserver `postman-client` comme fixture PLATFORM in-memory de développement sans lui fabriquer `org_id`, `space_id`, `SCOPE_SPACE` ou `SOURCE_OAUTH2_CLIENT`.
 - Réutiliser les fixtures fonctionnelles du récit 00; seules leur injection et leurs assertions de passage par le nouveau résolveur peuvent évoluer.
 
@@ -27,9 +27,10 @@ En tant que TAS, nous voulons résoudre le tenant et la frontière d’un client
 - [ ] Un contexte `PLATFORM` ne fabrique ni organisation ni espace.
 - [ ] Un contexte `ORGANIZATION` exige `org_id` et interdit un `space_id` implicite.
 - [ ] Un contexte `SPACE` exige des `org_id` et `space_id` cohérents.
+- [ ] La résolution lit directement PostgreSQL, sans cache : une désactivation ou modification d’un client via TMS est donc reflétée à la résolution suivante, sans fenêtre à invalider.
+- [ ] `ResolvedOAuthClientResolver` est la seule dépendance des trois consommateurs vis-à-vis de la résolution : un décorateur de cache pourra s’intercaler plus tard sans les modifier.
 - [ ] `TakiboRegisteredClientRepository.findByClientId`, `TenantResolutionFilter` et PKCE utilisent le même port et le même `ResolvedOAuthClient`; aucun lookup parallèle par `(org_id, space_id, client_id)` ne subsiste.
 - [ ] `PkceEnforcementFilter` applique la politique issue du client résolu globalement par `client_id`; il n’exige pas que le tenant ait déjà été fourni ou deviné par la requête.
-- [ ] Un événement TMS de modification, révocation ou désactivation évince immédiatement l’entrée de cache concernée; le TTL n’est qu’un filet de rattrapage.
 - [ ] `postman-client` est résolu par la seule source in-memory dev comme PLATFORM; aucun accès à `oauth2_clients`, fallback générique ou source in-memory de production n’est introduit.
 - [ ] Un client TMS marqué PLATFORM alors que le schéma/mapping ne sait pas le représenter échoue explicitement; il n’est jamais converti silencieusement en SPACE.
 - [ ] Le test négatif « tenant/frontière incohérent », inatteignable dans le récit 00, est actif et vert dans ce récit.
@@ -42,7 +43,6 @@ En tant que TAS, nous voulons résoudre le tenant et la frontière d’un client
 - Matrice PLATFORM/ORGANIZATION/SPACE valide et invalide.
 - Client désactivé, inconnu et frontières incompatibles.
 - Cohérence entre repository, filtre tenant et PKCE pour un même `client_id`.
-- Cache : hit, expiration, événement d’invalidation et désactivation immédiate.
 - PKCE sans tenant fourni par le client; priorité de la source dev PLATFORM puis TMS; source dev absente en production.
 - Rejeu intégral des tests du récit 00 et nouveau cas de frontière incohérente.
 
@@ -53,3 +53,4 @@ En tant que TAS, nous voulons résoudre le tenant et la frontière d’un client
 - Migration vers un microservice TMS.
 - Recherche de `user_code` ou de tokens SAS, traitée dans TAS-GRANTS-02.
 - Migration de `postman-client` ou d’un client PLATFORM vers `oauth2_clients`; elle nécessite un récit dédié de schéma et de mapping.
+- **Le cache de résolution.** Après vérification de Keycloak (qui cache ses clients, rôles et groupes) : il le fait avec une infrastructure de cohérence que TAKIBO ne possède pas encore — caches Infinispan bornés, cache répliqué `work` propageant les invalidations entre nœuds, et une expiration de secours si une invalidation est perdue. Un simple `Caffeine` avec TTL n'offre aucune de ces garanties ; un client désactivé, un secret révoqué ou une frontière `org_id`/`space_id` périmée resteraient acceptés jusqu'à expiration. Ce que Keycloak cache est indissociable de comment il le fait ; copier seulement le cache introduirait plus de risque que de bénéfice. Ce qui justifierait un cache est le débit de résolutions par seconde et la charge PostgreSQL, pas le nombre de tenants : `client_id` est indexé et unique, PostgreSQL est local au monolithe, et aucune mesure ne montre aujourd'hui un problème. `ResolvedOAuthClientResolver` est conçu pour qu'un décorateur de cache s'intercale plus tard entre les consommateurs et le résolveur TMS sans modifier ni les uns ni l'autre. Ce cache fera l'objet d'un récit séparé, après mesures de charge, avec taille maximale (jamais un cache non borné) et invalidation distribuée — jamais une clé composée avec `org_id`/`space_id`, qui obligerait à connaître le tenant avant d'avoir authentifié le client.
