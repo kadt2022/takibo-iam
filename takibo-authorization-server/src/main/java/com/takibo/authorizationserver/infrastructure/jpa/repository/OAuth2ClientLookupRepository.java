@@ -7,8 +7,10 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface OAuth2ClientLookupRepository extends JpaRepository<OAuth2ClientLookupEntity, UUID> {
-    Optional<OAuth2ClientLookupEntity> findByOrgIdAndSpaceIdAndClientId(UUID orgId, UUID spaceId, String clientId);
 
-    // client_id est globalement unique en v1 (cf. migration TAS), donc résoluble seul.
+    // client_id est globalement unique en v1 (cf. migration TAS), donc résoluble seul —
+    // c'est ce qui rend ResolvedOAuthClientResolver possible sans connaître org_id/space_id
+    // au préalable (TAS-GRANTS-01). findByOrgIdAndSpaceIdAndClientId a disparu avec le
+    // dernier appelant qui en dépendait, PkceEnforcementFilter.
     Optional<OAuth2ClientLookupEntity> findByClientId(String clientId);
 }

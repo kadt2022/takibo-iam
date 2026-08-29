@@ -4,12 +4,18 @@ import org.junit.jupiter.api.Test;
 import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
+import org.springframework.security.oauth2.core.oidc.endpoint.OidcParameterNames;
 import org.springframework.security.oauth2.jwt.JwsHeader;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
 import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
+import org.springframework.security.oauth2.server.authorization.settings.TokenSettings;
 import org.springframework.security.oauth2.server.authorization.token.JwtEncodingContext;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -179,7 +185,7 @@ class TakiboOAuth2TokenCustomizerTest {
         JwtClaimsSet.Builder claims = JwtClaimsSet.builder().subject("busa-finance");
         JwtEncodingContext context = jwtContext(OAuth2TokenType.ACCESS_TOKEN, spaceClient(), claims);
 
-        new TakiboOAuth2TokenCustomizer().tokenCustomizer().customize(context);
+        new TakiboOAuth2TokenCustomizer().tokenCustomizer(Clock.systemUTC()).customize(context);
         JwtClaimsSet set = claims.build();
 
         assertThat(set.getClaimAsString("takibo_scope_level")).isEqualTo("SPACE");
@@ -194,12 +200,65 @@ class TakiboOAuth2TokenCustomizerTest {
         JwtClaimsSet.Builder claims = JwtClaimsSet.builder().subject("busa-finance");
         JwtEncodingContext context = jwtContext(OAuth2TokenType.REFRESH_TOKEN, spaceClient(), claims);
 
-        new TakiboOAuth2TokenCustomizer().tokenCustomizer().customize(context);
+        new TakiboOAuth2TokenCustomizer().tokenCustomizer(Clock.systemUTC()).customize(context);
         JwtClaimsSet set = claims.build();
 
         assertThat((Object) set.getClaim("takibo_scope_level")).isNull();
         assertThat((Object) set.getClaim("org_id")).isNull();
         assertThat((Object) set.getClaim("space_id")).isNull();
+        assertThat((Object) set.getClaim("subject_type")).isNull();
+    }
+
+    @Test
+    void given_an_id_token_context_with_a_configured_ttl_then_expiry_is_rewritten_to_that_ttl() {
+        RegisteredClient client = baseClient("8", "web-app")
+                .tokenSettings(TokenSettings.builder()
+                        .setting(TakiboTokenClaims.ID_TOKEN_TTL_SECONDS, 600L)
+                        .build())
+                .build();
+        JwtClaimsSet.Builder claims = JwtClaimsSet.builder()
+                .subject("busa-finance")
+                .expiresAt(Instant.parse("2026-08-29T12:30:00Z")); // 30 min fixes de SAS
+        Clock fixedClock = Clock.fixed(Instant.parse("2026-08-29T12:00:00Z"), ZoneOffset.UTC);
+        JwtEncodingContext context = jwtContext(
+                new OAuth2TokenType(OidcParameterNames.ID_TOKEN), client, claims);
+
+        new TakiboOAuth2TokenCustomizer().tokenCustomizer(fixedClock).customize(context);
+        JwtClaimsSet set = claims.build();
+
+        assertThat(set.getExpiresAt()).isEqualTo(Instant.parse("2026-08-29T12:10:00Z"));
+    }
+
+    @Test
+    void given_an_id_token_context_without_a_configured_ttl_then_expiry_is_left_untouched() {
+        RegisteredClient client = baseClient("9", "web-app").build();
+        Instant fixedExpiry = Instant.parse("2026-08-29T12:30:00Z");
+        JwtClaimsSet.Builder claims = JwtClaimsSet.builder()
+                .subject("busa-finance")
+                .expiresAt(fixedExpiry);
+        Clock clock = Clock.fixed(Instant.parse("2026-08-29T12:00:00Z"), ZoneOffset.UTC);
+        JwtEncodingContext context = jwtContext(
+                new OAuth2TokenType(OidcParameterNames.ID_TOKEN), client, claims);
+
+        new TakiboOAuth2TokenCustomizer().tokenCustomizer(clock).customize(context);
+        JwtClaimsSet set = claims.build();
+
+        assertThat(set.getExpiresAt()).isEqualTo(fixedExpiry);
+    }
+
+    @Test
+    void given_an_id_token_context_then_tenant_and_subject_claims_are_not_applied() {
+        // L'ID token n'est pas un access token : la branche TTL retourne avant applyTenantClaims.
+        RegisteredClient client = spaceClient();
+        JwtClaimsSet.Builder claims = JwtClaimsSet.builder().subject("busa-finance");
+        Clock clock = Clock.fixed(Instant.parse("2026-08-29T12:00:00Z"), ZoneOffset.UTC);
+        JwtEncodingContext context = jwtContext(
+                new OAuth2TokenType(OidcParameterNames.ID_TOKEN), client, claims);
+
+        new TakiboOAuth2TokenCustomizer().tokenCustomizer(clock).customize(context);
+        JwtClaimsSet set = claims.build();
+
+        assertThat((Object) set.getClaim("takibo_scope_level")).isNull();
         assertThat((Object) set.getClaim("subject_type")).isNull();
     }
 

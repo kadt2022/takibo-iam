@@ -1,12 +1,10 @@
 package com.takibo.authorizationserver.infrastructure.security.tenant;
 
-import com.takibo.authorizationserver.domain.exception.TakiboInvalidClientException;
-import com.takibo.authorizationserver.domain.exception.TakiboInvalidRequestException;
-import com.takibo.authorizationserver.domain.exception.TakiboServerErrorException;
+import com.takibo.authorizationserver.domain.client.ResolvedOAuthClient;
+import com.takibo.authorizationserver.domain.client.ResolvedOAuthClientContextHolder;
+import com.takibo.authorizationserver.domain.client.ResolvedOAuthClientResolver;
 import com.takibo.authorizationserver.domain.exception.TenantNotFoundException;
-import com.takibo.authorizationserver.domain.security.tenant.TenantContext;
-import com.takibo.authorizationserver.domain.security.tenant.TenantContextHolder;
-import com.takibo.authorizationserver.domain.security.tenant.TenantResolver;
+import com.takibo.authorizationserver.infrastructure.security.error.OAuth2HttpErrorWriter;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -14,20 +12,44 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.filter.OncePerRequestFilter;
-import org.springframework.web.servlet.HandlerExceptionResolver;
 
 import java.io.IOException;
 
 /**
- * HTTP filter that resolves tenant context from client_id and stores in TenantContextHolder.
+ * HTTP filter that resolves the OAuth2 client from {@code client_id} and stores it in
+ * {@link ResolvedOAuthClientContextHolder} (TAS-GRANTS-01).
+ * <p>
+ * Une seule résolution par requête, partagée par {@link com.takibo.authorizationserver.infrastructure.security.pkce.PkceEnforcementFilter}
+ * qui s'exécute après ce filtre dans la chaîne — voir {@code TenantSecurityConfig} et
+ * {@code PkceSecurityConfig} pour l'ordre. Aucun tenant n'est fabriqué : un client
+ * {@code PLATFORM} publie un {@link ResolvedOAuthClient} sans organisation ni space, et c'est
+ * cette absence, pas une valeur par défaut, qui ferme les routes situées en aval.
+ * <p>
+ * Rejets écrits par {@link OAuth2HttpErrorWriter} — la forme RFC 6749/6750, la même que
+ * {@code PkceEnforcementFilter} et que le rejet natif de Spring Authorization Server — jamais
+ * par le gestionnaire d'erreurs générique de la plateforme, dont le corps
+ * {@code {"code":...,"message":...}} n'est pas celui qu'un client OAuth2 attend sur
+ * {@code /oauth2/*}.
+ * <p>
+ * Le rejet d'un client introuvable dépend du point de terminaison : {@code /oauth2/token}
+ * (et {@code /oauth2/introspect}, {@code /oauth2/revoke}, qui authentifient eux aussi un
+ * client) répond par le même corps opaque {@code invalid_client}/401, sans description, que
+ * SAS produit déjà pour un secret invalide — la surface ne doit jamais dire laquelle des deux
+ * causes s'applique. {@code /oauth2/authorize} n'a pas ce vocabulaire : la RFC 6749 §4.1.2.1 ne
+ * définit {@code invalid_client} que pour le point de terminaison token, et un {@code
+ * WWW-Authenticate: Basic} sur un point de terminaison que le navigateur atteint directement
+ * (pas un client HTTP authentifié) peut y déclencher une invite d'identifiants native. Un
+ * {@code client_id} introuvable y répond donc par {@code invalid_request} sur ce paramètre,
+ * la même forme que {@code OAuth2AuthorizationCodeRequestAuthenticationProvider} de Spring
+ * Authorization Server pour ce même cas.
  */
 @Slf4j
 @RequiredArgsConstructor
 public class TenantResolutionFilter extends OncePerRequestFilter {
 
-    private final TenantResolver tenantResolver;
+    private final ResolvedOAuthClientResolver resolvedOAuthClientResolver;
     private final ClientIdExtractor clientIdExtractor;
-    private final HandlerExceptionResolver handlerExceptionResolver;
+    private final OAuth2HttpErrorWriter errorWriter;
 
     @Override
     protected void doFilterInternal(
@@ -51,88 +73,58 @@ public class TenantResolutionFilter extends OncePerRequestFilter {
 
             if (isDiscoveryEndpoint(requestUri)) {
                 if (clientId != null && !clientId.isBlank()) {
-                    resolveTenant(clientId);
+                    resolveClient(clientId);
                 }
             } else if (isUserInfoEndpoint(requestUri)) {
                 clientId = clientIdExtractor.extractForUserInfoHint(request);
                 if (clientId != null && !clientId.isBlank()) {
-                    resolveTenant(clientId);
+                    resolveClient(clientId);
                 }
             } else if (isAuthorizeEndpoint(requestUri)) {
                 if (clientId == null || clientId.isBlank()) {
-                    writeOAuth2OrThrowInvalidRequest("Missing required parameter: client_id", request, response);
+                    errorWriter.writeInvalidRequest("Missing required parameter: client_id", request, response);
                     return;
                 }
-                resolveTenant(clientId);
+                resolveClient(clientId);
             } else if (isTokenEndpoint(requestUri)) {
                 if (clientId == null || clientId.isBlank()) {
-                    writeOAuth2OrThrowInvalidClient("Client authentication required", request, response);
+                    errorWriter.writeInvalidClient(null, request, response);
                     return;
                 }
-                resolveTenant(clientId);
+                resolveClient(clientId);
             } else if (requiresTenant(requestUri)) {
                 if (clientId == null || clientId.isBlank()) {
-                    writeOAuth2OrThrowInvalidRequest("Client identification required", request, response);
+                    errorWriter.writeInvalidRequest("Client identification required", request, response);
                     return;
                 }
-                resolveTenant(clientId);
+                resolveClient(clientId);
             }
 
             filterChain.doFilter(request, response);
 
         } catch (TenantNotFoundException e) {
-            log.warn("Tenant not found: {}", e.getMessage());
-            writeOAuth2OrThrowInvalidClient("Client not found: " + e.getMessage(), request, response);
-
-        } catch (TakiboServerErrorException.TenantResolutionException e) {
-            log.error("Tenant resolution failed (system error)", e);
-            writeOAuth2OrThrowServerError("Failed to resolve tenant", request, response);
+            log.warn("Client not found: {}", e.getMessage());
+            if (isAuthorizeEndpoint(requestUri)) {
+                // invalid_client n'existe pas dans le vocabulaire d'erreur de ce point de
+                // terminaison (RFC 6749 4.1.2.1), et un WWW-Authenticate: Basic y serait
+                // adresse au navigateur, pas a un client HTTP authentifie : voir la javadoc
+                // de classe.
+                errorWriter.writeInvalidRequest("Invalid parameter: client_id", request, response);
+            } else {
+                // Opaque volontairement, sans description : voir la javadoc de classe.
+                errorWriter.writeInvalidClient(null, request, response);
+            }
 
         } finally {
-            TenantContextHolder.clear();
+            ResolvedOAuthClientContextHolder.clear();
         }
     }
 
-    private void resolveTenant(String clientId) {
-        TenantContext context = tenantResolver.resolve(clientId);
-        TenantContextHolder.set(context);
-        log.debug("Tenant context resolved and set for request");
-    }
-
-    private void writeOAuth2OrThrowInvalidRequest(String message, HttpServletRequest request, HttpServletResponse response) {
-        if (isOAuth2Surface(request.getRequestURI())) {
-            resolveWithSentinel(request, response, new TakiboInvalidRequestException(message));
-        } else {
-            throw new IllegalArgumentException(message);
-        }
-    }
-
-    private void writeOAuth2OrThrowInvalidClient(String message, HttpServletRequest request, HttpServletResponse response) {
-        if (isOAuth2Surface(request.getRequestURI())) {
-            resolveWithSentinel(request, response, new TakiboInvalidClientException(message));
-        } else {
-            throw new IllegalArgumentException(message);
-        }
-    }
-
-    private void writeOAuth2OrThrowServerError(String message, HttpServletRequest request, HttpServletResponse response) {
-        if (isOAuth2Surface(request.getRequestURI())) {
-            resolveWithSentinel(request, response, new TakiboServerErrorException(message, "TENANT_RESOLUTION_FAILED"));
-        } else {
-            throw new IllegalStateException(message);
-        }
-    }
-
-    private void resolveWithSentinel(HttpServletRequest request, HttpServletResponse response, RuntimeException ex) {
-        if (handlerExceptionResolver.resolveException(request, response, null, ex) == null && !response.isCommitted()) {
-            throw ex;
-        }
-    }
-
-    private boolean isOAuth2Surface(String uri) {
-        return uri.startsWith("/oauth2/")
-                || uri.startsWith("/.well-known/")
-                || uri.startsWith("/userinfo");
+    private void resolveClient(String clientId) {
+        ResolvedOAuthClient client = resolvedOAuthClientResolver.resolve(clientId)
+                .orElseThrow(() -> new TenantNotFoundException(clientId));
+        ResolvedOAuthClientContextHolder.set(client);
+        log.debug("OAuth2 client resolved and set for request");
     }
 
     private boolean isDiscoveryEndpoint(String uri) {

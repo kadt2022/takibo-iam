@@ -1,14 +1,12 @@
 package com.takibo.authorizationserver.infrastructure.security.tenant;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.takibo.authorizationserver.domain.security.tenant.TenantResolver;
+import com.takibo.authorizationserver.domain.client.ResolvedOAuthClientResolver;
 import com.takibo.authorizationserver.infrastructure.security.error.OAuth2HttpErrorWriter;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
-import org.springframework.web.servlet.HandlerExceptionResolver;
 
 /**
  * Security configuration for tenant resolution.
@@ -31,11 +29,12 @@ public class TenantSecurityConfig {
 
     @Bean
     public FilterRegistrationBean<TenantResolutionFilter> tenantResolutionFilter(
-            TenantResolver tenantResolver,
+            ResolvedOAuthClientResolver resolvedOAuthClientResolver,
             ClientIdExtractor clientIdExtractor,
-            @Qualifier("handlerExceptionResolver") HandlerExceptionResolver handlerExceptionResolver) {
+            OAuth2HttpErrorWriter oAuth2HttpErrorWriter) {
 
-        TenantResolutionFilter filter = new TenantResolutionFilter(tenantResolver, clientIdExtractor, handlerExceptionResolver);
+        TenantResolutionFilter filter =
+                new TenantResolutionFilter(resolvedOAuthClientResolver, clientIdExtractor, oAuth2HttpErrorWriter);
 
         FilterRegistrationBean<TenantResolutionFilter> registration = new FilterRegistrationBean<>(filter);
         registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 10); // Run early, before Spring Security

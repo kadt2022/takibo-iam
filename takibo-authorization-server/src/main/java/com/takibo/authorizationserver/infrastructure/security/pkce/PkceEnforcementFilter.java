@@ -1,9 +1,7 @@
 package com.takibo.authorizationserver.infrastructure.security.pkce;
 
-import com.takibo.authorizationserver.domain.security.tenant.TenantContext;
-import com.takibo.authorizationserver.domain.security.tenant.TenantContextHolder;
-import com.takibo.authorizationserver.infrastructure.jpa.entity.OAuth2ClientLookupEntity;
-import com.takibo.authorizationserver.infrastructure.jpa.repository.OAuth2ClientLookupRepository;
+import com.takibo.authorizationserver.domain.client.ResolvedOAuthClient;
+import com.takibo.authorizationserver.domain.client.ResolvedOAuthClientContextHolder;
 import com.takibo.authorizationserver.infrastructure.security.error.OAuth2HttpErrorWriter;
 import com.takibo.authorizationserver.infrastructure.security.tenant.ClientIdExtractor;
 import jakarta.servlet.FilterChain;
@@ -15,6 +13,16 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 
+/**
+ * Applique la politique PKCE du client résolu par {@code client_id} (TAS-GRANTS-01).
+ * <p>
+ * Lit {@link ResolvedOAuthClientContextHolder}, peuplé par {@code TenantResolutionFilter} qui
+ * s'exécute avant ce filtre dans la chaîne — voir {@code TenantSecurityConfig} et
+ * {@code PkceSecurityConfig} pour l'ordre. Plus aucun second lookup par
+ * {@code (org_id, space_id, client_id)} : {@link ResolvedOAuthClient#pkceRequired()} porte
+ * déjà la règle complète, y compris pour un client {@code PLATFORM} sans organisation ni
+ * space — la politique ne dépend jamais de ce que la requête prétend connaître du tenant.
+ */
 public class PkceEnforcementFilter extends OncePerRequestFilter {
 
     private static final String AUTHORIZATION_ENDPOINT = "/oauth2/authorize";
@@ -22,16 +30,10 @@ public class PkceEnforcementFilter extends OncePerRequestFilter {
     private static final String GRANT_TYPE_AUTHORIZATION_CODE = "authorization_code";
     private static final String PKCE_METHOD_S256 = "S256";
 
-    private final OAuth2ClientLookupRepository repository;
     private final ClientIdExtractor clientIdExtractor;
     private final OAuth2HttpErrorWriter errorWriter;
 
-    public PkceEnforcementFilter(
-            OAuth2ClientLookupRepository repository,
-            ClientIdExtractor clientIdExtractor,
-            OAuth2HttpErrorWriter errorWriter
-    ) {
-        this.repository = repository;
+    public PkceEnforcementFilter(ClientIdExtractor clientIdExtractor, OAuth2HttpErrorWriter errorWriter) {
         this.clientIdExtractor = clientIdExtractor;
         this.errorWriter = errorWriter;
     }
@@ -66,22 +68,13 @@ public class PkceEnforcementFilter extends OncePerRequestFilter {
             return;
         }
 
-        TenantContext tenant = TenantContextHolder.get();
-        if (tenant == null) {
+        ResolvedOAuthClient client = ResolvedOAuthClientContextHolder.get();
+        if (client == null) {
             errorWriter.writeInvalidRequest("Tenant context not set", request, response);
             return;
         }
 
-        OAuth2ClientLookupEntity client = repository
-                .findByOrgIdAndSpaceIdAndClientId(tenant.orgId(), tenant.spaceId(), clientId)
-                .orElse(null);
-        if (client == null) {
-            errorWriter.writeInvalidClient("Client not found", request, response);
-            return;
-        }
-
-        boolean pkceRequired = Boolean.TRUE.equals(client.getRequirePkce())
-                || client.getClientType() == OAuth2ClientLookupEntity.ClientType.PUBLIC;
+        boolean pkceRequired = client.pkceRequired();
 
         if (isAuthorize) {
             if (!enforceAuthorize(request, response, pkceRequired)) {
