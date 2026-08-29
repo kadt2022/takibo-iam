@@ -10,10 +10,14 @@ import com.takibo.authorizationserver.infrastructure.jpa.repository.OAuth2Client
 import com.takibo.authorizationserver.infrastructure.jpa.repository.OAuth2ClientPostLogoutRedirectUriRepository;
 import com.takibo.authorizationserver.infrastructure.jpa.repository.OAuth2ClientRedirectUriRepository;
 import com.takibo.authorizationserver.infrastructure.jpa.repository.OAuth2ClientScopeRepository;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -29,9 +33,13 @@ import java.util.stream.Collectors;
  * Miroir de {@link TakiboRegisteredClientRepository}, dont c'est appelé à prendre la place
  * une fois les trois consommateurs branchés sur {@link ResolvedOAuthClientResolver} : mêmes
  * cinq dépôts, même lecture, seule la forme du résultat diffère.
+ * <p>
+ * <b>Instantané cohérent.</b> Les cinq lectures (client, grants, scopes, URI de redirection,
+ * URI de post-déconnexion) portent sur des tables séparées. Sans transaction englobante,
+ * une modification concurrente entre deux de ces lectures produirait un
+ * {@link ResolvedOAuthClient} mélangeant l'ancienne et la nouvelle configuration —
+ * {@code REPEATABLE READ} garantit que les cinq lectures voient le même instantané.
  */
-@Component
-@RequiredArgsConstructor
 @Slf4j
 public class JpaResolvedOAuthClientResolver implements ResolvedOAuthClientResolver {
 
@@ -40,8 +48,24 @@ public class JpaResolvedOAuthClientResolver implements ResolvedOAuthClientResolv
     private final OAuth2ClientScopeRepository scopes;
     private final OAuth2ClientRedirectUriRepository redirectUris;
     private final OAuth2ClientPostLogoutRedirectUriRepository postLogoutRedirectUris;
+    private final Clock clock;
+
+    public JpaResolvedOAuthClientResolver(OAuth2ClientLookupRepository clients,
+                                          OAuth2ClientGrantTypeRepository grantTypes,
+                                          OAuth2ClientScopeRepository scopes,
+                                          OAuth2ClientRedirectUriRepository redirectUris,
+                                          OAuth2ClientPostLogoutRedirectUriRepository postLogoutRedirectUris,
+                                          Clock clock) {
+        this.clients = clients;
+        this.grantTypes = grantTypes;
+        this.scopes = scopes;
+        this.redirectUris = redirectUris;
+        this.postLogoutRedirectUris = postLogoutRedirectUris;
+        this.clock = clock;
+    }
 
     @Override
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public Optional<ResolvedOAuthClient> resolve(String clientId) {
         return clients.findByClientId(clientId).flatMap(this::toResolvedClient);
     }
@@ -59,8 +83,15 @@ public class JpaResolvedOAuthClientResolver implements ResolvedOAuthClientResolv
             return Optional.empty();
         }
 
+        if (isSecretExpired(entity)) {
+            // Un secret expire ne doit jamais continuer a authentifier son client : traite
+            // comme introuvable, au meme titre qu'un client sans grant type.
+            log.warn("OAuth2 client {} ({}) has an expired client secret; treated as not found",
+                    entity.getClientId(), entity.getId());
+            return Optional.empty();
+        }
+
         boolean requireClientSecret = Boolean.TRUE.equals(entity.getRequireClientSecret());
-        ClientType clientType = requireClientSecret ? ClientType.CONFIDENTIAL : ClientType.PUBLIC;
 
         try {
             return Optional.of(new ResolvedOAuthClient(
@@ -69,21 +100,18 @@ public class JpaResolvedOAuthClientResolver implements ResolvedOAuthClientResolv
                     ClientPlan.SPACE,
                     entity.getOrgId(),
                     entity.getSpaceId(),
-                    clientType,
+                    toDomainClientType(entity.getClientType()),
                     Boolean.TRUE.equals(entity.getRequirePkce()),
-                    // Pas encore de colonne require_consent projetee dans cette lecture : la
-                    // meme absence que TakiboRegisteredClientRepository, qui ne la lit pas
-                    // non plus aujourd'hui.
-                    false,
+                    Boolean.TRUE.equals(entity.getRequireConsent()),
                     requireClientSecret,
                     entity.getClientSecretHash(),
                     entity.getTokenEndpointAuthMethod(),
                     entity.getJwksUri(),
                     entity.getJwksJson(),
                     entity.getIdTokenSignedAlg(),
-                    null,
-                    null,
-                    null,
+                    ttlOf(entity.getAccessTokenTtlSeconds()),
+                    ttlOf(entity.getRefreshTokenTtlSeconds()),
+                    ttlOf(entity.getIdTokenTtlSeconds()),
                     scopes.findByClientId(entity.getId()).stream()
                             .map(s -> s.getScope())
                             .collect(Collectors.toUnmodifiableSet()),
@@ -102,5 +130,18 @@ public class JpaResolvedOAuthClientResolver implements ResolvedOAuthClientResolv
                     entity.getClientId(), entity.getId(), e.getMessage());
             return Optional.empty();
         }
+    }
+
+    private boolean isSecretExpired(OAuth2ClientLookupEntity entity) {
+        OffsetDateTime expiresAt = entity.getClientSecretExpiresAt();
+        return expiresAt != null && expiresAt.toInstant().isBefore(Instant.now(clock));
+    }
+
+    private static ClientType toDomainClientType(OAuth2ClientLookupEntity.ClientType entityType) {
+        return ClientType.valueOf(entityType.name());
+    }
+
+    private static Duration ttlOf(Integer seconds) {
+        return seconds == null ? null : Duration.ofSeconds(seconds);
     }
 }

@@ -7,6 +7,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Entity
@@ -39,8 +40,14 @@ public class OAuth2ClientLookupEntity {
     @Column(name = "client_secret_hash")
     private String clientSecretHash;
 
+    @Column(name = "client_secret_expires_at")
+    private OffsetDateTime clientSecretExpiresAt;
+
     @Column(name = "token_endpoint_auth_method", nullable = false, length = 64)
     private String tokenEndpointAuthMethod;
+
+    @Column(name = "require_consent", nullable = false)
+    private Boolean requireConsent;
 
     @Column(name = "jwks_uri", length = 255)
     private String jwksUri;
@@ -50,6 +57,15 @@ public class OAuth2ClientLookupEntity {
 
     @Column(name = "id_token_signed_alg", length = 32)
     private String idTokenSignedAlg;
+
+    @Column(name = "access_token_ttl_seconds")
+    private Integer accessTokenTtlSeconds;
+
+    @Column(name = "refresh_token_ttl_seconds")
+    private Integer refreshTokenTtlSeconds;
+
+    @Column(name = "id_token_ttl_seconds")
+    private Integer idTokenTtlSeconds;
 
     public UUID getId() {
         return id;
@@ -83,8 +99,16 @@ public class OAuth2ClientLookupEntity {
         return clientSecretHash;
     }
 
+    public OffsetDateTime getClientSecretExpiresAt() {
+        return clientSecretExpiresAt;
+    }
+
     public String getTokenEndpointAuthMethod() {
         return tokenEndpointAuthMethod;
+    }
+
+    public Boolean getRequireConsent() {
+        return requireConsent;
     }
 
     public String getJwksUri() {
@@ -97,6 +121,18 @@ public class OAuth2ClientLookupEntity {
 
     public String getIdTokenSignedAlg() {
         return idTokenSignedAlg;
+    }
+
+    public Integer getAccessTokenTtlSeconds() {
+        return accessTokenTtlSeconds;
+    }
+
+    public Integer getRefreshTokenTtlSeconds() {
+        return refreshTokenTtlSeconds;
+    }
+
+    public Integer getIdTokenTtlSeconds() {
+        return idTokenTtlSeconds;
     }
 
     public enum ClientType {

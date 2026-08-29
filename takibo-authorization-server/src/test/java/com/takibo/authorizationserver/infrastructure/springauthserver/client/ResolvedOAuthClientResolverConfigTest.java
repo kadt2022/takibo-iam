@@ -2,9 +2,16 @@ package com.takibo.authorizationserver.infrastructure.springauthserver.client;
 
 import com.takibo.authorizationserver.domain.client.ResolvedOAuthClient;
 import com.takibo.authorizationserver.domain.client.ResolvedOAuthClientResolver;
+import com.takibo.authorizationserver.infrastructure.jpa.repository.OAuth2ClientGrantTypeRepository;
+import com.takibo.authorizationserver.infrastructure.jpa.repository.OAuth2ClientLookupRepository;
+import com.takibo.authorizationserver.infrastructure.jpa.repository.OAuth2ClientPostLogoutRedirectUriRepository;
+import com.takibo.authorizationserver.infrastructure.jpa.repository.OAuth2ClientRedirectUriRepository;
+import com.takibo.authorizationserver.infrastructure.jpa.repository.OAuth2ClientScopeRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.time.Clock;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -47,5 +54,30 @@ class ResolvedOAuthClientResolverConfigTest {
                 new ResolvedOAuthClientResolverConfig().resolvedOAuthClientResolver(platformProvider, tms);
 
         assertThat(resolver.resolve("busa-finance")).contains(spaceClient);
+    }
+
+    @Test
+    void given_an_encoder_and_a_secret_then_the_platform_bean_resolves_postman_client() {
+        PasswordEncoder passwordEncoder = mock(PasswordEncoder.class);
+        when(passwordEncoder.encode("dev-secret")).thenReturn("encoded");
+
+        InMemoryPlatformOAuthClientResolver platform = new ResolvedOAuthClientResolverConfig()
+                .inMemoryPlatformOAuthClientResolver(passwordEncoder, "dev-secret");
+
+        assertThat(platform.resolve("postman-client")).isPresent();
+    }
+
+    @Test
+    void given_the_five_repositories_and_a_clock_then_the_tms_bean_is_built() {
+        JpaResolvedOAuthClientResolver tms = new ResolvedOAuthClientResolverConfig()
+                .jpaResolvedOAuthClientResolver(
+                        mock(OAuth2ClientLookupRepository.class),
+                        mock(OAuth2ClientGrantTypeRepository.class),
+                        mock(OAuth2ClientScopeRepository.class),
+                        mock(OAuth2ClientRedirectUriRepository.class),
+                        mock(OAuth2ClientPostLogoutRedirectUriRepository.class),
+                        mock(Clock.class));
+
+        assertThat(tms).isNotNull();
     }
 }
