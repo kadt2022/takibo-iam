@@ -204,8 +204,24 @@ class JpaResolvedOAuthClientResolverTest {
         // champ, le reste ne serait jamais consulte.
         OAuth2ClientLookupEntity entity = mock(OAuth2ClientLookupEntity.class);
         when(entity.getId()).thenReturn(ID);
+        when(entity.getRequireClientSecret()).thenReturn(true);
         when(entity.getClientSecretExpiresAt())
                 .thenReturn(NOW.minusSeconds(1).atOffset(ZoneOffset.UTC));
+        when(clients.findByClientId("busa-finance")).thenReturn(Optional.of(entity));
+        when(clock.instant()).thenReturn(NOW);
+        givenGrantTypes("client_credentials");
+
+        assertThat(resolver.resolve("busa-finance")).isEmpty();
+    }
+
+    @Test
+    void given_a_client_secret_expiring_exactly_now_then_it_is_treated_as_not_found() {
+        // Borne inclusive : l'instant precis de l'echeance compte deja comme expire, pas
+        // seulement l'instant qui le suit.
+        OAuth2ClientLookupEntity entity = mock(OAuth2ClientLookupEntity.class);
+        when(entity.getId()).thenReturn(ID);
+        when(entity.getRequireClientSecret()).thenReturn(true);
+        when(entity.getClientSecretExpiresAt()).thenReturn(NOW.atOffset(ZoneOffset.UTC));
         when(clients.findByClientId("busa-finance")).thenReturn(Optional.of(entity));
         when(clock.instant()).thenReturn(NOW);
         givenGrantTypes("client_credentials");
@@ -224,6 +240,23 @@ class JpaResolvedOAuthClientResolverTest {
         givenGrantTypes("client_credentials");
 
         assertThat(resolver.resolve("busa-finance")).isPresent();
+    }
+
+    @Test
+    void given_a_client_not_requiring_a_secret_with_an_expired_secret_column_then_it_still_resolves() {
+        // private_key_jwt (ou tout client sans secret) n'a rien a expirer : une ancienne
+        // valeur residuelle de client_secret_expires_at ne doit pas le rejeter. Le premier
+        // operande de la conjonction court-circuite avant toute lecture de l'horloge.
+        OAuth2ClientLookupEntity entity =
+                clientEntity(OAuth2ClientLookupEntity.ClientType.CONFIDENTIAL, false, null);
+        when(entity.getTokenEndpointAuthMethod()).thenReturn("private_key_jwt");
+        when(entity.getClientSecretExpiresAt())
+                .thenReturn(NOW.minusSeconds(1).atOffset(ZoneOffset.UTC));
+        when(clients.findByClientId("jwt-client")).thenReturn(Optional.of(entity));
+        givenGrantTypes("client_credentials");
+
+        assertThat(resolver.resolve("jwt-client")).isPresent();
+        verifyNoInteractions(clock);
     }
 
     @Test

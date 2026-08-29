@@ -80,16 +80,16 @@ class TakiboRegisteredClientRepositoryTest {
     }
 
     @Test
-    void given_a_context_client_with_a_different_client_id_when_find_by_client_id_then_it_resolves_directly() {
+    void given_a_context_client_with_a_different_client_id_when_find_by_client_id_then_it_fails_closed() {
+        // Un contexte pose mais portant un autre client_id est une divergence, pas une
+        // absence : retomber sur le resolveur romprait la garantie d'une seule resolution
+        // par requete en resolvant B en base pendant qu'un contexte pour A est actif.
         ResolvedOAuthClientContextHolder.set(aClient("other-client").build());
-        when(resolvedOAuthClientResolver.resolve("busa-finance"))
-                .thenReturn(Optional.of(aClient("busa-finance").build()));
 
         RegisteredClient rc = repository.findByClientId("busa-finance");
 
-        assertThat(rc).isNotNull();
-        assertThat(rc.getClientId()).isEqualTo("busa-finance");
-        verify(resolvedOAuthClientResolver).resolve("busa-finance");
+        assertThat(rc).isNull();
+        verifyNoInteractions(resolvedOAuthClientResolver);
     }
 
     @Test

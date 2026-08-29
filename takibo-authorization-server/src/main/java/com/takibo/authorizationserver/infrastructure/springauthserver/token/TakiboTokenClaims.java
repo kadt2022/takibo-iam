@@ -28,9 +28,10 @@ public final class TakiboTokenClaims {
     /**
      * Clé {@code TokenSettings} personnalisée pour la durée de vie de l'ID token, en secondes.
      * Spring Authorization Server n'a pas d'équivalent natif à
-     * {@code accessTokenTimeToLive}/{@code refreshTokenTimeToLive} pour l'ID token ; ce
-     * réglage est porté ici pour qu'il ne soit pas perdu, sans qu'un consommateur existe
-     * encore pour le lire (OIDC vient avec les récits d'authentification humaine).
+     * {@code accessTokenTimeToLive}/{@code refreshTokenTimeToLive} pour l'ID token — il fixe
+     * 30 minutes en dur dans {@code JwtGenerator}. {@code TakiboOAuth2TokenCustomizer} lit ce
+     * réglage quand il est présent et réécrit la réclamation {@code exp} de l'ID token en
+     * conséquence, avant l'émission.
      */
     public static final String ID_TOKEN_TTL_SECONDS = "takibo_id_token_ttl_seconds";
 

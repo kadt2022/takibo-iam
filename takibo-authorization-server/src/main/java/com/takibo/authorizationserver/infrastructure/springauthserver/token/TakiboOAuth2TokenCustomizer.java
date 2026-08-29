@@ -3,6 +3,7 @@ package com.takibo.authorizationserver.infrastructure.springauthserver.token;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
+import org.springframework.security.oauth2.core.oidc.endpoint.OidcParameterNames;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
 import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
@@ -10,6 +11,9 @@ import org.springframework.security.oauth2.server.authorization.settings.ClientS
 import org.springframework.security.oauth2.server.authorization.token.JwtEncodingContext;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenCustomizer;
 import org.springframework.util.StringUtils;
+
+import java.time.Clock;
+import java.time.Instant;
 
 /**
  * Situe les access tokens à partir du client OAuth2 enregistré — sans rien inventer.
@@ -21,19 +25,44 @@ import org.springframework.util.StringUtils;
  * Plus de fallback : chaque plan et sa provenance doivent être explicites. Un client PLATFORM
  * produit un token sans tenant (fail-closed sur les routes tenant) ; une frontière incomplète
  * ou incompatible est une configuration incohérente -> erreur.
+ * <p>
+ * <b>TTL de l'ID token.</b> Spring Authorization Server 7.0.3 fixe l'expiration de l'ID token
+ * à 30 minutes en dur dans {@code JwtGenerator}, avant même d'appeler ce customizer (son propre
+ * commentaire source : {@code // TODO Allow configuration for ID Token time-to-live}) — il n'y
+ * a pas de réglage natif équivalent à {@code accessTokenTimeToLive}. Le customizer s'exécute
+ * sur le même {@link JwtClaimsSet.Builder} avant l'émission : quand {@code
+ * TakiboTokenClaims#ID_TOKEN_TTL_SECONDS} est présent dans les {@code TokenSettings} du client
+ * (posé par {@code TakiboRegisteredClientRepository} depuis {@code ResolvedOAuthClient}), la
+ * réclamation {@code exp} est réécrite ici avec ce TTL, qui gagne alors sur la valeur fixe.
  */
 @Configuration
 public class TakiboOAuth2TokenCustomizer {
 
     @Bean
-    public OAuth2TokenCustomizer<JwtEncodingContext> tokenCustomizer() {
+    public OAuth2TokenCustomizer<JwtEncodingContext> tokenCustomizer(Clock clock) {
         return context -> {
+            if (OidcParameterNames.ID_TOKEN.equals(context.getTokenType().getValue())) {
+                applyIdTokenTtl(context.getRegisteredClient(), context.getClaims(), clock);
+                return;
+            }
             if (!OAuth2TokenType.ACCESS_TOKEN.equals(context.getTokenType())) {
                 return;
             }
             applyTenantClaims(context.getRegisteredClient(), context.getClaims());
             applySubjectClaims(context.getAuthorizationGrantType(), context.getClaims());
         };
+    }
+
+    /**
+     * Réécrit l'expiration de l'ID token quand le client porte un TTL explicite — voir la
+     * javadoc de classe. Un client sans ce réglage garde les 30 minutes fixes de Spring
+     * Authorization Server, sans qu'on n'invente ici de valeur par défaut.
+     */
+    static void applyIdTokenTtl(RegisteredClient client, JwtClaimsSet.Builder claims, Clock clock) {
+        Long idTokenTtlSeconds = client.getTokenSettings().getSetting(TakiboTokenClaims.ID_TOKEN_TTL_SECONDS);
+        if (idTokenTtlSeconds != null) {
+            claims.expiresAt(Instant.now(clock).plusSeconds(idTokenTtlSeconds));
+        }
     }
 
     /**

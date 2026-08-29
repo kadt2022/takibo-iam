@@ -133,8 +133,14 @@ public class JpaResolvedOAuthClientResolver implements ResolvedOAuthClientResolv
     }
 
     private boolean isSecretExpired(OAuth2ClientLookupEntity entity) {
+        // Un client qui n'utilise aucun secret (private_key_jwt, par exemple) n'a rien a
+        // expirer : une ancienne valeur residuelle en base ne doit pas le rejeter. La borne
+        // est inclusive - l'instant exact d'expiration compte deja comme expire, pas
+        // seulement l'instant qui le suit.
         OffsetDateTime expiresAt = entity.getClientSecretExpiresAt();
-        return expiresAt != null && expiresAt.toInstant().isBefore(Instant.now(clock));
+        return Boolean.TRUE.equals(entity.getRequireClientSecret())
+                && expiresAt != null
+                && !expiresAt.toInstant().isAfter(Instant.now(clock));
     }
 
     private static ClientType toDomainClientType(OAuth2ClientLookupEntity.ClientType entityType) {

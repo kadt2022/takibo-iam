@@ -77,8 +77,14 @@ public class TakiboRegisteredClientRepository implements RegisteredClientReposit
     @Override
     public RegisteredClient findByClientId(String clientId) {
         ResolvedOAuthClient fromRequestContext = ResolvedOAuthClientContextHolder.get();
-        if (fromRequestContext != null && fromRequestContext.clientId().equals(clientId)) {
-            return toRegisteredClient(fromRequestContext);
+        if (fromRequestContext != null) {
+            // Un contexte posé mais portant un autre client_id est une divergence, pas une
+            // absence : on échoue fermé plutôt que d'aller résoudre B en base pendant qu'un
+            // contexte pour A est actif, ce qui romprait la garantie d'une seule résolution
+            // par requête sans qu'aucun appelant ne s'en aperçoive.
+            return fromRequestContext.clientId().equals(clientId)
+                    ? toRegisteredClient(fromRequestContext)
+                    : null;
         }
         return resolvedOAuthClientResolver.resolve(clientId)
                 .map(this::toRegisteredClient)
@@ -154,9 +160,9 @@ public class TakiboRegisteredClientRepository implements RegisteredClientReposit
      * {@code requireConsent} et les trois TTL sont appliqués ici — {@code accessTokenTtl} et
      * {@code refreshTokenTtl} ont un réglage natif dans {@link TokenSettings} ;
      * {@code idTokenTtl} n'en a pas, et est porté sous
-     * {@link TakiboTokenClaims#ID_TOKEN_TTL_SECONDS} en attendant qu'un consommateur OIDC en
-     * ait besoin. Un TTL absent laisse le défaut de Spring Authorization Server, jamais une
-     * valeur figée ici.
+     * {@link TakiboTokenClaims#ID_TOKEN_TTL_SECONDS}, que {@code TakiboOAuth2TokenCustomizer}
+     * relit pour réécrire l'expiration de l'ID token à l'émission. Un TTL absent laisse le
+     * défaut de Spring Authorization Server, jamais une valeur figée ici.
      */
     private RegisteredClient toRegisteredClient(ResolvedOAuthClient client) {
         ClientSettings.Builder clientSettings = ClientSettings.builder()
