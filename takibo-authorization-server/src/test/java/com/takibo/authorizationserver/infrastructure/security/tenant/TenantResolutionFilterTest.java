@@ -246,6 +246,26 @@ class TenantResolutionFilterTest {
         verify(chain, never()).doFilter(any(), any());
     }
 
+    @Test
+    void given_unknown_client_at_authorize_when_filter_then_invalid_request_without_basic_challenge()
+            throws Exception {
+        // RFC 6749 4.1.2.1 : invalid_client n'existe pas au point de terminaison authorize.
+        // Un WWW-Authenticate: Basic y provoquerait en plus une invite de identifiants
+        // native cote navigateur, qui n'authentifie jamais de client HTTP a cette surface.
+        when(resolvedOAuthClientResolver.resolve(CLIENT_ID)).thenReturn(Optional.empty());
+
+        MockHttpServletRequest request = authorizeRequest();
+        request.setParameter(PARAM_CLIENT_ID, CLIENT_ID);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter().doFilter(request, response, chain);
+
+        verify(errorWriter).writeInvalidRequest(
+                eq("Invalid parameter: client_id"), eq(request), eq(response));
+        verify(errorWriter, never()).writeInvalidClient(any(), any(), any());
+        verify(chain, never()).doFilter(any(), any());
+    }
+
     // ---------- Purge du contexte ----------
 
     @Test

@@ -29,9 +29,19 @@ import java.io.IOException;
  * {@code PkceEnforcementFilter} et que le rejet natif de Spring Authorization Server — jamais
  * par le gestionnaire d'erreurs générique de la plateforme, dont le corps
  * {@code {"code":...,"message":...}} n'est pas celui qu'un client OAuth2 attend sur
- * {@code /oauth2/*}. Un client inconnu répond par le même corps opaque, sans description, que
- * SAS produit déjà pour un secret invalide : la surface ne doit jamais dire laquelle des deux
- * causes s'applique.
+ * {@code /oauth2/*}.
+ * <p>
+ * Le rejet d'un client introuvable dépend du point de terminaison : {@code /oauth2/token}
+ * (et {@code /oauth2/introspect}, {@code /oauth2/revoke}, qui authentifient eux aussi un
+ * client) répond par le même corps opaque {@code invalid_client}/401, sans description, que
+ * SAS produit déjà pour un secret invalide — la surface ne doit jamais dire laquelle des deux
+ * causes s'applique. {@code /oauth2/authorize} n'a pas ce vocabulaire : la RFC 6749 §4.1.2.1 ne
+ * définit {@code invalid_client} que pour le point de terminaison token, et un {@code
+ * WWW-Authenticate: Basic} sur un point de terminaison que le navigateur atteint directement
+ * (pas un client HTTP authentifié) peut y déclencher une invite d'identifiants native. Un
+ * {@code client_id} introuvable y répond donc par {@code invalid_request} sur ce paramètre,
+ * la même forme que {@code OAuth2AuthorizationCodeRequestAuthenticationProvider} de Spring
+ * Authorization Server pour ce même cas.
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -94,8 +104,16 @@ public class TenantResolutionFilter extends OncePerRequestFilter {
 
         } catch (TenantNotFoundException e) {
             log.warn("Client not found: {}", e.getMessage());
-            // Opaque volontairement, sans description : voir la javadoc de classe.
-            errorWriter.writeInvalidClient(null, request, response);
+            if (isAuthorizeEndpoint(requestUri)) {
+                // invalid_client n'existe pas dans le vocabulaire d'erreur de ce point de
+                // terminaison (RFC 6749 4.1.2.1), et un WWW-Authenticate: Basic y serait
+                // adresse au navigateur, pas a un client HTTP authentifie : voir la javadoc
+                // de classe.
+                errorWriter.writeInvalidRequest("Invalid parameter: client_id", request, response);
+            } else {
+                // Opaque volontairement, sans description : voir la javadoc de classe.
+                errorWriter.writeInvalidClient(null, request, response);
+            }
 
         } finally {
             ResolvedOAuthClientContextHolder.clear();
