@@ -60,6 +60,7 @@ d'autorisation, et ils doivent être corrigés dans le même mouvement :
 - [x] Les deux tests sentinelles de TAS-GRANTS-00 sont mis à jour plutôt que contournés : `given_current_wiring_then_authorization_and_consent_service_beans_are_declared` et `given_successful_tokens_when_database_inspected_then_one_row_is_persisted_per_plan` (renommés depuis leurs versions TAS-GRANTS-00, qui constataient l'absence exacte de ce que ceux-ci constatent).
 - [x] `AuthorizationSaveContractBaselineIntegrationTest` n'observe plus l'enregistreur en mémoire — il observe directement la ligne persistée par JDBC.
 - [x] Le chiffrement au repos consomme le port défini par TAS-GRANTS-02A ; aucun second mécanisme n'est introduit.
+- [x] Un access token `client_credentials` émis est rapporté actif par `/oauth2/introspect`, puis inactif par la même introspection après `/oauth2/revoke` — `given_a_client_credentials_token_when_introspected_then_revoked_then_introspection_reports_inactive`. Preuve que la persistance introduite par ce récit alimente réellement ces deux endpoints par défaut de Spring Authorization Server ; la révocation avancée (famille, époque) reste hors périmètre (TAS-GRANTS-07).
 
 ## Tests attendus
 

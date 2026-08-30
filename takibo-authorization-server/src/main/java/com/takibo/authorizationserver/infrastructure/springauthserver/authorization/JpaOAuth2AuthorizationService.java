@@ -44,8 +44,8 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
 
 import static com.takibo.authorizationserver.infrastructure.springauthserver.authorization.OAuth2AuthorizationJacksonConfig.OAUTH2_AUTHORIZATION_OBJECT_MAPPER;
 
@@ -271,7 +271,7 @@ public class JpaOAuth2AuthorizationService implements OAuth2AuthorizationService
      */
     private <T extends OAuth2Token> SealedToken seal(
             String column, String authorizationId, OAuth2Authorization.Token<T> token,
-            Function<String, String> hasher) {
+            UnaryOperator<String> hasher) {
         if (token == null) {
             return SealedToken.ABSENT;
         }
@@ -386,7 +386,7 @@ public class JpaOAuth2AuthorizationService implements OAuth2AuthorizationService
     /** @param hasher exactement celle utilisée à l'écriture — voir {@link #seal} correspondant. */
     private String reveal(
             String column, String authorizationId, String encryptedValue, String hash,
-            Function<String, String> hasher) {
+            UnaryOperator<String> hasher) {
         EncryptedTokenValue sealed = new EncryptedTokenValue(encryptedValue, hash);
         return sealed.reveal(secretCipher, SecretContext.oauth2AuthorizationValue(column, authorizationId), hasher);
     }

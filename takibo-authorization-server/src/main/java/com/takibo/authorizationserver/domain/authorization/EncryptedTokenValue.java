@@ -7,7 +7,7 @@ import com.takibo.authorizationserver.domain.keys.port.SecretDecryptionException
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Objects;
-import java.util.function.Function;
+import java.util.function.UnaryOperator;
 import java.util.regex.Pattern;
 
 /**
@@ -49,7 +49,7 @@ public record EncryptedTokenValue(String encryptedValue, String hash) {
         }
     }
 
-    /** Équivalent à {@link #seal(SecretCipher, SecretContext, String, Function)} avec SHA-256. */
+    /** Équivalent à {@link #seal(SecretCipher, SecretContext, String, UnaryOperator)} avec SHA-256. */
     public static EncryptedTokenValue seal(SecretCipher cipher, SecretContext context, String plaintext) {
         return seal(cipher, context, plaintext, TokenHash::sha256Hex);
     }
@@ -66,7 +66,7 @@ public record EncryptedTokenValue(String encryptedValue, String hash) {
      *                  {@code user_code}
      */
     public static EncryptedTokenValue seal(
-            SecretCipher cipher, SecretContext context, String plaintext, Function<String, String> hasher) {
+            SecretCipher cipher, SecretContext context, String plaintext, UnaryOperator<String> hasher) {
         Objects.requireNonNull(cipher, "cipher must not be null");
         Objects.requireNonNull(context, "context must not be null");
         Objects.requireNonNull(plaintext, "plaintext must not be null");
@@ -76,7 +76,7 @@ public record EncryptedTokenValue(String encryptedValue, String hash) {
                 hasher.apply(plaintext));
     }
 
-    /** Équivalent à {@link #reveal(SecretCipher, SecretContext, Function)} avec SHA-256. */
+    /** Équivalent à {@link #reveal(SecretCipher, SecretContext, UnaryOperator)} avec SHA-256. */
     public String reveal(SecretCipher cipher, SecretContext context) {
         return reveal(cipher, context, TokenHash::sha256Hex);
     }
@@ -101,7 +101,7 @@ public record EncryptedTokenValue(String encryptedValue, String hash) {
      * @throws SecretDecryptionException si le chiffre est illisible, altéré, scellé pour un
      *         autre contexte, ou si le clair obtenu ne correspond pas à {@link #hash}
      */
-    public String reveal(SecretCipher cipher, SecretContext context, Function<String, String> hasher) {
+    public String reveal(SecretCipher cipher, SecretContext context, UnaryOperator<String> hasher) {
         Objects.requireNonNull(cipher, "cipher must not be null");
         Objects.requireNonNull(context, "context must not be null");
         Objects.requireNonNull(hasher, "hasher must not be null");
