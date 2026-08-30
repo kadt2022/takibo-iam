@@ -79,3 +79,4 @@ d'autorisation, et ils doivent être corrigés dans le même mouvement :
 - Pages de login, consentement ou device.
 - Activation d’un nouveau grant.
 - Gestion complète de la révocation.
+- La purge des autorisations expirées est prise en charge par TAS-GRANTS-02B, obligatoire avant mise en production. Aucun déploiement durable ne doit activer cette persistance sans politique de rétention.
