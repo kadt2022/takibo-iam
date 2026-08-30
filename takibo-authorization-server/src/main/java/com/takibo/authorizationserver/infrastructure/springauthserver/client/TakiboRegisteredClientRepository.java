@@ -1,5 +1,6 @@
 package com.takibo.authorizationserver.infrastructure.springauthserver.client;
 
+import com.takibo.authorizationserver.domain.client.ClientType;
 import com.takibo.authorizationserver.domain.client.ResolvedOAuthClient;
 import com.takibo.authorizationserver.domain.client.ResolvedOAuthClientContextHolder;
 import com.takibo.authorizationserver.domain.client.ResolvedOAuthClientResolver;
@@ -184,6 +185,12 @@ public class TakiboRegisteredClientRepository implements RegisteredClientReposit
      * {@link TakiboTokenClaims#ID_TOKEN_TTL_SECONDS}, que {@code TakiboOAuth2TokenCustomizer}
      * relit pour réécrire l'expiration de l'ID token à l'émission. Un TTL absent laisse le
      * défaut de Spring Authorization Server, jamais une valeur figée ici.
+     * <p>
+     * {@code reuseRefreshTokens(false)} est imposé à tout client {@code CONFIDENTIAL} autorisé
+     * au grant {@code refresh_token} (TAS-GRANTS-02) : un refresh token qui ne tourne jamais
+     * resterait valide indéfiniment tant qu'il n'expire pas, exposant un vol unique à un accès
+     * permanent. Un client {@code PUBLIC} n'en reçoit jamais (SAS retourne silencieusement
+     * {@code null} pour son refresh), la question ne se pose donc pas pour lui.
      */
     private RegisteredClient toRegisteredClient(ResolvedOAuthClient client) {
         ClientSettings.Builder clientSettings = ClientSettings.builder()
@@ -223,6 +230,15 @@ public class TakiboRegisteredClientRepository implements RegisteredClientReposit
         }
         if (client.idTokenTtl() != null) {
             tokenSettings.setting(TakiboTokenClaims.ID_TOKEN_TTL_SECONDS, client.idTokenTtl().toSeconds());
+        }
+        if (client.clientType() == ClientType.CONFIDENTIAL
+                && client.grantTypes().contains(AuthorizationGrantType.REFRESH_TOKEN.getValue())) {
+            // TAS-GRANTS-02 : un refresh token reutilisable resterait valide indefiniment tant
+            // qu'il n'expire pas — le voler une seule fois suffirait. Impose la rotation a
+            // chaque usage pour tout client confidentiel autorise au refresh ; ne s'applique
+            // pas a un client PUBLIC, qui n'en recoit jamais (voir la doctrine du lot :
+            // "une SPA publique... SAS peut retourner silencieusement null pour le refresh").
+            tokenSettings.reuseRefreshTokens(false);
         }
 
         RegisteredClient.Builder builder = RegisteredClient.withId(client.registeredClientId())
