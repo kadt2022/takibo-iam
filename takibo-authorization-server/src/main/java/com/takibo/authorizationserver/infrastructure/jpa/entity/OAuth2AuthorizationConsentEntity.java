@@ -57,10 +57,13 @@ public class OAuth2AuthorizationConsentEntity {
     private String registeredClientId;
 
     /**
-     * Toujours requis : un écran de consentement suppose un compte déjà authentifié. Ne
-     * porte pas le sujet du couple de lecture — voir {@link #principalName}.
+     * NULL tant qu'aucun port de résolution de compte par {@code principal_name} n'existe
+     * (TAS-GRANTS-03) : {@code OAuth2AuthorizationConsentService} ne reçoit de Spring
+     * Authorization Server que {@code registeredClientId}/{@code principalName}/
+     * {@code authorities}, jamais un identifiant de compte — voir V202608290003. Ne porte pas
+     * le sujet du couple de lecture, {@link #principalName} s'en charge.
      */
-    @Column(name = "principal_account_id", nullable = false)
+    @Column(name = "principal_account_id")
     private UUID principalAccountId;
 
     /** HUMAN dans tous les cas observés — un client_credentials ne consent jamais. */

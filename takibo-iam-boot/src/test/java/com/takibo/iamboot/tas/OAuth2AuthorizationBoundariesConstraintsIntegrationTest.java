@@ -166,6 +166,17 @@ class OAuth2AuthorizationBoundariesConstraintsIntegrationTest extends TasPostgre
     // ---------- oauth2_authorization_consent ----------
 
     @Test
+    void given_a_consent_without_a_principal_account_then_it_is_accepted() {
+        // OAuth2AuthorizationConsentService (tranche suivante) ne recoit de Spring
+        // Authorization Server que registeredClientId/principalName/authorities, jamais un
+        // identifiant de compte : voir V202608290003.
+        assertThatCode(() -> insertConsent(
+                UUID.randomUUID(), TasBaselineDataset.ORG_ID, TasBaselineDataset.SPACE_ID,
+                null, "busa-finance", "no-account-yet@takibo.test"))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
     void given_an_organization_consent_without_space_then_it_is_accepted() {
         assertThatCode(() -> insertConsent(
                 UUID.randomUUID(), TasBaselineDataset.ORG_ID, null,
