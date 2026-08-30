@@ -8,7 +8,9 @@ import com.takibo.authorizationserver.domain.keys.port.SecretCipher;
 import com.takibo.authorizationserver.domain.keys.port.SigningKeyMaterialGenerator;
 import com.takibo.authorizationserver.domain.keys.port.SigningKeyRepository;
 import com.takibo.authorizationserver.domain.keys.port.SigningKeyWriter;
+import com.takibo.authorizationserver.domain.keys.port.UserCodeHmac;
 import com.takibo.authorizationserver.infrastructure.keys.AesGcmSecretCipher;
+import com.takibo.authorizationserver.infrastructure.keys.HmacSha256UserCodeHmac;
 import com.takibo.authorizationserver.infrastructure.keys.PersistentJwkSource;
 import com.takibo.authorizationserver.infrastructure.keys.RsaSigningKeyGenerator;
 import com.takibo.authorizationserver.infrastructure.keys.SecretCipherKey;
@@ -64,6 +66,21 @@ public class SigningKeysConfiguration {
             @Value("${takibo.tas.keys.cipher.active-key-id}") String activeKeyId,
             @Value("${takibo.tas.keys.cipher.active-key}") String activeKeyBase64) {
         return new AesGcmSecretCipher(new SecretCipherKey(activeKeyId, decode(activeKeyBase64)));
+    }
+
+    /**
+     * Clé distincte de celle de {@link #secretCipher} : mélanger les usages d'une même
+     * matière entre chiffrement et HMAC est un anti-pattern cryptographique, pas une
+     * simplification. Voir {@link UserCodeHmac} pour ce que cette clé protège
+     * ({@code user_code}, seule valeur de faible entropie parmi les six colonnes chiffrées de
+     * TAS-GRANTS-02) et pourquoi les cinq autres n'en ont pas besoin.
+     */
+    @Bean
+    @ConditionalOnProperty(name = "takibo.tas.keys.ephemeral", havingValue = "false",
+            matchIfMissing = true)
+    public UserCodeHmac userCodeHmac(
+            @Value("${takibo.tas.keys.user-code-hmac.key}") String hmacKeyBase64) {
+        return new HmacSha256UserCodeHmac(decode(hmacKeyBase64));
     }
 
     private static byte[] decode(String base64) {

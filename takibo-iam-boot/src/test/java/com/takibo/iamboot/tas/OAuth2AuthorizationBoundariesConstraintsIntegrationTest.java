@@ -182,6 +182,17 @@ class OAuth2AuthorizationBoundariesConstraintsIntegrationTest extends TasPostgre
     }
 
     @Test
+    void given_a_platform_consent_without_org_or_space_then_it_is_accepted() {
+        // Aucun flux ne produit aujourd'hui de consentement PLATFORM (client_credentials
+        // n'affiche jamais d'ecran de consentement), mais le schema ne doit pas non plus
+        // l'interdire par une contrainte que le modele applicatif ne respecte qu'a moitie
+        // (V202608300001).
+        assertThatCode(() -> insertConsent(
+                UUID.randomUUID(), null, null, "postman-client", "n-a@takibo.test"))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
     void given_an_organization_consent_without_space_then_it_is_accepted() {
         assertThatCode(() -> insertConsent(
                 UUID.randomUUID(), TasBaselineDataset.ORG_ID, null,

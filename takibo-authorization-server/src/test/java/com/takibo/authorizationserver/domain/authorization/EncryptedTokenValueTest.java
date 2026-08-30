@@ -2,6 +2,7 @@ package com.takibo.authorizationserver.domain.authorization;
 
 import com.takibo.authorizationserver.domain.keys.port.SecretCipher;
 import com.takibo.authorizationserver.domain.keys.port.SecretContext;
+import com.takibo.authorizationserver.domain.keys.port.SecretDecryptionException;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -35,12 +36,27 @@ class EncryptedTokenValueTest {
     @Test
     void given_a_sealed_value_when_revealed_then_the_cipher_decrypts_with_the_same_context() {
         when(cipher.decrypt(CONTEXT, "v1$key$ciphertext")).thenReturn("the-access-token");
-        EncryptedTokenValue sealed = new EncryptedTokenValue("v1$key$ciphertext", TokenHash.sha256Hex("x"));
+        EncryptedTokenValue sealed = new EncryptedTokenValue(
+                "v1$key$ciphertext", TokenHash.sha256Hex("the-access-token"));
 
         String revealed = sealed.reveal(cipher, CONTEXT);
 
         assertThat(revealed).isEqualTo("the-access-token");
         verify(cipher).decrypt(CONTEXT, "v1$key$ciphertext");
+    }
+
+    @Test
+    void given_a_decrypted_value_not_matching_the_stored_hash_then_reveal_fails_closed() {
+        // Le couple (encryptedValue, hash) doit etre un invariant verifie, pas seulement une
+        // convention : un hash qui ne correspond plus au clair dechiffre -- corruption, ligne
+        // dont le hash a ete reecrit pour rediriger une recherche -- doit etre rejete, meme si
+        // le dechiffrement lui-meme (authentification GCM, liaison au contexte) a reussi.
+        when(cipher.decrypt(CONTEXT, "v1$key$ciphertext")).thenReturn("the-access-token");
+        EncryptedTokenValue tampered = new EncryptedTokenValue(
+                "v1$key$ciphertext", TokenHash.sha256Hex("a-completely-different-value"));
+
+        assertThatThrownBy(() -> tampered.reveal(cipher, CONTEXT))
+                .isInstanceOf(SecretDecryptionException.class);
     }
 
     @Test

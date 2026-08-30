@@ -133,6 +133,39 @@ class JpaOAuth2AuthorizationConsentServiceTest {
     }
 
     @Test
+    void given_the_registered_client_now_resolves_under_a_different_boundary_then_reload_fails_closed() {
+        // Meme garde que JpaOAuth2AuthorizationService : un consentement sauvegarde pour
+        // org-A/space-X ne doit pas se relire silencieusement si le meme registered_client_id
+        // resout desormais sous org-B/space-Y -- un client repris pourrait sinon sauter
+        // l'ecran de consentement pour un tenant qui n'a jamais consenti a rien.
+        OAuth2AuthorizationConsentEntity entity = OAuth2AuthorizationConsentEntity.builder()
+                .id(UUID.randomUUID())
+                .orgId(ORG_ID)
+                .spaceId(SPACE_ID)
+                .registeredClientId(REGISTERED_CLIENT_ID)
+                .subjectType("HUMAN")
+                .principalName("user@takibo.test")
+                .authorities("SCOPE_api.read")
+                .build();
+        when(consents.findByRegisteredClientIdAndPrincipalName(REGISTERED_CLIENT_ID, "user@takibo.test"))
+                .thenReturn(Optional.of(entity));
+        RegisteredClient movedClient = RegisteredClient.withId(REGISTERED_CLIENT_ID)
+                .clientId("busa-finance")
+                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+                .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
+                .scope("api.read")
+                .clientSettings(ClientSettings.builder()
+                        .setting(TakiboTokenClaims.ORG_ID, UUID.randomUUID().toString())
+                        .setting(TakiboTokenClaims.SPACE_ID, UUID.randomUUID().toString())
+                        .build())
+                .build();
+        when(registeredClientRepository.findById(REGISTERED_CLIENT_ID)).thenReturn(movedClient);
+
+        assertThatThrownBy(() -> service.findById(REGISTERED_CLIENT_ID, "user@takibo.test"))
+                .isInstanceOf(DataRetrievalFailureException.class);
+    }
+
+    @Test
     void given_an_unresolvable_client_when_saving_then_it_fails_closed() {
         when(registeredClientRepository.findById(REGISTERED_CLIENT_ID)).thenReturn(null);
         OAuth2AuthorizationConsent consent = OAuth2AuthorizationConsent

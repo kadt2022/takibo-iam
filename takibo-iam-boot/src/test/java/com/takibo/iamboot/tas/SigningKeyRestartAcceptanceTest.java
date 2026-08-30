@@ -60,6 +60,19 @@ class SigningKeyRestartAcceptanceTest {
 
     private static final String CIPHER_KEY_ID = "restart-test-key";
     private static final byte[] CIPHER_KEY_MATERIAL = new byte[32];
+    // Distincte de CIPHER_KEY_MATERIAL : voir UserCodeHmac (TAS-GRANTS-02) sur pourquoi les
+    // deux cles ne doivent jamais partager la meme matiere. Ce test ne signe ni ne verifie
+    // aucun user_code, mais ephemeral=false ci-dessous active le meme bean de production
+    // (SigningKeysConfiguration.userCodeHmac) que le reste de l'application : sans cette
+    // propriete, le contexte complet de TakiboIamBootApplication ne demarrerait pas.
+    private static final byte[] USER_CODE_HMAC_KEY_MATERIAL;
+
+    static {
+        USER_CODE_HMAC_KEY_MATERIAL = new byte[32];
+        for (int i = 0; i < USER_CODE_HMAC_KEY_MATERIAL.length; i++) {
+            USER_CODE_HMAC_KEY_MATERIAL[i] = (byte) (255 - i);
+        }
+    }
 
     private static PostgreSQLContainer<?> postgres;
 
@@ -68,7 +81,8 @@ class SigningKeyRestartAcceptanceTest {
             "spring.datasource.driver-class-name", "spring.flyway.enabled",
             "spring.flyway.locations", "spring.jpa.hibernate.ddl-auto",
             "takibo.tas.keys.ephemeral", "takibo.tas.keys.cipher.active-key-id",
-            "takibo.tas.keys.cipher.active-key", "management.health.mail.enabled",
+            "takibo.tas.keys.cipher.active-key", "takibo.tas.keys.user-code-hmac.key",
+            "management.health.mail.enabled",
             "security.password-encoder.bcrypt-strength", "server.port"
     };
 
@@ -159,6 +173,8 @@ class SigningKeyRestartAcceptanceTest {
         System.setProperty("takibo.tas.keys.cipher.active-key-id", CIPHER_KEY_ID);
         System.setProperty("takibo.tas.keys.cipher.active-key",
                 Base64.getEncoder().encodeToString(CIPHER_KEY_MATERIAL));
+        System.setProperty("takibo.tas.keys.user-code-hmac.key",
+                Base64.getEncoder().encodeToString(USER_CODE_HMAC_KEY_MATERIAL));
         System.setProperty("management.health.mail.enabled", "false");
         System.setProperty("security.password-encoder.bcrypt-strength", "4");
         // application.yml fixe server.port a 8081, une priorite superieure a celle des

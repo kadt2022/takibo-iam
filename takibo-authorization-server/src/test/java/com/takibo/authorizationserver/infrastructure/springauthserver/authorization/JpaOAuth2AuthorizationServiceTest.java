@@ -3,9 +3,11 @@ package com.takibo.authorizationserver.infrastructure.springauthserver.authoriza
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.takibo.authorizationserver.domain.authorization.TokenHash;
 import com.takibo.authorizationserver.domain.keys.port.SecretCipher;
+import com.takibo.authorizationserver.domain.keys.port.UserCodeHmac;
 import com.takibo.authorizationserver.infrastructure.jpa.entity.OAuth2AuthorizationEntity;
 import com.takibo.authorizationserver.infrastructure.jpa.repository.OAuth2AuthorizationRepository;
 import com.takibo.authorizationserver.infrastructure.keys.AesGcmSecretCipher;
+import com.takibo.authorizationserver.infrastructure.keys.HmacSha256UserCodeHmac;
 import com.takibo.authorizationserver.infrastructure.keys.SecretCipherKey;
 import com.takibo.authorizationserver.infrastructure.springauthserver.token.TakiboTokenClaims;
 import org.junit.jupiter.api.Test;
@@ -57,10 +59,11 @@ class JpaOAuth2AuthorizationServiceTest {
     private final OAuth2AuthorizationRepository authorizations = mock(OAuth2AuthorizationRepository.class);
     private final RegisteredClientRepository registeredClientRepository = mock(RegisteredClientRepository.class);
     private final SecretCipher secretCipher = new AesGcmSecretCipher(aKey());
+    private final UserCodeHmac userCodeHmac = new HmacSha256UserCodeHmac(aHmacKeyMaterial());
     private final ObjectMapper objectMapper = new OAuth2AuthorizationJacksonConfig().oauth2AuthorizationObjectMapper();
 
     private final JpaOAuth2AuthorizationService service = new JpaOAuth2AuthorizationService(
-            authorizations, registeredClientRepository, secretCipher, objectMapper);
+            authorizations, registeredClientRepository, secretCipher, userCodeHmac, objectMapper);
 
     // ---------- Round-trip ----------
 
@@ -355,6 +358,47 @@ class JpaOAuth2AuthorizationServiceTest {
                 .isInstanceOf(DataRetrievalFailureException.class);
     }
 
+    @Test
+    void given_the_registered_client_now_resolves_under_a_different_boundary_then_reload_fails_closed() {
+        // Une autorisation creee pour org-A/space-X, puis le meme registered_client_id
+        // resolu ensuite sous org-B/space-Y -- client deplace ou recree sous une autre
+        // frontiere entre l'emission et la relecture. TakiboOAuth2TokenCustomizer lit
+        // org_id/space_id depuis le RegisteredClient resolu au moment de l'emission d'un
+        // refresh, jamais depuis l'autorisation elle-meme : sans cette garde, un refresh
+        // token rejouerait silencieusement sous le nouveau tenant.
+        String registeredClientId = UUID.randomUUID().toString();
+        RegisteredClient originalClient = spaceClient(registeredClientId, ORG_ID, SPACE_ID);
+        when(registeredClientRepository.findById(registeredClientId)).thenReturn(originalClient);
+        OAuth2Authorization authorization = clientCredentialsAuthorization(originalClient);
+        OAuth2AuthorizationEntity entity = save(authorization);
+
+        RegisteredClient movedClient = spaceClient(
+                registeredClientId, UUID.randomUUID(), UUID.randomUUID());
+        when(registeredClientRepository.findById(registeredClientId)).thenReturn(movedClient);
+        when(authorizations.findByAccessTokenHash(entity.getAccessTokenHash()))
+                .thenReturn(Optional.of(entity));
+
+        assertThatThrownBy(() -> service.findByToken("the-access-token", OAuth2TokenType.ACCESS_TOKEN))
+                .isInstanceOf(DataRetrievalFailureException.class);
+    }
+
+    @Test
+    void given_the_registered_client_still_resolves_under_the_same_boundary_then_reload_succeeds() {
+        // Contre-epreuve : la garde ne doit pas rejeter le cas normal, ou le client resout
+        // toujours sous la meme frontiere qu'a l'emission.
+        String registeredClientId = UUID.randomUUID().toString();
+        RegisteredClient client = spaceClient(registeredClientId, ORG_ID, SPACE_ID);
+        when(registeredClientRepository.findById(registeredClientId)).thenReturn(client);
+        OAuth2Authorization authorization = clientCredentialsAuthorization(client);
+        OAuth2AuthorizationEntity entity = save(authorization);
+        when(authorizations.findByAccessTokenHash(entity.getAccessTokenHash()))
+                .thenReturn(Optional.of(entity));
+
+        OAuth2Authorization reloaded = service.findByToken("the-access-token", OAuth2TokenType.ACCESS_TOKEN);
+
+        assertThat(reloaded).isNotNull();
+    }
+
     // ---------- Fixtures ----------
 
     private OAuth2AuthorizationEntity save(OAuth2Authorization authorization) {
@@ -376,7 +420,11 @@ class JpaOAuth2AuthorizationServiceTest {
     }
 
     private static RegisteredClient spaceClient() {
-        return RegisteredClient.withId(UUID.randomUUID().toString())
+        return spaceClient(UUID.randomUUID().toString(), ORG_ID, SPACE_ID);
+    }
+
+    private static RegisteredClient spaceClient(String registeredClientId, UUID orgId, UUID spaceId) {
+        return RegisteredClient.withId(registeredClientId)
                 .clientId("busa-finance")
                 .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
                 .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
@@ -384,8 +432,8 @@ class JpaOAuth2AuthorizationServiceTest {
                 .redirectUri("https://app.takibo.io/callback")
                 .scope("api.read")
                 .clientSettings(ClientSettings.builder()
-                        .setting(TakiboTokenClaims.ORG_ID, ORG_ID.toString())
-                        .setting(TakiboTokenClaims.SPACE_ID, SPACE_ID.toString())
+                        .setting(TakiboTokenClaims.ORG_ID, orgId.toString())
+                        .setting(TakiboTokenClaims.SPACE_ID, spaceId.toString())
                         .build())
                 .build();
     }
@@ -405,5 +453,15 @@ class JpaOAuth2AuthorizationServiceTest {
             material[i] = (byte) i;
         }
         return new SecretCipherKey("test-key", material);
+    }
+
+    private static byte[] aHmacKeyMaterial() {
+        // Distincte de aKey() : melanger la matiere de chiffrement et celle du HMAC serait
+        // exactement l'anti-pattern que UserCodeHmac documente vouloir eviter.
+        byte[] material = new byte[32];
+        for (int i = 0; i < material.length; i++) {
+            material[i] = (byte) (255 - i);
+        }
+        return material;
     }
 }

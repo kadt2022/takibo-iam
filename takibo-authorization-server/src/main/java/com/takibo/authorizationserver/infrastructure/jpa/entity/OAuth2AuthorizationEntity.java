@@ -102,7 +102,7 @@ public class OAuth2AuthorizationEntity {
 
     // ========== AUTHORIZATION CODE (VALUE CHIFFRÉE + HASH) ==========
 
-    @Column(name = "authorization_code_value", length = 500)
+    @Column(name = "authorization_code_value", columnDefinition = "text")
     private String authorizationCodeValue;
 
     @Column(name = "authorization_code_hash", columnDefinition = "char(64)")
@@ -120,7 +120,7 @@ public class OAuth2AuthorizationEntity {
 
     // ========== ACCESS TOKEN (VALUE + HASH) ==========
 
-    @Column(name = "access_token_value", length = 16000)
+    @Column(name = "access_token_value", columnDefinition = "text")
     private String accessTokenValue;
 
     @Column(name = "access_token_hash", columnDefinition = "char(64)")
@@ -144,7 +144,7 @@ public class OAuth2AuthorizationEntity {
 
     // ========== OIDC ID TOKEN (VALUE + HASH) ==========
 
-    @Column(name = "oidc_id_token_value", length = 16000)
+    @Column(name = "oidc_id_token_value", columnDefinition = "text")
     private String oidcIdTokenValue;
 
     @Column(name = "oidc_id_token_hash", columnDefinition = "char(64)")
@@ -162,7 +162,7 @@ public class OAuth2AuthorizationEntity {
 
     // ========== REFRESH TOKEN (VALUE + HASH) ==========
 
-    @Column(name = "refresh_token_value", length = 4000)
+    @Column(name = "refresh_token_value", columnDefinition = "text")
     private String refreshTokenValue;
 
     @Column(name = "refresh_token_hash", columnDefinition = "char(64)")
@@ -180,7 +180,7 @@ public class OAuth2AuthorizationEntity {
 
     // ========== USER CODE (VALUE CHIFFRÉE + HASH) ==========
 
-    @Column(name = "user_code_value", length = 500)
+    @Column(name = "user_code_value", columnDefinition = "text")
     private String userCodeValue;
 
     @Column(name = "user_code_hash", columnDefinition = "char(64)")
@@ -198,7 +198,7 @@ public class OAuth2AuthorizationEntity {
 
     // ========== DEVICE CODE (VALUE CHIFFRÉE + HASH) ==========
 
-    @Column(name = "device_code_value", length = 500)
+    @Column(name = "device_code_value", columnDefinition = "text")
     private String deviceCodeValue;
 
     @Column(name = "device_code_hash", columnDefinition = "char(64)")

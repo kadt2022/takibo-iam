@@ -60,6 +60,16 @@ class OAuth2AuthorizationRestartAcceptanceTest {
 
     private static final String CIPHER_KEY_ID = "oauth2-authz-restart-test-key";
     private static final byte[] CIPHER_KEY_MATERIAL = new byte[32];
+    // Distincte de CIPHER_KEY_MATERIAL : voir UserCodeHmac sur pourquoi les deux cles ne
+    // doivent jamais partager la meme matiere.
+    private static final byte[] USER_CODE_HMAC_KEY_MATERIAL;
+
+    static {
+        USER_CODE_HMAC_KEY_MATERIAL = new byte[32];
+        for (int i = 0; i < USER_CODE_HMAC_KEY_MATERIAL.length; i++) {
+            USER_CODE_HMAC_KEY_MATERIAL[i] = (byte) (255 - i);
+        }
+    }
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final HttpClient HTTP = HttpClient.newHttpClient();
 
@@ -70,7 +80,8 @@ class OAuth2AuthorizationRestartAcceptanceTest {
             "spring.datasource.driver-class-name", "spring.flyway.enabled",
             "spring.flyway.locations", "spring.jpa.hibernate.ddl-auto",
             "takibo.tas.keys.ephemeral", "takibo.tas.keys.cipher.active-key-id",
-            "takibo.tas.keys.cipher.active-key", "management.health.mail.enabled",
+            "takibo.tas.keys.cipher.active-key", "takibo.tas.keys.user-code-hmac.key",
+            "management.health.mail.enabled",
             "security.password-encoder.bcrypt-strength", "server.port"
     };
 
@@ -188,6 +199,8 @@ class OAuth2AuthorizationRestartAcceptanceTest {
         System.setProperty("takibo.tas.keys.cipher.active-key-id", CIPHER_KEY_ID);
         System.setProperty("takibo.tas.keys.cipher.active-key",
                 Base64.getEncoder().encodeToString(CIPHER_KEY_MATERIAL));
+        System.setProperty("takibo.tas.keys.user-code-hmac.key",
+                Base64.getEncoder().encodeToString(USER_CODE_HMAC_KEY_MATERIAL));
         System.setProperty("management.health.mail.enabled", "false");
         System.setProperty("security.password-encoder.bcrypt-strength", "4");
         System.setProperty("server.port", "0");

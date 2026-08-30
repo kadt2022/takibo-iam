@@ -17,6 +17,7 @@ import org.springframework.util.Assert;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -87,7 +88,8 @@ public class JpaOAuth2AuthorizationConsentService implements OAuth2Authorization
         // OAuth2AuthorizationConsent.withId, qui ne prend qu'un identifiant, jamais un
         // RegisteredClient — mais elle l'est pour rester coherent avec la doctrine du récit :
         // un consentement pour un client devenu inconnu ne devrait pas se relire en silence.
-        requireResolvableClient(entity.getRegisteredClientId());
+        RegisteredClient client = requireResolvableClient(entity.getRegisteredClientId());
+        requireMatchingBoundary(entity.getRegisteredClientId(), entity.getOrgId(), entity.getSpaceId(), client);
 
         OAuth2AuthorizationConsent.Builder builder =
                 OAuth2AuthorizationConsent.withId(entity.getRegisteredClientId(), entity.getPrincipalName());
@@ -102,6 +104,24 @@ public class JpaOAuth2AuthorizationConsentService implements OAuth2Authorization
                     "The RegisteredClient with id '" + registeredClientId + "' was not found");
         }
         return client;
+    }
+
+    /**
+     * Même garde que {@code JpaOAuth2AuthorizationService} : un client déplacé ou recréé sous
+     * une autre organisation/space entre l'écriture et la relecture ne doit jamais faire
+     * réutiliser silencieusement un consentement sous le nouveau tenant — un client
+     * repris pourrait sinon sauter l'écran de consentement pour un tenant qui n'a jamais
+     * consenti à rien.
+     */
+    private static void requireMatchingBoundary(
+            String registeredClientId, UUID savedOrgId, UUID savedSpaceId, RegisteredClient client) {
+        UUID currentOrgId = readUuidSetting(client, TakiboTokenClaims.ORG_ID);
+        UUID currentSpaceId = readUuidSetting(client, TakiboTokenClaims.SPACE_ID);
+        if (!Objects.equals(savedOrgId, currentOrgId) || !Objects.equals(savedSpaceId, currentSpaceId)) {
+            throw new DataRetrievalFailureException(
+                    "The RegisteredClient with id '" + registeredClientId
+                            + "' no longer resolves under the org/space this consent was saved for");
+        }
     }
 
     private static UUID readUuidSetting(RegisteredClient client, String settingName) {
