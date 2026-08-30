@@ -43,23 +43,23 @@ d'autorisation, et ils doivent être corrigés dans le même mouvement :
 
 ## Critères d’acceptation
 
-- [ ] Une autorisation survit au redémarrage de TAS.
-- [ ] Le schéma refuse les combinaisons invalides de plan et de frontière.
-- [ ] Une autorisation PLATFORM sans `org_id`/`space_id` et une autorisation SPACE complète peuvent être sauvegardées sans violer de FK.
-- [ ] La recherche par code/token utilise un hash, sans journaliser ni exposer le secret.
-- [ ] `findByToken` retrouve chaque type de token sans paramètre tenant grâce à son hash globalement unique.
-- [ ] La valeur du device code reste récupérable lors de la validation du `user_code`, puis après `invalidate()` et un nouveau `save()`.
-- [ ] Les refresh tokens ne sont jamais stockés en clair.
-- [ ] Les attributs SAS sont sérialisés et relus sans perte.
-- [ ] Les TTL et le consentement proviennent de la configuration du client TMS; les valeurs nulles conservent les valeurs par défaut préexistantes.
-- [ ] Le mapping produit `reuseRefreshTokens(false)` pour un client confidentiel autorisé au refresh.
-- [ ] Le registre de clients reste en lecture seule côté TAS; `RegisteredClientRepository.save` n’est pas utilisé/supporté.
-- [ ] `client_credentials` continue à fonctionner avec la persistance active.
-- [ ] Le test transversal défini en TAS-GRANTS-00 constate bien une ligne `oauth2_authorization` pour PLATFORM et SPACE; aucun service composite ne contourne la persistance PLATFORM.
-- [ ] `findById(registeredClientId, principalName)` retrouve un consentement sans paramètre de tenant, et un consentement au plan ORGANIZATION se sauvegarde sans `space_id`.
-- [ ] Les deux tests sentinelles de TAS-GRANTS-00 sont mis à jour plutôt que contournés : `given_current_wiring_then_no_authorization_service_bean_is_declared` et `given_successful_token_when_database_inspected_then_nothing_is_persisted`.
-- [ ] `AuthorizationSaveContractBaselineIntegrationTest` n'observe plus l'enregistreur en mémoire. Son bean déclaré via `@TestConfiguration` masque celui du contexte : il doit soit déléguer au service réel, soit céder la place à une observation directe de la base.
-- [ ] Le chiffrement au repos consomme le port défini par TAS-GRANTS-02A ; aucun second mécanisme n'est introduit.
+- [x] Une autorisation survit au redémarrage de TAS. — `OAuth2AuthorizationRestartAcceptanceTest` : deux contextes Spring successifs, le second retrouve via `findByToken` ce que le premier a émis et fermé.
+- [x] Le schéma refuse les combinaisons invalides de plan et de frontière. — `OAuth2AuthorizationBoundariesConstraintsIntegrationTest`.
+- [x] Une autorisation PLATFORM sans `org_id`/`space_id` et une autorisation SPACE complète peuvent être sauvegardées sans violer de FK. — `AuthorizationSaveContractBaselineIntegrationTest`.
+- [x] La recherche par code/token utilise un hash, sans journaliser ni exposer le secret. — `JpaOAuth2AuthorizationService` ne journalise aucune valeur de token ; le round-trip prouve que la colonne `*_value` ne porte jamais le clair.
+- [x] `findByToken` retrouve chaque type de token sans paramètre tenant grâce à son hash globalement unique.
+- [x] La valeur du device code reste récupérable lors de la validation du `user_code`, puis après `invalidate()` et un nouveau `save()`. — `given_a_device_code_authorization_when_found_invalidated_and_resaved_...`.
+- [x] Les refresh tokens ne sont jamais stockés en clair.
+- [x] Les attributs SAS sont sérialisés et relus sans perte. — `given_attributes_and_state_then_they_round_trip`.
+- [x] Les TTL et le consentement proviennent de la configuration du client TMS; les valeurs nulles conservent les valeurs par défaut préexistantes. — mappage posé en TAS-GRANTS-01, non régressé.
+- [x] Le mapping produit `reuseRefreshTokens(false)` pour un client confidentiel autorisé au refresh.
+- [x] Le registre de clients reste en lecture seule côté TAS; `RegisteredClientRepository.save` n’est pas utilisé/supporté.
+- [x] `client_credentials` continue à fonctionner avec la persistance active. — `ClientCredentialsBaselineIntegrationTest` intégralement vert, persistance active.
+- [x] Le test transversal défini en TAS-GRANTS-00 constate bien une ligne `oauth2_authorization` pour PLATFORM et SPACE; aucun service composite ne contourne la persistance PLATFORM.
+- [x] `findById(registeredClientId, principalName)` retrouve un consentement sans paramètre de tenant, et un consentement au plan ORGANIZATION se sauvegarde sans `space_id`.
+- [x] Les deux tests sentinelles de TAS-GRANTS-00 sont mis à jour plutôt que contournés : `given_current_wiring_then_authorization_and_consent_service_beans_are_declared` et `given_successful_tokens_when_database_inspected_then_one_row_is_persisted_per_plan` (renommés depuis leurs versions TAS-GRANTS-00, qui constataient l'absence exacte de ce que ceux-ci constatent).
+- [x] `AuthorizationSaveContractBaselineIntegrationTest` n'observe plus l'enregistreur en mémoire — il observe directement la ligne persistée par JDBC.
+- [x] Le chiffrement au repos consomme le port défini par TAS-GRANTS-02A ; aucun second mécanisme n'est introduit.
 
 ## Tests attendus
 
