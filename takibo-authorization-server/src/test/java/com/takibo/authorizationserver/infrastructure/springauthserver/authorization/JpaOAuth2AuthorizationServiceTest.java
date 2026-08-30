@@ -228,6 +228,60 @@ class JpaOAuth2AuthorizationServiceTest {
         assertThat(reloaded.<String>getAttribute(OAuth2ParameterNames.STATE)).isEqualTo("the-state-value");
     }
 
+    @Test
+    void given_a_device_code_authorization_when_found_invalidated_and_resaved_then_the_value_and_hash_survive_without_rehashing() {
+        RegisteredClient client = spaceClient();
+        when(registeredClientRepository.findById(client.getId())).thenReturn(client);
+        Instant now = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+        OAuth2Authorization authorization = OAuth2Authorization.withRegisteredClient(client)
+                .principalName("user@takibo.test")
+                .authorizationGrantType(AuthorizationGrantType.DEVICE_CODE)
+                .token(new OAuth2DeviceCode("the-device-code", now, now.plusSeconds(600)))
+                .token(new OAuth2UserCode("THE-USER-CODE", now, now.plusSeconds(600)))
+                .build();
+
+        service.save(authorization);
+        ArgumentCaptor<OAuth2AuthorizationEntity> firstSave = ArgumentCaptor.forClass(OAuth2AuthorizationEntity.class);
+        verify(authorizations).save(firstSave.capture());
+        OAuth2AuthorizationEntity savedEntity = firstSave.getValue();
+
+        // Retrouve par le device code, comme le ferait la validation periodique du client.
+        when(authorizations.findByDeviceCodeHash(savedEntity.getDeviceCodeHash()))
+                .thenReturn(Optional.of(savedEntity));
+        OAuth2Authorization reloaded = service.findByToken(
+                "the-device-code", new OAuth2TokenType(OAuth2ParameterNames.DEVICE_CODE));
+        assertThat(reloaded).isNotNull();
+        assertThat(reloaded.getToken(OAuth2DeviceCode.class).getToken().getTokenValue())
+                .isEqualTo("the-device-code");
+
+        // Invalide et resauvegarde -- exactement le cycle qu'un flux device declenche a
+        // l'approbation ou a l'expiration du device code.
+        OAuth2Authorization invalidated = OAuth2Authorization.from(reloaded)
+                .invalidate(reloaded.getToken(OAuth2DeviceCode.class).getToken())
+                .build();
+        service.save(invalidated);
+
+        ArgumentCaptor<OAuth2AuthorizationEntity> secondSave = ArgumentCaptor.forClass(OAuth2AuthorizationEntity.class);
+        verify(authorizations, org.mockito.Mockito.times(2)).save(secondSave.capture());
+        OAuth2AuthorizationEntity resavedEntity = secondSave.getAllValues().get(1);
+
+        // Le hash ne bouge pas : il reste celui du device code d'origine, jamais un hash du
+        // hash ou d'un chiffre intermediaire recalcule a partir d'une valeur deja scellee.
+        assertThat(resavedEntity.getDeviceCodeHash()).isEqualTo(savedEntity.getDeviceCodeHash());
+
+        when(authorizations.findByDeviceCodeHash(resavedEntity.getDeviceCodeHash()))
+                .thenReturn(Optional.of(resavedEntity));
+        OAuth2Authorization reloadedAfterInvalidation = service.findByToken(
+                "the-device-code", new OAuth2TokenType(OAuth2ParameterNames.DEVICE_CODE));
+
+        assertThat(reloadedAfterInvalidation.getToken(OAuth2DeviceCode.class).getToken().getTokenValue())
+                .isEqualTo("the-device-code");
+        assertThat(reloadedAfterInvalidation.getToken(OAuth2DeviceCode.class).isInvalidated()).isTrue();
+        // Le user code, non touche par l'invalidation du device code, reste lui aussi intact.
+        assertThat(reloadedAfterInvalidation.getToken(OAuth2UserCode.class).getToken().getTokenValue())
+                .isEqualTo("THE-USER-CODE");
+    }
+
     // ---------- findByToken : repartition par type ----------
 
     @Test
