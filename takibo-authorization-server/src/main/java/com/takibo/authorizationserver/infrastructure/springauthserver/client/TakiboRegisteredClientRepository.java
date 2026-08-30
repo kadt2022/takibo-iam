@@ -23,6 +23,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -67,8 +68,28 @@ public class TakiboRegisteredClientRepository implements RegisteredClientReposit
                 "OAuth2 clients are managed via the management-service, not the authorization server");
     }
 
+    /**
+     * Seul client PLATFORM du récit (in-memory, {@link InMemoryPlatformOAuthClientResolver}) :
+     * {@code postman-client} n'a pas de ligne {@code oauth2_clients} à interroger par
+     * identifiant technique, {@link #findById} doit donc le reconnaître autrement. Migrer ce
+     * client vers TMS est explicitement hors périmètre (TAS-GRANTS-01/02) ; ce nom reste donc
+     * seul à porter cette identité, comme il l'est déjà dans
+     * {@link InMemoryPlatformOAuthClientResolver} et les fixtures de test.
+     */
+    private static final String PLATFORM_CLIENT_ID = "postman-client";
+
     @Override
     public RegisteredClient findById(String id) {
+        // TAS-GRANTS-02 : OAuth2AuthorizationService persiste registeredClientId et le relit
+        // pour reconstruire une autorisation. postman-client a un identifiant technique stable
+        // (InMemoryPlatformOAuthClientResolver.REGISTERED_CLIENT_ID) mais aucune ligne TMS :
+        // sans ce détour, une autorisation PLATFORM redeviendrait introuvable après ce point.
+        Optional<ResolvedOAuthClient> platformClient = resolvedOAuthClientResolver
+                .resolve(PLATFORM_CLIENT_ID)
+                .filter(client -> client.registeredClientId().equals(id));
+        if (platformClient.isPresent()) {
+            return toRegisteredClient(platformClient.get());
+        }
         return clients.findById(UUID.fromString(id))
                 .map(this::toRegisteredClient)
                 .orElse(null);

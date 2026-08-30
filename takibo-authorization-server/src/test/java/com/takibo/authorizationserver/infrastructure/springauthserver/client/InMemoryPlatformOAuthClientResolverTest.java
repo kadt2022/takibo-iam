@@ -50,6 +50,21 @@ class InMemoryPlatformOAuthClientResolverTest {
     }
 
     @Test
+    void given_two_separate_resolver_instances_then_the_registered_client_id_is_identical() {
+        // Simule deux redemarrages : OAuth2AuthorizationService (TAS-GRANTS-02) persiste
+        // registeredClientId et le relit apres coup. Un UUID different a chaque instance
+        // romprait ce lien des le premier redemarrage.
+        when(passwordEncoder.encode(eq("dev-secret"))).thenReturn("encoded-secret");
+        InMemoryPlatformOAuthClientResolver first =
+                new InMemoryPlatformOAuthClientResolver(passwordEncoder, "dev-secret");
+        InMemoryPlatformOAuthClientResolver second =
+                new InMemoryPlatformOAuthClientResolver(passwordEncoder, "dev-secret");
+
+        assertThat(first.resolve("postman-client").orElseThrow().registeredClientId())
+                .isEqualTo(second.resolve("postman-client").orElseThrow().registeredClientId());
+    }
+
+    @Test
     void given_two_resolutions_then_the_same_instance_is_returned_without_re_encoding() {
         // Le secret est code une seule fois, a la construction : verifie qu'aucun second
         // appel au PasswordEncoder n'a lieu a la resolution.

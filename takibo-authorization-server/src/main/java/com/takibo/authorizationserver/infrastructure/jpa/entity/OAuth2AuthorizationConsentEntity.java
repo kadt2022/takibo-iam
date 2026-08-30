@@ -11,6 +11,13 @@ import lombok.*;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
+/**
+ * Ligne {@code oauth2_authorization_consent} (TAS-GRANTS-02).
+ * <p>
+ * Clé de lecture globale sur {@code (registered_client_id, principal_name)} — voir
+ * V202608290001 : {@code OAuth2AuthorizationConsentService.findById(registeredClientId,
+ * principalName)} n'a aucun paramètre de tenant.
+ */
 @Getter
 @Setter
 @NoArgsConstructor
@@ -21,8 +28,8 @@ import java.util.UUID;
         name = "oauth2_authorization_consent",
         uniqueConstraints = {
                 @UniqueConstraint(
-                        name = "uk_oauth2_consent_client_principal",
-                        columnNames = {"org_id", "space_id", "registered_client_id", "principal_account_id"}
+                        name = "uk_oauth2_consent_client_principal_global",
+                        columnNames = {"registered_client_id", "principal_name"}
                 )
         },
         indexes = {
@@ -37,17 +44,32 @@ public class OAuth2AuthorizationConsentEntity {
     @Column(name = "id", nullable = false)
     private UUID id;
 
-    @Column(name = "org_id", nullable = false)
+    /** NULL = PLATFORM. */
+    @Column(name = "org_id")
     private UUID orgId;
 
-    @Column(name = "space_id", nullable = false)
+    /** NULL pour PLATFORM et ORGANIZATION ; requis pour SPACE. */
+    @Column(name = "space_id")
     private UUID spaceId;
 
+    /** {@code RegisteredClient.getId()}, jamais le {@code client_id} public. */
     @Column(name = "registered_client_id", nullable = false, length = 128)
     private String registeredClientId;
 
+    /**
+     * Toujours requis : un écran de consentement suppose un compte déjà authentifié. Ne
+     * porte pas le sujet du couple de lecture — voir {@link #principalName}.
+     */
     @Column(name = "principal_account_id", nullable = false)
     private UUID principalAccountId;
+
+    /** HUMAN dans tous les cas observés — un client_credentials ne consent jamais. */
+    @Column(name = "subject_type", nullable = false, length = 20)
+    private String subjectType;
+
+    /** Clé de lecture de {@code findById}, avec {@link #registeredClientId}. */
+    @Column(name = "principal_name", nullable = false, length = 255)
+    private String principalName;
 
     @Column(name = "authorities", nullable = false, length = 2000)
     private String authorities;

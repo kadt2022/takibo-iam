@@ -16,9 +16,27 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.time.OffsetDateTime;
-import java.util.Map;
 import java.util.UUID;
 
+/**
+ * Ligne {@code oauth2_authorization} (TAS-GRANTS-02) : autorisation, codes, tokens et
+ * consentement implicite d'une émission OAuth2/OIDC.
+ * <p>
+ * {@code org_id}/{@code space_id} suivent {@code ResolvedOAuthClient.plan()} : tous deux NULL
+ * pour PLATFORM, {@code org_id} seul pour ORGANIZATION, les deux pour SPACE — voir
+ * V202608290001. {@code subjectType}/{@code principalName} distinguent CLIENT_APP
+ * ({@code client_credentials} : le principal est le client, {@code principalAccountId} reste
+ * NULL) de HUMAN ({@code principalAccountId} peut rester NULL le temps qu'un device code soit
+ * approuvé).
+ * <p>
+ * Les colonnes {@code *_value} portent un chiffre autoportant (voir
+ * {@link com.takibo.authorizationserver.domain.authorization.EncryptedTokenValue}), jamais un
+ * clair ; les colonnes {@code *_hash} sont la clé de recherche
+ * ({@link com.takibo.authorizationserver.domain.authorization.TokenHash}). {@code attributes}
+ * et chaque {@code *_metadata} portent du JSON déjà sérialisé par l'{@code ObjectMapper}
+ * configuré avec les modules Jackson de Spring Authorization Server — cette entité ne fait
+ * aucune conversion, elle relaie le texte tel quel vers/depuis la colonne {@code jsonb}.
+ */
 @Getter
 @Setter
 @NoArgsConstructor
@@ -45,17 +63,29 @@ public class OAuth2AuthorizationEntity {
     @Column(name = "id", nullable = false)
     private UUID id;
 
-    @Column(name = "org_id", nullable = false)
+    /** NULL = PLATFORM. Jamais renseigné sans que le client résolu ne le porte lui-même. */
+    @Column(name = "org_id")
     private UUID orgId;
 
-    @Column(name = "space_id", nullable = false)
+    /** NULL pour PLATFORM et ORGANIZATION ; requis pour SPACE. */
+    @Column(name = "space_id")
     private UUID spaceId;
 
+    /** {@code RegisteredClient.getId()}, jamais le {@code client_id} public. */
     @Column(name = "registered_client_id", nullable = false, length = 128)
     private String registeredClientId;
 
-    @Column(name = "principal_account_id", nullable = false)
+    /** NULL pour CLIENT_APP, et pour un sujet HUMAN pas encore approuvé (device code). */
+    @Column(name = "principal_account_id")
     private UUID principalAccountId;
+
+    /** {@code CLIENT_APP} ou {@code HUMAN} — voir la javadoc de classe. */
+    @Column(name = "subject_type", nullable = false, length = 20)
+    private String subjectType;
+
+    /** {@code OAuth2Authorization.getPrincipalName()} tel quel. */
+    @Column(name = "principal_name", nullable = false, length = 255)
+    private String principalName;
 
     @Column(name = "authorization_grant_type", nullable = false, length = 100)
     private String authorizationGrantType;
@@ -65,12 +95,15 @@ public class OAuth2AuthorizationEntity {
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "attributes", columnDefinition = "jsonb")
-    private Map<String, Object> attributes;
+    private String attributes;
 
     @Column(name = "state", length = 500)
     private String state;
 
-    // ========== AUTHORIZATION CODE (HASH-ONLY) ==========
+    // ========== AUTHORIZATION CODE (VALUE CHIFFRÉE + HASH) ==========
+
+    @Column(name = "authorization_code_value", length = 500)
+    private String authorizationCodeValue;
 
     @Column(name = "authorization_code_hash", columnDefinition = "char(64)")
     private String authorizationCodeHash;
@@ -83,7 +116,7 @@ public class OAuth2AuthorizationEntity {
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "authorization_code_metadata", columnDefinition = "jsonb")
-    private Map<String, Object> authorizationCodeMetadata;
+    private String authorizationCodeMetadata;
 
     // ========== ACCESS TOKEN (VALUE + HASH) ==========
 
@@ -101,7 +134,7 @@ public class OAuth2AuthorizationEntity {
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "access_token_metadata", columnDefinition = "jsonb")
-    private Map<String, Object> accessTokenMetadata;
+    private String accessTokenMetadata;
 
     @Column(name = "access_token_type", length = 100)
     private String accessTokenType;
@@ -125,7 +158,7 @@ public class OAuth2AuthorizationEntity {
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "oidc_id_token_metadata", columnDefinition = "jsonb")
-    private Map<String, Object> oidcIdTokenMetadata;
+    private String oidcIdTokenMetadata;
 
     // ========== REFRESH TOKEN (VALUE + HASH) ==========
 
@@ -143,9 +176,12 @@ public class OAuth2AuthorizationEntity {
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "refresh_token_metadata", columnDefinition = "jsonb")
-    private Map<String, Object> refreshTokenMetadata;
+    private String refreshTokenMetadata;
 
-    // ========== USER CODE (HASH-ONLY) ==========
+    // ========== USER CODE (VALUE CHIFFRÉE + HASH) ==========
+
+    @Column(name = "user_code_value", length = 500)
+    private String userCodeValue;
 
     @Column(name = "user_code_hash", columnDefinition = "char(64)")
     private String userCodeHash;
@@ -158,9 +194,12 @@ public class OAuth2AuthorizationEntity {
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "user_code_metadata", columnDefinition = "jsonb")
-    private Map<String, Object> userCodeMetadata;
+    private String userCodeMetadata;
 
-    // ========== DEVICE CODE (HASH-ONLY) ==========
+    // ========== DEVICE CODE (VALUE CHIFFRÉE + HASH) ==========
+
+    @Column(name = "device_code_value", length = 500)
+    private String deviceCodeValue;
 
     @Column(name = "device_code_hash", columnDefinition = "char(64)")
     private String deviceCodeHash;
@@ -173,7 +212,7 @@ public class OAuth2AuthorizationEntity {
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "device_code_metadata", columnDefinition = "jsonb")
-    private Map<String, Object> deviceCodeMetadata;
+    private String deviceCodeMetadata;
 
     // ========== TIMESTAMPS ==========
 
