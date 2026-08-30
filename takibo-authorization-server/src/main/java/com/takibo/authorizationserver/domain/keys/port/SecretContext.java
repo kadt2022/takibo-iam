@@ -43,4 +43,22 @@ public record SecretContext(String type, String recordId) {
     public static SecretContext signingKeyMaterial(String kid) {
         return new SecretContext("tas_signing_keys.private_key_encrypted", kid);
     }
+
+    /**
+     * Valeur d'un token/code porte par une ligne {@code oauth2_authorization} (TAS-GRANTS-02).
+     * <p>
+     * {@code column} entre dans le type, pas seulement {@code authorizationId} : une meme
+     * ligne porte jusqu'a six valeurs chiffrees (code, access token, refresh token, ID token,
+     * device code, user code). Sans le distinguer, le chiffre d'un refresh token pourrait
+     * etre recopie dans la colonne {@code access_token_value} de la meme ligne et s'y
+     * dechiffrer sans encombre — l'AAD n'aurait rien a y redire, puisque {@code recordId}
+     * suffirait a l'authentifier. Avec le nom de colonne dans le type, ce deplacement echoue
+     * au dechiffrement comme n'importe quel autre.
+     *
+     * @param column         nom de la colonne {@code *_value}, ex. {@code access_token_value}
+     * @param authorizationId identifiant de la ligne {@code oauth2_authorization}
+     */
+    public static SecretContext oauth2AuthorizationValue(String column, String authorizationId) {
+        return new SecretContext("oauth2_authorization." + column, authorizationId);
+    }
 }
