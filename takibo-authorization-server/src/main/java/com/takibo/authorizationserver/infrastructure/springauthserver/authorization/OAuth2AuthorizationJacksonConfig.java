@@ -35,6 +35,13 @@ public class OAuth2AuthorizationJacksonConfig {
 
     public static final String OAUTH2_AUTHORIZATION_OBJECT_MAPPER = "oauth2AuthorizationObjectMapper";
 
+    // Deprecation assumee, justifiee dans la javadoc de classe : la generation Jackson 3 de
+    // ces modules (tools.jackson) n'a pas d'equivalent pour un ObjectMapper Jackson 2, celui
+    // que tout le reste de l'application utilise. Migrer l'un sans l'autre romprait cette
+    // classe ; migrer les deux est hors perimetre de ce recit.
+    // "removal", pas seulement "deprecation" : @Deprecated(forRemoval = true) declenche la
+    // categorie d'avertissement javac distincte -Xlint:removal.
+    @SuppressWarnings({"deprecation", "removal"})
     @Bean(OAUTH2_AUTHORIZATION_OBJECT_MAPPER)
     public ObjectMapper oauth2AuthorizationObjectMapper() {
         ObjectMapper objectMapper = new ObjectMapper();
