@@ -7,13 +7,10 @@ import org.junit.jupiter.api.condition.EnabledIf;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.context.annotation.Bean;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.core.OAuth2AccessToken;
-import org.springframework.security.oauth2.server.authorization.InMemoryOAuth2AuthorizationService;
 import org.springframework.security.oauth2.server.authorization.OAuth2Authorization;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationService;
 import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
@@ -28,32 +25,24 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Fige ce que Spring Authorization Server confie a {@code OAuth2AuthorizationService.save()}
- * apres une emission {@code client_credentials} reussie (TAS-GRANTS-00).
+ * Fige ce que {@code OAuth2AuthorizationService.save()} persiste réellement après une
+ * émission {@code client_credentials} réussie (TAS-GRANTS-00, mis à jour par TAS-GRANTS-02).
  * <p>
- * L'application ne declare aucun bean de ce type : SAS fabrique son implementation en memoire
- * et la garde comme objet partage de son configurer, hors du contexte. Le contrat de
- * sauvegarde est donc inobservable en l'etat.
- * <p>
- * Ce test declare un service enregistreur <b>cote test uniquement</b>. SAS traite un bean
- * fourni exactement comme son implementation par defaut : ce sont les memes providers qui
- * appellent {@code save()}, avec les memes arguments. Ce qui est observe ici est donc bien le
- * contrat de production, pas un artefact du test.
- * <p>
- * C'est ce contrat que le service persistant du recit 02 devra honorer a l'identique. Deux
- * points meritent l'attention a ce moment-la :
+ * TAS-GRANTS-00 observait ce contrat via un enregistreur déclaré côté test uniquement, faute
+ * de bean de production. Ce détour a disparu avec lui : {@code JpaOAuth2AuthorizationService}
+ * est désormais le bean réel du contexte, et un second bean de ce type déclaré ici l'aurait
+ * rendu ambigu pour Spring Authorization Server. Ce test observe donc directement la ligne
+ * {@code oauth2_authorization} laissée en base — la même persistance que verrait un
+ * redémarrage, pas un artefact de test.
  * <ul>
  *   <li>{@code registeredClientId} porte l'identifiant technique du client, jamais le
- *       {@code client_id} public — or la contrainte {@code fk_oauth2_authz_client_scope}
- *       reference aujourd'hui le second ;</li>
- *   <li>le client PLATFORM produit une autorisation sans organisation ni space, alors que
- *       {@code oauth2_authorization.org_id} est aujourd'hui {@code NOT NULL}.</li>
+ *       {@code client_id} public ;</li>
+ *   <li>le client PLATFORM produit une autorisation sans organisation ni space.</li>
  * </ul>
  */
 @SpringBootTest(
@@ -69,54 +58,10 @@ class AuthorizationSaveContractBaselineIntegrationTest extends TasPostgresBaseli
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final HttpClient HTTP = HttpClient.newHttpClient();
 
-    @TestConfiguration
-    static class RecordingAuthorizationServiceConfiguration {
-        @Bean
-        RecordingOAuth2AuthorizationService oAuth2AuthorizationService() {
-            return new RecordingOAuth2AuthorizationService();
-        }
-    }
-
-    /** Delegue au service en memoire de SAS et conserve ce qui lui est confie. */
-    static class RecordingOAuth2AuthorizationService implements OAuth2AuthorizationService {
-
-        private final OAuth2AuthorizationService delegate = new InMemoryOAuth2AuthorizationService();
-        private final List<OAuth2Authorization> saved = new CopyOnWriteArrayList<>();
-
-        @Override
-        public void save(OAuth2Authorization authorization) {
-            saved.add(authorization);
-            delegate.save(authorization);
-        }
-
-        @Override
-        public void remove(OAuth2Authorization authorization) {
-            delegate.remove(authorization);
-        }
-
-        @Override
-        public OAuth2Authorization findById(String id) {
-            return delegate.findById(id);
-        }
-
-        @Override
-        public OAuth2Authorization findByToken(String token, OAuth2TokenType tokenType) {
-            return delegate.findByToken(token, tokenType);
-        }
-
-        List<OAuth2Authorization> saved() {
-            return List.copyOf(saved);
-        }
-
-        void reset() {
-            saved.clear();
-        }
-    }
-
     @LocalServerPort private int port;
     @Autowired private JdbcTemplate jdbc;
     @Autowired private PasswordEncoder passwordEncoder;
-    @Autowired private RecordingOAuth2AuthorizationService authorizationService;
+    @Autowired private OAuth2AuthorizationService authorizationService;
 
     @Value("${takibo.dev.postman-client.secret}")
     private String platformClientSecret;
@@ -127,7 +72,6 @@ class AuthorizationSaveContractBaselineIntegrationTest extends TasPostgresBaseli
     void seed() {
         dataset = new TasBaselineDataset(jdbc, passwordEncoder);
         dataset.reset();
-        authorizationService.reset();
     }
 
     @Test
@@ -136,22 +80,23 @@ class AuthorizationSaveContractBaselineIntegrationTest extends TasPostgresBaseli
                 TasBaselineDataset.PLATFORM_CLIENT_ID, platformClientSecret, "api.read");
         assertThat(response.statusCode()).isEqualTo(200);
 
-        assertThat(authorizationService.saved()).hasSize(1);
-        OAuth2Authorization authorization = authorizationService.saved().get(0);
+        Map<String, Object> row = singlePersistedAuthorizationRow();
 
-        assertThat(authorization.getPrincipalName())
-                .isEqualTo(TasBaselineDataset.PLATFORM_CLIENT_ID);
-        assertThat(authorization.getAuthorizationGrantType().getValue())
-                .isEqualTo("client_credentials");
-        assertThat(authorization.getAuthorizedScopes()).containsExactly("api.read");
+        assertThat(row.get("principal_name")).isEqualTo(TasBaselineDataset.PLATFORM_CLIENT_ID);
+        assertThat(row.get("authorization_grant_type")).isEqualTo("client_credentials");
+        assertThat(row.get("authorized_scopes")).isEqualTo("api.read");
+        assertThat(row.get("subject_type")).isEqualTo("CLIENT_APP");
+        assertThat(row.get("principal_account_id")).isNull();
+        // PLATFORM : ni organisation, ni space.
+        assertThat(row.get("org_id")).isNull();
+        assertThat(row.get("space_id")).isNull();
 
         // Le client PLATFORM est in-memory : son identifiant technique ne correspond a
-        // aucune ligne de oauth2_clients. Persister cette autorisation telle quelle
-        // violerait fk_oauth2_authz_client_scope, en plus de org_id NOT NULL. Le recit 02
-        // doit traiter ce cas, pas le contourner.
+        // aucune ligne de oauth2_clients. fk_oauth2_authz_client_scope, qui referencait le
+        // client_id public, a ete retiree pour cette raison meme (V202608290001).
         Long matchingClientRows = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM oauth2_clients WHERE id = CAST(? AS uuid)",
-                Long.class, authorization.getRegisteredClientId());
+                Long.class, row.get("registered_client_id"));
         assertThat(matchingClientRows).isZero();
     }
 
@@ -163,37 +108,43 @@ class AuthorizationSaveContractBaselineIntegrationTest extends TasPostgresBaseli
                 TasBaselineDataset.SPACE_CLIENT_SCOPE);
         assertThat(response.statusCode()).isEqualTo(200);
 
-        assertThat(authorizationService.saved()).hasSize(1);
-        OAuth2Authorization authorization = authorizationService.saved().get(0);
+        Map<String, Object> row = singlePersistedAuthorizationRow();
 
-        // Identifiant technique, jamais le client_id public : le schema actuel fait pourtant
-        // pointer fk_oauth2_authz_client_scope vers oauth2_clients.client_id.
-        assertThat(authorization.getRegisteredClientId())
+        // Identifiant technique, jamais le client_id public.
+        assertThat(row.get("registered_client_id"))
                 .isEqualTo(TasBaselineDataset.SPACE_CLIENT_UUID.toString());
-        assertThat(authorization.getPrincipalName())
-                .isEqualTo(TasBaselineDataset.SPACE_CLIENT_ID);
-        assertThat(authorization.getAuthorizedScopes())
-                .containsExactly(TasBaselineDataset.SPACE_CLIENT_SCOPE);
+        assertThat(row.get("principal_name")).isEqualTo(TasBaselineDataset.SPACE_CLIENT_ID);
+        assertThat(row.get("authorized_scopes")).isEqualTo(TasBaselineDataset.SPACE_CLIENT_SCOPE);
+        assertThat(row.get("org_id")).isEqualTo(TasBaselineDataset.ORG_ID);
+        assertThat(row.get("space_id")).isEqualTo(TasBaselineDataset.SPACE_ID);
     }
 
     @Test
-    void given_success_then_saved_access_token_matches_the_one_returned_to_the_client() {
+    void given_success_then_saved_access_token_is_encrypted_but_reads_back_as_the_one_returned() {
         HttpResponse<String> response = requestToken(
                 TasBaselineDataset.SPACE_CLIENT_ID,
                 TasBaselineDataset.SPACE_CLIENT_SECRET,
                 TasBaselineDataset.SPACE_CLIENT_SCOPE);
         String returned = accessToken(response);
 
-        OAuth2Authorization authorization = authorizationService.saved().get(0);
-        OAuth2Authorization.Token<OAuth2AccessToken> token =
-                authorization.getToken(OAuth2AccessToken.class);
+        Map<String, Object> row = singlePersistedAuthorizationRow();
 
-        assertThat(token).isNotNull();
-        assertThat(token.getToken().getTokenValue()).isEqualTo(returned);
-        assertThat(token.getToken().getIssuedAt()).isNotNull();
-        assertThat(token.getToken().getExpiresAt()).isNotNull();
+        // Jamais en clair en base...
+        assertThat(row.get("access_token_value")).isNotEqualTo(returned);
+        assertThat((String) row.get("access_token_value")).contains("$");
+        assertThat(row.get("access_token_hash")).isNotNull();
+        assertThat(row.get("access_token_issued_at")).isNotNull();
+        assertThat(row.get("access_token_expires_at")).isNotNull();
+        // ... mais OAuth2AuthorizationService.findByToken doit retrouver exactement ce qui a
+        // ete emis : c'est le contrat que Spring Authorization Server exige pour introspecter
+        // ou revoquer ce meme token plus tard.
+        OAuth2Authorization reloaded = authorizationService.findByToken(
+                returned, OAuth2TokenType.ACCESS_TOKEN);
+        assertThat(reloaded).isNotNull();
+        assertThat(reloaded.getToken(OAuth2AccessToken.class).getToken().getTokenValue())
+                .isEqualTo(returned);
         // Aucun refresh token en client_credentials : la RFC l'interdit.
-        assertThat(authorization.getRefreshToken()).isNull();
+        assertThat(row.get("refresh_token_value")).isNull();
     }
 
     @Test
@@ -201,7 +152,13 @@ class AuthorizationSaveContractBaselineIntegrationTest extends TasPostgresBaseli
         requestToken(TasBaselineDataset.SPACE_CLIENT_ID, "not-the-secret",
                 TasBaselineDataset.SPACE_CLIENT_SCOPE);
 
-        assertThat(authorizationService.saved()).isEmpty();
+        assertThat(dataset.countAuthorizationRows()).isZero();
+    }
+
+    private Map<String, Object> singlePersistedAuthorizationRow() {
+        List<Map<String, Object>> rows = jdbc.queryForList("SELECT * FROM oauth2_authorization");
+        assertThat(rows).hasSize(1);
+        return rows.get(0);
     }
 
     // ---------- Appel HTTP ----------
