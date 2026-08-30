@@ -11,8 +11,7 @@ class TokenHashTest {
     void given_a_value_then_the_hash_is_64_lowercase_hex_characters() {
         String hash = TokenHash.sha256Hex("a-token-value");
 
-        assertThat(hash).hasSize(64);
-        assertThat(hash).matches("^[a-f0-9]{64}$");
+        assertThat(hash).hasSize(64).matches("^[a-f0-9]{64}$");
     }
 
     @Test

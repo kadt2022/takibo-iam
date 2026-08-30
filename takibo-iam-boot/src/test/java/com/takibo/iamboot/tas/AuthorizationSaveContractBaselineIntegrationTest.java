@@ -82,10 +82,10 @@ class AuthorizationSaveContractBaselineIntegrationTest extends TasPostgresBaseli
 
         Map<String, Object> row = singlePersistedAuthorizationRow();
 
-        assertThat(row.get("principal_name")).isEqualTo(TasBaselineDataset.PLATFORM_CLIENT_ID);
-        assertThat(row.get("authorization_grant_type")).isEqualTo("client_credentials");
-        assertThat(row.get("authorized_scopes")).isEqualTo("api.read");
-        assertThat(row.get("subject_type")).isEqualTo("CLIENT_APP");
+        assertThat(row).containsEntry("principal_name", TasBaselineDataset.PLATFORM_CLIENT_ID);
+        assertThat(row).containsEntry("authorization_grant_type", "client_credentials");
+        assertThat(row).containsEntry("authorized_scopes", "api.read");
+        assertThat(row).containsEntry("subject_type", "CLIENT_APP");
         assertThat(row.get("principal_account_id")).isNull();
         // PLATFORM : ni organisation, ni space.
         assertThat(row.get("org_id")).isNull();
@@ -111,12 +111,12 @@ class AuthorizationSaveContractBaselineIntegrationTest extends TasPostgresBaseli
         Map<String, Object> row = singlePersistedAuthorizationRow();
 
         // Identifiant technique, jamais le client_id public.
-        assertThat(row.get("registered_client_id"))
-                .isEqualTo(TasBaselineDataset.SPACE_CLIENT_UUID.toString());
-        assertThat(row.get("principal_name")).isEqualTo(TasBaselineDataset.SPACE_CLIENT_ID);
-        assertThat(row.get("authorized_scopes")).isEqualTo(TasBaselineDataset.SPACE_CLIENT_SCOPE);
-        assertThat(row.get("org_id")).isEqualTo(TasBaselineDataset.ORG_ID);
-        assertThat(row.get("space_id")).isEqualTo(TasBaselineDataset.SPACE_ID);
+        assertThat(row).containsEntry(
+                "registered_client_id", TasBaselineDataset.SPACE_CLIENT_UUID.toString());
+        assertThat(row).containsEntry("principal_name", TasBaselineDataset.SPACE_CLIENT_ID);
+        assertThat(row).containsEntry("authorized_scopes", TasBaselineDataset.SPACE_CLIENT_SCOPE);
+        assertThat(row).containsEntry("org_id", TasBaselineDataset.ORG_ID);
+        assertThat(row).containsEntry("space_id", TasBaselineDataset.SPACE_ID);
     }
 
     @Test
@@ -130,7 +130,7 @@ class AuthorizationSaveContractBaselineIntegrationTest extends TasPostgresBaseli
         Map<String, Object> row = singlePersistedAuthorizationRow();
 
         // Jamais en clair en base...
-        assertThat(row.get("access_token_value")).isNotEqualTo(returned);
+        assertThat(row).doesNotContainEntry("access_token_value", returned);
         assertThat((String) row.get("access_token_value")).contains("$");
         assertThat(row.get("access_token_hash")).isNotNull();
         assertThat(row.get("access_token_issued_at")).isNotNull();

@@ -11,7 +11,7 @@ import org.springframework.security.oauth2.server.authorization.OAuth2Authorizat
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationConsentService;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.Assert;
 import org.springframework.util.CollectionUtils;
@@ -30,7 +30,7 @@ import java.util.stream.Collectors;
  * reçoit jamais d'identifiant de compte de Spring Authorization Server, seulement un
  * {@code principalName} — voir V202608290003.
  */
-@Component
+@Service
 @RequiredArgsConstructor
 public class JpaOAuth2AuthorizationConsentService implements OAuth2AuthorizationConsentService {
 

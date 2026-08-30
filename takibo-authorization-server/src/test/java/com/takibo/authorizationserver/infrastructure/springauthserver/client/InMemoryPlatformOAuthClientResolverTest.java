@@ -54,7 +54,7 @@ class InMemoryPlatformOAuthClientResolverTest {
         // Simule deux redemarrages : OAuth2AuthorizationService (TAS-GRANTS-02) persiste
         // registeredClientId et le relit apres coup. Un UUID different a chaque instance
         // romprait ce lien des le premier redemarrage.
-        when(passwordEncoder.encode(eq("dev-secret"))).thenReturn("encoded-secret");
+        when(passwordEncoder.encode("dev-secret")).thenReturn("encoded-secret");
         InMemoryPlatformOAuthClientResolver first =
                 new InMemoryPlatformOAuthClientResolver(passwordEncoder, "dev-secret");
         InMemoryPlatformOAuthClientResolver second =

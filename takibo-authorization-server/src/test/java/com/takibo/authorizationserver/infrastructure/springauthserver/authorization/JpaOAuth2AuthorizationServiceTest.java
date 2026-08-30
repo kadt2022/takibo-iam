@@ -39,6 +39,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -262,7 +263,7 @@ class JpaOAuth2AuthorizationServiceTest {
         service.save(invalidated);
 
         ArgumentCaptor<OAuth2AuthorizationEntity> secondSave = ArgumentCaptor.forClass(OAuth2AuthorizationEntity.class);
-        verify(authorizations, org.mockito.Mockito.times(2)).save(secondSave.capture());
+        verify(authorizations, times(2)).save(secondSave.capture());
         OAuth2AuthorizationEntity resavedEntity = secondSave.getAllValues().get(1);
 
         // Le hash ne bouge pas : il reste celui du device code d'origine, jamais un hash du
@@ -348,8 +349,9 @@ class JpaOAuth2AuthorizationServiceTest {
         when(registeredClientRepository.findById(client.getId())).thenReturn(null);
         when(authorizations.findById(UUID.fromString(authorization.getId())))
                 .thenReturn(Optional.of(entity));
+        String authorizationId = authorization.getId();
 
-        assertThatThrownBy(() -> service.findById(authorization.getId()))
+        assertThatThrownBy(() -> service.findById(authorizationId))
                 .isInstanceOf(DataRetrievalFailureException.class);
     }
 

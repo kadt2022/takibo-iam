@@ -28,7 +28,7 @@ import org.springframework.security.oauth2.server.authorization.OAuth2Authorizat
 import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.Assert;
 import org.springframework.util.CollectionUtils;
@@ -70,7 +70,7 @@ import static com.takibo.authorizationserver.infrastructure.springauthserver.aut
  *       compte qui n'existe pas encore et n'entre pas dans le périmètre de ce récit.</li>
  * </ul>
  */
-@Component
+@Service
 @Slf4j
 public class JpaOAuth2AuthorizationService implements OAuth2AuthorizationService {
 

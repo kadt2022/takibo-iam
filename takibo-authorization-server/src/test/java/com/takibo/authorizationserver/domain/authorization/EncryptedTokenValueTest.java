@@ -60,7 +60,9 @@ class EncryptedTokenValueTest {
 
     @Test
     void given_a_null_encrypted_value_then_construction_fails_closed() {
-        assertThatThrownBy(() -> new EncryptedTokenValue(null, "a".repeat(64)))
+        String validHash = "a".repeat(64);
+
+        assertThatThrownBy(() -> new EncryptedTokenValue(null, validHash))
                 .isInstanceOf(NullPointerException.class);
     }
 

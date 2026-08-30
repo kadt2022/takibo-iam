@@ -75,9 +75,10 @@ class OAuth2AuthorizationBoundariesConstraintsIntegrationTest extends TasPostgre
     void given_space_without_org_then_it_is_rejected() {
         // La combinaison qu'aucun plan ne represente : ORGANIZATION exige org sans space,
         // SPACE exige les deux, PLATFORM aucun des deux. Un space sans org n'est aucun d'eux.
+        UUID id = UUID.randomUUID();
+
         assertThatThrownBy(() -> insertAuthorization(
-                UUID.randomUUID(), null, TasBaselineDataset.SPACE_ID,
-                "CLIENT_APP", null, "orphan-space"))
+                id, null, TasBaselineDataset.SPACE_ID, "CLIENT_APP", null, "orphan-space"))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
@@ -85,8 +86,10 @@ class OAuth2AuthorizationBoundariesConstraintsIntegrationTest extends TasPostgre
     void given_a_client_app_subject_with_a_principal_account_then_it_is_rejected() {
         // client_credentials : le principal EST le client (OAuth2Authorization.principalName
         // porte le client_id), jamais un compte humain.
+        UUID id = UUID.randomUUID();
+
         assertThatThrownBy(() -> insertAuthorization(
-                UUID.randomUUID(), TasBaselineDataset.ORG_ID, TasBaselineDataset.SPACE_ID,
+                id, TasBaselineDataset.ORG_ID, TasBaselineDataset.SPACE_ID,
                 "CLIENT_APP", TasBaselineDataset.ACCOUNT_ID, TasBaselineDataset.SPACE_CLIENT_ID))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
@@ -111,8 +114,9 @@ class OAuth2AuthorizationBoundariesConstraintsIntegrationTest extends TasPostgre
 
     @Test
     void given_an_unknown_subject_type_then_it_is_rejected() {
-        assertThatThrownBy(() -> insertAuthorization(
-                UUID.randomUUID(), null, null, "ROBOT", null, "postman-client"))
+        UUID id = UUID.randomUUID();
+
+        assertThatThrownBy(() -> insertAuthorization(id, null, null, "ROBOT", null, "postman-client"))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
@@ -137,9 +141,9 @@ class OAuth2AuthorizationBoundariesConstraintsIntegrationTest extends TasPostgre
         // ce que V202608270001 a du corriger pour tas_signing_keys.
         String hash = "a".repeat(64);
         insertAuthorizationWithAccessTokenHash(UUID.randomUUID(), null, null, hash);
+        UUID secondId = UUID.randomUUID();
 
-        assertThatThrownBy(() -> insertAuthorizationWithAccessTokenHash(
-                UUID.randomUUID(), null, null, hash))
+        assertThatThrownBy(() -> insertAuthorizationWithAccessTokenHash(secondId, null, null, hash))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
@@ -148,9 +152,10 @@ class OAuth2AuthorizationBoundariesConstraintsIntegrationTest extends TasPostgre
         // Globale veut dire globale : meme a travers deux frontieres differentes.
         String hash = "b".repeat(64);
         insertAuthorizationWithAccessTokenHash(UUID.randomUUID(), null, null, hash);
+        UUID secondId = UUID.randomUUID();
 
         assertThatThrownBy(() -> insertAuthorizationWithAccessTokenHash(
-                UUID.randomUUID(), TasBaselineDataset.ORG_ID, TasBaselineDataset.SPACE_ID, hash))
+                secondId, TasBaselineDataset.ORG_ID, TasBaselineDataset.SPACE_ID, hash))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
@@ -186,9 +191,10 @@ class OAuth2AuthorizationBoundariesConstraintsIntegrationTest extends TasPostgre
 
     @Test
     void given_a_consent_space_without_org_then_it_is_rejected() {
+        UUID id = UUID.randomUUID();
+
         assertThatThrownBy(() -> insertConsent(
-                UUID.randomUUID(), null, TasBaselineDataset.SPACE_ID,
-                "orphan-space-client", "baseline@takibo.test"))
+                id, null, TasBaselineDataset.SPACE_ID, "orphan-space-client", "baseline@takibo.test"))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
@@ -216,9 +222,10 @@ class OAuth2AuthorizationBoundariesConstraintsIntegrationTest extends TasPostgre
         insertSecondOrganizationWithAccount();
         insertConsent(UUID.randomUUID(), TasBaselineDataset.ORG_ID, null,
                 TasBaselineDataset.ACCOUNT_ID, "shared-client", "shared@takibo.test");
+        UUID secondId = UUID.randomUUID();
 
         assertThatThrownBy(() -> insertConsent(
-                UUID.randomUUID(), SECOND_ORG_ID, null, SECOND_ORG_ACCOUNT_ID,
+                secondId, SECOND_ORG_ID, null, SECOND_ORG_ACCOUNT_ID,
                 "shared-client", "shared@takibo.test"))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
