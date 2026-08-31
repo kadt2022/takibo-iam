@@ -9,11 +9,9 @@ import com.takibo.authorizationserver.infrastructure.jpa.repository.OAuth2Author
 import com.takibo.authorizationserver.infrastructure.keys.AesGcmSecretCipher;
 import com.takibo.authorizationserver.infrastructure.keys.HmacSha256UserCodeHmac;
 import com.takibo.authorizationserver.infrastructure.keys.SecretCipherKey;
-import com.takibo.authorizationserver.infrastructure.springauthserver.token.TakiboTokenClaims;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataRetrievalFailureException;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
-import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import org.springframework.security.oauth2.core.OAuth2AccessToken;
 import org.springframework.security.oauth2.core.OAuth2DeviceCode;
 import org.springframework.security.oauth2.core.OAuth2RefreshToken;
@@ -26,7 +24,6 @@ import org.springframework.security.oauth2.server.authorization.OAuth2Authorizat
 import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
-import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
 
 import org.mockito.ArgumentCaptor;
 
@@ -424,27 +421,14 @@ class JpaOAuth2AuthorizationServiceTest {
     }
 
     private static RegisteredClient spaceClient(String registeredClientId, UUID orgId, UUID spaceId) {
-        return RegisteredClient.withId(registeredClientId)
-                .clientId("busa-finance")
-                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
-                .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
+        return TestRegisteredClients.spaceClientBuilder(registeredClientId, orgId, spaceId)
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                 .redirectUri("https://app.takibo.io/callback")
-                .scope("api.read")
-                .clientSettings(ClientSettings.builder()
-                        .setting(TakiboTokenClaims.ORG_ID, orgId.toString())
-                        .setting(TakiboTokenClaims.SPACE_ID, spaceId.toString())
-                        .build())
                 .build();
     }
 
     private static RegisteredClient platformClient() {
-        return RegisteredClient.withId(UUID.randomUUID().toString())
-                .clientId("postman-client")
-                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
-                .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
-                .scope("api.read")
-                .build();
+        return TestRegisteredClients.platformClient();
     }
 
     private static SecretCipherKey aKey() {

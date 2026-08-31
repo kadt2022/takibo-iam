@@ -13,7 +13,6 @@ import com.takibo.authorizationserver.infrastructure.jpa.repository.OAuth2Author
 import com.takibo.authorizationserver.infrastructure.springauthserver.token.TakiboTokenClaims;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.dao.DataRetrievalFailureException;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.OAuth2AccessToken;
 import org.springframework.security.oauth2.core.OAuth2DeviceCode;
@@ -40,7 +39,6 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Collections;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -178,7 +176,8 @@ public class JpaOAuth2AuthorizationService implements OAuth2AuthorizationService
     // ---------- OAuth2Authorization -> OAuth2AuthorizationEntity ----------
 
     private OAuth2AuthorizationEntity toEntity(OAuth2Authorization authorization) {
-        RegisteredClient client = requireResolvableClient(authorization.getRegisteredClientId());
+        RegisteredClient client = RegisteredClientBoundary.requireResolvableClient(
+                registeredClientRepository, authorization.getRegisteredClientId());
         String authorizationId = authorization.getId();
 
         SealedToken code = seal("authorization_code_value", authorizationId,
@@ -203,8 +202,8 @@ public class JpaOAuth2AuthorizationService implements OAuth2AuthorizationService
 
         return OAuth2AuthorizationEntity.builder()
                 .id(UUID.fromString(authorizationId))
-                .orgId(readUuidSetting(client, TakiboTokenClaims.ORG_ID))
-                .spaceId(readUuidSetting(client, TakiboTokenClaims.SPACE_ID))
+                .orgId(RegisteredClientBoundary.readUuidSetting(client, TakiboTokenClaims.ORG_ID))
+                .spaceId(RegisteredClientBoundary.readUuidSetting(client, TakiboTokenClaims.SPACE_ID))
                 .registeredClientId(authorization.getRegisteredClientId())
                 .principalAccountId(null)
                 .subjectType(subjectTypeOf(authorization.getAuthorizationGrantType()))
@@ -291,8 +290,10 @@ public class JpaOAuth2AuthorizationService implements OAuth2AuthorizationService
     // ---------- OAuth2AuthorizationEntity -> OAuth2Authorization ----------
 
     private OAuth2Authorization toDomain(OAuth2AuthorizationEntity entity) {
-        RegisteredClient client = requireResolvableClient(entity.getRegisteredClientId());
-        requireMatchingBoundary(entity.getRegisteredClientId(), entity.getOrgId(), entity.getSpaceId(), client);
+        RegisteredClient client = RegisteredClientBoundary.requireResolvableClient(
+                registeredClientRepository, entity.getRegisteredClientId());
+        RegisteredClientBoundary.requireMatchingBoundary(
+                entity.getRegisteredClientId(), entity.getOrgId(), entity.getSpaceId(), client, "authorization");
         String authorizationId = entity.getId().toString();
 
         OAuth2Authorization.Builder builder = OAuth2Authorization.withRegisteredClient(client)
@@ -392,43 +393,6 @@ public class JpaOAuth2AuthorizationService implements OAuth2AuthorizationService
     }
 
     // ---------- Fixtures partagées ----------
-
-    private RegisteredClient requireResolvableClient(String registeredClientId) {
-        RegisteredClient client = registeredClientRepository.findById(registeredClientId);
-        if (client == null) {
-            // Ecrit noir sur blanc l'exigence de TAS-GRANTS-02 : une autorisation ne peut se
-            // reconstruire que pour un client encore resolvable par ResolvedOAuthClientResolver
-            // (via TakiboRegisteredClientRepository) -- jamais silencieusement.
-            throw new DataRetrievalFailureException(
-                    "The RegisteredClient with id '" + registeredClientId + "' was not found");
-        }
-        return client;
-    }
-
-    /**
-     * Refuse de reconstruire une autorisation dont la frontière a divergé de celle du client
-     * résolu <b>maintenant</b>. Sans ce contrôle, un client déplacé ou recréé sous une autre
-     * organisation/space entre l'émission et la relecture ferait rejouer un refresh token
-     * sous le nouveau tenant : {@code TakiboOAuth2TokenCustomizer} lit {@code org_id}/
-     * {@code space_id} depuis le {@code RegisteredClient} résolu à l'instant présent, jamais
-     * depuis l'autorisation elle-même, qui ne les porte pas de façon indépendante. Échoue
-     * fermé plutôt que de laisser un token franchir silencieusement une frontière de tenant.
-     */
-    private static void requireMatchingBoundary(
-            String registeredClientId, UUID savedOrgId, UUID savedSpaceId, RegisteredClient client) {
-        UUID currentOrgId = readUuidSetting(client, TakiboTokenClaims.ORG_ID);
-        UUID currentSpaceId = readUuidSetting(client, TakiboTokenClaims.SPACE_ID);
-        if (!Objects.equals(savedOrgId, currentOrgId) || !Objects.equals(savedSpaceId, currentSpaceId)) {
-            throw new DataRetrievalFailureException(
-                    "The RegisteredClient with id '" + registeredClientId
-                            + "' no longer resolves under the org/space this authorization was saved for");
-        }
-    }
-
-    private static UUID readUuidSetting(RegisteredClient client, String settingName) {
-        String value = client.getClientSettings().getSetting(settingName);
-        return StringUtils.hasText(value) ? UUID.fromString(value) : null;
-    }
 
     private static String joinScopes(Set<String> scopes) {
         return CollectionUtils.isEmpty(scopes) ? null : StringUtils.collectionToDelimitedString(scopes, ",");

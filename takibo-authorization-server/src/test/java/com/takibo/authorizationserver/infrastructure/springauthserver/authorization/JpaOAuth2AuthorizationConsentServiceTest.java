@@ -2,17 +2,13 @@ package com.takibo.authorizationserver.infrastructure.springauthserver.authoriza
 
 import com.takibo.authorizationserver.infrastructure.jpa.entity.OAuth2AuthorizationConsentEntity;
 import com.takibo.authorizationserver.infrastructure.jpa.repository.OAuth2AuthorizationConsentRepository;
-import com.takibo.authorizationserver.infrastructure.springauthserver.token.TakiboTokenClaims;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DataRetrievalFailureException;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.oauth2.core.AuthorizationGrantType;
-import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationConsent;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
-import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -149,15 +145,8 @@ class JpaOAuth2AuthorizationConsentServiceTest {
                 .build();
         when(consents.findByRegisteredClientIdAndPrincipalName(REGISTERED_CLIENT_ID, "user@takibo.test"))
                 .thenReturn(Optional.of(entity));
-        RegisteredClient movedClient = RegisteredClient.withId(REGISTERED_CLIENT_ID)
-                .clientId("busa-finance")
-                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
-                .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
-                .scope("api.read")
-                .clientSettings(ClientSettings.builder()
-                        .setting(TakiboTokenClaims.ORG_ID, UUID.randomUUID().toString())
-                        .setting(TakiboTokenClaims.SPACE_ID, UUID.randomUUID().toString())
-                        .build())
+        RegisteredClient movedClient = TestRegisteredClients
+                .spaceClientBuilder(REGISTERED_CLIENT_ID, UUID.randomUUID(), UUID.randomUUID())
                 .build();
         when(registeredClientRepository.findById(REGISTERED_CLIENT_ID)).thenReturn(movedClient);
 
@@ -200,15 +189,6 @@ class JpaOAuth2AuthorizationConsentServiceTest {
     }
 
     private static RegisteredClient spaceClient() {
-        return RegisteredClient.withId(REGISTERED_CLIENT_ID)
-                .clientId("busa-finance")
-                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
-                .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
-                .scope("api.read")
-                .clientSettings(ClientSettings.builder()
-                        .setting(TakiboTokenClaims.ORG_ID, ORG_ID.toString())
-                        .setting(TakiboTokenClaims.SPACE_ID, SPACE_ID.toString())
-                        .build())
-                .build();
+        return TestRegisteredClients.spaceClientBuilder(REGISTERED_CLIENT_ID, ORG_ID, SPACE_ID).build();
     }
 }
