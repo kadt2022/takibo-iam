@@ -60,6 +60,20 @@ class EncryptedTokenValueTest {
     }
 
     @Test
+    void given_a_hash_mismatch_then_the_message_is_the_same_as_any_cipher_failure() {
+        // Le message doit etre rigoureusement identique a celui d'un chiffre altere : un
+        // message distinct dirait a un attaquant laquelle des deux colonnes il a reussi a
+        // alterer -- exactement l'oracle que l'opacite ferme. C'est pourquoi les deux chemins
+        // passent par SecretDecryptionException.opaque().
+        when(cipher.decrypt(CONTEXT, "v1$key$ciphertext")).thenReturn("the-access-token");
+        EncryptedTokenValue tampered = new EncryptedTokenValue(
+                "v1$key$ciphertext", TokenHash.sha256Hex("a-completely-different-value"));
+
+        assertThatThrownBy(() -> tampered.reveal(cipher, CONTEXT))
+                .hasMessage(SecretDecryptionException.FAILED);
+    }
+
+    @Test
     void given_a_hash_of_the_wrong_length_then_construction_fails_closed() {
         assertThatThrownBy(() -> new EncryptedTokenValue("v1$key$ciphertext", "too-short"))
                 .isInstanceOf(IllegalArgumentException.class);

@@ -20,9 +20,23 @@ public class HmacSha256UserCodeHmac implements UserCodeHmac {
 
     private static final String ALGORITHM = "HmacSHA256";
 
+    static final int REQUIRED_KEY_LENGTH_BYTES = 32;
+
     private final SecretKeySpec key;
 
+    /**
+     * @param keyMaterial exactement 32 octets, comme {@link SecretCipherKey}. {@link SecretKeySpec}
+     *                    accepterait sans broncher n'importe quelle longueur non nulle — HMAC
+     *                    est defini pour toute taille de cle — mais une cle plus courte que la
+     *                    sortie de SHA-256 reduit d'autant la resistance recherchee, et une cle
+     *                    plus longue est repliee par HMAC, donc silencieusement equivalente a
+     *                    une autre. Refuser ici est le seul endroit ou l'ecart se voit.
+     */
     public HmacSha256UserCodeHmac(byte[] keyMaterial) {
+        if (keyMaterial == null || keyMaterial.length != REQUIRED_KEY_LENGTH_BYTES) {
+            throw new IllegalArgumentException(
+                    "USER_CODE_HMAC_KEY_MUST_BE_" + REQUIRED_KEY_LENGTH_BYTES + "_BYTES");
+        }
         this.key = new SecretKeySpec(keyMaterial, ALGORITHM);
     }
 

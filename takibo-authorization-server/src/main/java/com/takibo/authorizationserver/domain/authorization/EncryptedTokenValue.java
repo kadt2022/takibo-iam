@@ -99,7 +99,9 @@ public record EncryptedTokenValue(String encryptedValue, String hash) {
      *                autre fonction ne correspondrait jamais, quelle que soit la validité du
      *                clair
      * @throws SecretDecryptionException si le chiffre est illisible, altéré, scellé pour un
-     *         autre contexte, ou si le clair obtenu ne correspond pas à {@link #hash}
+     *         autre contexte, ou si le clair obtenu ne correspond pas à {@link #hash} — le
+     *         message est le même dans tous ces cas ({@link SecretDecryptionException#FAILED}),
+     *         par conception
      */
     public String reveal(SecretCipher cipher, SecretContext context, UnaryOperator<String> hasher) {
         Objects.requireNonNull(cipher, "cipher must not be null");
@@ -110,9 +112,10 @@ public record EncryptedTokenValue(String encryptedValue, String hash) {
         if (!MessageDigest.isEqual(
                 hash.getBytes(StandardCharsets.UTF_8),
                 recomputedHash.getBytes(StandardCharsets.UTF_8))) {
-            // Meme message opaque que SecretCipher pour un chiffre altere : la cause exacte
-            // n'apprendrait rien a un exploitant et renseignerait un attaquant.
-            throw new SecretDecryptionException("ENCRYPTED_TOKEN_VALUE_HASH_MISMATCH");
+            // Exactement le meme message que SecretCipher pour un chiffre altere, via la meme
+            // fabrique : un message distinct ici dirait a un attaquant laquelle des deux
+            // colonnes il a reussi a alterer -- precisement l'oracle que l'opacite ferme.
+            throw SecretDecryptionException.opaque();
         }
         return plaintext;
     }
