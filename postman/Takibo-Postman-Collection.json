@@ -5765,7 +5765,114 @@
           ]
         },
         {
-          "name": "4xx - Introspection - Client non authentifie refuse",
+          "name": "401 - Revocation - Client non authentifie refuse",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "token",
+                  "value": "{{platform_access_token}}"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/oauth2/revoke",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "oauth2",
+                "revoke"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 - Revocation - Client non authentifie refuse', function () {",
+                  "    // RFC 7009 section 2.1 renvoie au modele d erreurs OAuth 2.0 : meme",
+                  "    // contrat d authentification cliente que l introspection.",
+                  "    pm.response.to.have.status(401);",
+                  "    pm.expect(pm.response.json().error).to.eql('invalid_client');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Revocation - Jeton inconnu accepte sans oracle",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "postman-client"
+                },
+                {
+                  "key": "password",
+                  "value": "{{postmanSecret}}"
+                }
+              ]
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "token",
+                  "value": "un-jeton-qui-n-a-jamais-existe"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/oauth2/revoke",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "oauth2",
+                "revoke"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 - Revocation - Jeton inconnu accepte sans oracle', function () {",
+                  "    // RFC 7009 : un jeton inconnu ou deja revoque reste un 200. C est la",
+                  "    // contrepartie du 401 ci-dessus : l echec d authentification cliente est",
+                  "    // signale, l existence du jeton ne l est jamais.",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "401 - Introspection - Client non authentifie refuse",
           "request": {
             "method": "POST",
             "header": [
@@ -5800,14 +5907,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('4xx - Introspection - Client non authentifie refuse', function () {",
-                  "    // L introspection revele l etat d un jeton : elle exige l authentification",
-                  "    // du client, sans quoi n importe qui sonderait n importe quel jeton.",
-                  "    // Le code exact n est volontairement pas fige : TenantResolutionFilter",
-                  "    // repond invalid_request/400 la ou son javadoc annonce invalid_client/401",
-                  "    // pour ce point de terminaison. Divergence heritee de TAS-GRANTS-01, en",
-                  "    // attente d arbitrage ; la propriete testee reste vraie dans les deux cas.",
-                  "    pm.expect(pm.response.code, 'le refus doit etre un 4xx').to.be.within(400, 499);",
+                  "pm.test('401 - Introspection - Client non authentifie refuse', function () {",
+                  "    // RFC 7662 section 2.3 : une authentification cliente absente est un 401",
+                  "    // invalid_client, jamais un invalid_request/400 -- et la reponse ne dit",
+                  "    // rien du jeton sonde, sans quoi elle deviendrait un oracle.",
+                  "    pm.response.to.have.status(401);",
+                  "    pm.expect(pm.response.json().error).to.eql('invalid_client');",
+                  "    pm.expect(pm.response.headers.get('WWW-Authenticate')).to.exist;",
                   "    pm.expect(pm.response.json().active, 'un refus ne dit rien du jeton sonde').to.be.undefined;",
                   "});"
                 ]

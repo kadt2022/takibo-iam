@@ -227,17 +227,10 @@ class AuthorizationSaveContractBaselineIntegrationTest extends TasPostgresBaseli
     }
 
     @Test
-    void given_no_client_authentication_when_introspecting_then_it_is_refused_without_disclosure() {
-        // L'introspection revele l'etat d'un jeton : sans authentification du client,
-        // n'importe qui sonderait n'importe quel jeton.
-        //
-        // L'assertion porte volontairement sur la propriete de securite (refus + aucune
-        // divulgation) plutot que sur un code precis : TenantResolutionFilter repond
-        // aujourd'hui invalid_request/400 sur ce point de terminaison, alors que son propre
-        // javadoc annonce invalid_client/401 pour /oauth2/introspect et /oauth2/revoke, qui
-        // authentifient un client comme /oauth2/token. Cette divergence vient de
-        // TAS-GRANTS-01 (deja fusionne) et attend un arbitrage ; ce test reste vrai dans les
-        // deux cas plutot que de figer celui qui sera peut-etre corrige.
+    void given_no_client_authentication_when_introspecting_then_it_is_refused_as_invalid_client() {
+        // RFC 7662 section 2.3 : une authentification cliente absente est un 401
+        // invalid_client, jamais un invalid_request/400 -- et jamais une reponse qui dirait
+        // quoi que ce soit du jeton sonde.
         String token = accessToken(requestToken(
                 TasBaselineDataset.SPACE_CLIENT_ID,
                 TasBaselineDataset.SPACE_CLIENT_SECRET,
@@ -246,10 +239,41 @@ class AuthorizationSaveContractBaselineIntegrationTest extends TasPostgresBaseli
         HttpResponse<String> introspection = postFormWithoutClientAuthentication(
                 "/oauth2/introspect", Map.of("token", token));
 
-        assertThat(introspection.statusCode()).isBetween(400, 499);
+        assertThat(introspection.statusCode()).isEqualTo(401);
+        assertThat(field(introspection, "error")).isEqualTo("invalid_client");
+        assertThat(introspection.headers().firstValue("WWW-Authenticate")).isPresent();
         assertThat(field(introspection, "active"))
                 .as("un refus ne doit rien dire de l'etat du jeton sonde")
                 .isNull();
+    }
+
+    @Test
+    void given_no_client_authentication_when_revoking_then_it_is_refused_as_invalid_client() {
+        // RFC 7009 section 2.1 renvoie au modele d'erreurs OAuth 2.0 : meme contrat que
+        // l'introspection. Le jeton vise, lui, ne produit jamais d'erreur -- voir le test de
+        // revocation authentifiee.
+        String token = accessToken(requestToken(
+                TasBaselineDataset.SPACE_CLIENT_ID,
+                TasBaselineDataset.SPACE_CLIENT_SECRET,
+                TasBaselineDataset.SPACE_CLIENT_SCOPE));
+
+        HttpResponse<String> revocation = postFormWithoutClientAuthentication(
+                "/oauth2/revoke", Map.of("token", token));
+
+        assertThat(revocation.statusCode()).isEqualTo(401);
+        assertThat(field(revocation, "error")).isEqualTo("invalid_client");
+    }
+
+    @Test
+    void given_an_authenticated_client_when_revoking_an_unknown_token_then_it_still_answers_200() {
+        // RFC 7009 : un jeton inconnu ou deja revoque reste un 200. Repondre autrement
+        // donnerait un oracle d'existence -- exactement ce que le 401 ci-dessus ne doit pas
+        // etre confondu avec.
+        HttpResponse<String> revocation = revoke(
+                TasBaselineDataset.SPACE_CLIENT_ID, TasBaselineDataset.SPACE_CLIENT_SECRET,
+                "un-jeton-qui-n-a-jamais-existe");
+
+        assertThat(revocation.statusCode()).isEqualTo(200);
     }
 
     @Test

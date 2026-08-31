@@ -35,7 +35,11 @@ import java.io.IOException;
  * (et {@code /oauth2/introspect}, {@code /oauth2/revoke}, qui authentifient eux aussi un
  * client) répond par le même corps opaque {@code invalid_client}/401, sans description, que
  * SAS produit déjà pour un secret invalide — la surface ne doit jamais dire laquelle des deux
- * causes s'applique. {@code /oauth2/authorize} n'a pas ce vocabulaire : la RFC 6749 §4.1.2.1 ne
+ * causes s'applique. La RFC 7662 §2.3 l'impose explicitement pour l'introspection, et la
+ * RFC 7009 §2.1 y renvoie pour la révocation. Cette règle porte sur <b>l'authentification du
+ * client</b>, jamais sur le jeton visé : un jeton inconnu, expiré ou déjà révoqué reste un
+ * {@code 200} ({@code active:false} à l'introspection), sans quoi la réponse deviendrait un
+ * oracle d'existence. {@code /oauth2/authorize} n'a pas ce vocabulaire : la RFC 6749 §4.1.2.1 ne
  * définit {@code invalid_client} que pour le point de terminaison token, et un {@code
  * WWW-Authenticate: Basic} sur un point de terminaison que le navigateur atteint directement
  * (pas un client HTTP authentifié) peut y déclencher une invite d'identifiants native. Un
@@ -94,7 +98,13 @@ public class TenantResolutionFilter extends OncePerRequestFilter {
                 resolveClient(clientId);
             } else if (requiresTenant(requestUri)) {
                 if (clientId == null || clientId.isBlank()) {
-                    errorWriter.writeInvalidRequest("Client identification required", request, response);
+                    // Meme traitement que /oauth2/token : ces points de terminaison
+                    // authentifient un client, et l'absence d'authentification y est un
+                    // invalid_client/401, jamais un invalid_request/400 -- RFC 7662 section 2.3
+                    // pour l'introspection, RFC 7009 section 2.1 pour la revocation, qui
+                    // renvoie au modele d'erreurs OAuth 2.0. Opaque, sans description, comme
+                    // pour un secret invalide : voir la javadoc de classe.
+                    errorWriter.writeInvalidClient(null, request, response);
                     return;
                 }
                 resolveClient(clientId);

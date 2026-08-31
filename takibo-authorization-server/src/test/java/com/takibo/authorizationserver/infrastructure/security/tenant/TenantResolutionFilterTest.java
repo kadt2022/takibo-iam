@@ -203,15 +203,31 @@ class TenantResolutionFilterTest {
     // ---------- Surfaces exigeant une identification ----------
 
     @Test
-    void given_introspect_request_without_client_id_when_filter_then_invalid_request()
+    void given_introspect_request_without_client_id_when_filter_then_invalid_client()
             throws Exception {
+        // RFC 7662 section 2.3 : une authentification cliente absente ou invalide est un 401,
+        // distinct du jeton introspecte invalide ou revoque, qui reste un 200 active=false.
+        // Opaque, sans description, comme /oauth2/token.
         MockHttpServletRequest request = uriRequest("/oauth2/introspect");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         filter().doFilter(request, response, chain);
 
-        verify(errorWriter).writeInvalidRequest(
-                eq("Client identification required"), eq(request), eq(response));
+        verify(errorWriter).writeInvalidClient(isNull(), eq(request), eq(response));
+        verify(chain, never()).doFilter(any(), any());
+    }
+
+    @Test
+    void given_revoke_request_without_client_id_when_filter_then_invalid_client()
+            throws Exception {
+        // RFC 7009 section 2.1 renvoie au modele d'erreurs OAuth 2.0 : meme contrat que
+        // l'introspection pour l'authentification cliente.
+        MockHttpServletRequest request = uriRequest("/oauth2/revoke");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter().doFilter(request, response, chain);
+
+        verify(errorWriter).writeInvalidClient(isNull(), eq(request), eq(response));
         verify(chain, never()).doFilter(any(), any());
     }
 
