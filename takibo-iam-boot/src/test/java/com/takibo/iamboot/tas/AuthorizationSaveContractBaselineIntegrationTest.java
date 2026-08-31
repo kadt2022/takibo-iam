@@ -1,5 +1,6 @@
 package com.takibo.iamboot.tas;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -189,6 +190,91 @@ class AuthorizationSaveContractBaselineIntegrationTest extends TasPostgresBaseli
         assertThat(isActive(afterRevocation)).isFalse();
     }
 
+    @Test
+    void given_an_active_token_when_introspected_then_the_response_identifies_the_client_and_scope() {
+        String token = accessToken(requestToken(
+                TasBaselineDataset.SPACE_CLIENT_ID,
+                TasBaselineDataset.SPACE_CLIENT_SECRET,
+                TasBaselineDataset.SPACE_CLIENT_SCOPE));
+
+        HttpResponse<String> introspection = introspect(
+                TasBaselineDataset.SPACE_CLIENT_ID, TasBaselineDataset.SPACE_CLIENT_SECRET, token);
+
+        assertThat(field(introspection, "client_id")).isEqualTo(TasBaselineDataset.SPACE_CLIENT_ID);
+        assertThat(field(introspection, "scope")).contains(TasBaselineDataset.SPACE_CLIENT_SCOPE);
+    }
+
+    @Test
+    void given_an_unknown_token_when_introspected_then_it_reports_inactive_without_an_error() {
+        // RFC 7662 : un jeton inconnu ne se distingue pas d'un jeton revoque -- meme statut,
+        // meme corps. Repondre 4xx ici donnerait un oracle d'existence.
+        HttpResponse<String> introspection = introspect(
+                TasBaselineDataset.SPACE_CLIENT_ID, TasBaselineDataset.SPACE_CLIENT_SECRET,
+                "un-jeton-qui-n-a-jamais-existe");
+
+        assertThat(introspection.statusCode()).isEqualTo(200);
+        assertThat(isActive(introspection)).isFalse();
+    }
+
+    @Test
+    void given_an_inactive_token_when_introspected_then_the_response_discloses_nothing_else() {
+        HttpResponse<String> introspection = introspect(
+                TasBaselineDataset.SPACE_CLIENT_ID, TasBaselineDataset.SPACE_CLIENT_SECRET,
+                "un-jeton-qui-n-a-jamais-existe");
+
+        assertThat(field(introspection, "client_id")).isNull();
+        assertThat(field(introspection, "scope")).isNull();
+    }
+
+    @Test
+    void given_no_client_authentication_when_introspecting_then_it_is_refused_without_disclosure() {
+        // L'introspection revele l'etat d'un jeton : sans authentification du client,
+        // n'importe qui sonderait n'importe quel jeton.
+        //
+        // L'assertion porte volontairement sur la propriete de securite (refus + aucune
+        // divulgation) plutot que sur un code precis : TenantResolutionFilter repond
+        // aujourd'hui invalid_request/400 sur ce point de terminaison, alors que son propre
+        // javadoc annonce invalid_client/401 pour /oauth2/introspect et /oauth2/revoke, qui
+        // authentifient un client comme /oauth2/token. Cette divergence vient de
+        // TAS-GRANTS-01 (deja fusionne) et attend un arbitrage ; ce test reste vrai dans les
+        // deux cas plutot que de figer celui qui sera peut-etre corrige.
+        String token = accessToken(requestToken(
+                TasBaselineDataset.SPACE_CLIENT_ID,
+                TasBaselineDataset.SPACE_CLIENT_SECRET,
+                TasBaselineDataset.SPACE_CLIENT_SCOPE));
+
+        HttpResponse<String> introspection = postFormWithoutClientAuthentication(
+                "/oauth2/introspect", Map.of("token", token));
+
+        assertThat(introspection.statusCode()).isBetween(400, 499);
+        assertThat(field(introspection, "active"))
+                .as("un refus ne doit rien dire de l'etat du jeton sonde")
+                .isNull();
+    }
+
+    @Test
+    void given_two_tokens_when_one_is_revoked_then_the_other_stays_active() {
+        // La revocation porte sur un jeton, jamais sur le client : un second jeton du meme
+        // client doit survivre.
+        String revoked = accessToken(requestToken(
+                TasBaselineDataset.SPACE_CLIENT_ID,
+                TasBaselineDataset.SPACE_CLIENT_SECRET,
+                TasBaselineDataset.SPACE_CLIENT_SCOPE));
+        String kept = accessToken(requestToken(
+                TasBaselineDataset.SPACE_CLIENT_ID,
+                TasBaselineDataset.SPACE_CLIENT_SECRET,
+                TasBaselineDataset.SPACE_CLIENT_SCOPE));
+
+        revoke(TasBaselineDataset.SPACE_CLIENT_ID, TasBaselineDataset.SPACE_CLIENT_SECRET, revoked);
+
+        assertThat(isActive(introspect(
+                TasBaselineDataset.SPACE_CLIENT_ID, TasBaselineDataset.SPACE_CLIENT_SECRET, revoked)))
+                .isFalse();
+        assertThat(isActive(introspect(
+                TasBaselineDataset.SPACE_CLIENT_ID, TasBaselineDataset.SPACE_CLIENT_SECRET, kept)))
+                .isTrue();
+    }
+
     private Map<String, Object> singlePersistedAuthorizationRow() {
         List<Map<String, Object>> rows = jdbc.queryForList("SELECT * FROM oauth2_authorization");
         assertThat(rows).hasSize(1);
@@ -214,17 +300,31 @@ class AuthorizationSaveContractBaselineIntegrationTest extends TasPostgresBaseli
             String path, String clientId, String secret, Map<String, String> form) {
         String credentials = Base64.getEncoder().encodeToString(
                 (clientId + ":" + secret).getBytes(StandardCharsets.UTF_8));
-        String body = form.entrySet().stream()
-                .map(e -> URLEncoder.encode(e.getKey(), StandardCharsets.UTF_8)
-                        + "=" + URLEncoder.encode(e.getValue(), StandardCharsets.UTF_8))
-                .collect(Collectors.joining("&"));
-
-        HttpRequest request = HttpRequest.newBuilder()
+        return send(HttpRequest.newBuilder()
                 .uri(URI.create("http://localhost:" + port + path))
                 .header("Authorization", "Basic " + credentials)
                 .header("Content-Type", "application/x-www-form-urlencoded")
-                .POST(HttpRequest.BodyPublishers.ofString(body))
-                .build();
+                .POST(HttpRequest.BodyPublishers.ofString(encode(form)))
+                .build(), path);
+    }
+
+    private HttpResponse<String> postFormWithoutClientAuthentication(
+            String path, Map<String, String> form) {
+        return send(HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:" + port + path))
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .POST(HttpRequest.BodyPublishers.ofString(encode(form)))
+                .build(), path);
+    }
+
+    private static String encode(Map<String, String> form) {
+        return form.entrySet().stream()
+                .map(e -> URLEncoder.encode(e.getKey(), StandardCharsets.UTF_8)
+                        + "=" + URLEncoder.encode(e.getValue(), StandardCharsets.UTF_8))
+                .collect(Collectors.joining("&"));
+    }
+
+    private static HttpResponse<String> send(HttpRequest request, String path) {
         try {
             return HTTP.send(request, HttpResponse.BodyHandlers.ofString());
         } catch (InterruptedException e) {
@@ -248,6 +348,16 @@ class AuthorizationSaveContractBaselineIntegrationTest extends TasPostgresBaseli
             return JSON.readTree(introspectionResponse.body()).path("active").asBoolean();
         } catch (Exception e) {
             throw new IllegalStateException("Reponse illisible: " + introspectionResponse.body(), e);
+        }
+    }
+
+    /** {@code null} quand le champ est absent — ce que RFC 7662 impose pour un jeton inactif. */
+    private static String field(HttpResponse<String> response, String name) {
+        try {
+            JsonNode node = JSON.readTree(response.body()).get(name);
+            return node == null || node.isNull() ? null : node.asText();
+        } catch (Exception e) {
+            throw new IllegalStateException("Reponse illisible: " + response.body(), e);
         }
     }
 }

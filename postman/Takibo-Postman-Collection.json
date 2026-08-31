@@ -5453,6 +5453,431 @@
       ]
     },
     {
+      "name": "12 - Introspection et revocation OAuth2",
+      "item": [
+        {
+          "name": "200 - Jeton sonde - Jeton machine dedie a la revocation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "postman-client"
+                },
+                {
+                  "key": "password",
+                  "value": "{{postmanSecret}}"
+                }
+              ]
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "client_credentials"
+                },
+                {
+                  "key": "scope",
+                  "value": "api.read"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/oauth2/token",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "oauth2",
+                "token"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 - Jeton sonde - Jeton machine dedie a la revocation', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().access_token).to.exist;",
+                  "});",
+                  "// Jeton distinct de platform_access_token, qui sert a toute la collection :",
+                  "// le revoquer casserait toutes les requetes suivantes.",
+                  "pm.collectionVariables.set('revocation_probe_token', pm.response.json().access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Introspection - Jeton actif avant revocation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "postman-client"
+                },
+                {
+                  "key": "password",
+                  "value": "{{postmanSecret}}"
+                }
+              ]
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "token",
+                  "value": "{{revocation_probe_token}}"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/oauth2/introspect",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "oauth2",
+                "introspect"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 - Introspection - Jeton actif avant revocation', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().active, 'un jeton fraichement emis est actif').to.eql(true);",
+                  "});",
+                  "pm.test('200 - Introspection - Le jeton introspecte est bien celui du client machine', function () {",
+                  "    var body = pm.response.json();",
+                  "    pm.expect(body.client_id).to.eql('postman-client');",
+                  "    pm.expect(body.scope).to.include('api.read');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Revocation - Jeton machine revoque",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "postman-client"
+                },
+                {
+                  "key": "password",
+                  "value": "{{postmanSecret}}"
+                }
+              ]
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "token",
+                  "value": "{{revocation_probe_token}}"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/oauth2/revoke",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "oauth2",
+                "revoke"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 - Revocation - Jeton machine revoque', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Introspection - Jeton inactif apres revocation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "postman-client"
+                },
+                {
+                  "key": "password",
+                  "value": "{{postmanSecret}}"
+                }
+              ]
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "token",
+                  "value": "{{revocation_probe_token}}"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/oauth2/introspect",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "oauth2",
+                "introspect"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 - Introspection - Jeton inactif apres revocation', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().active, 'un jeton revoque n est plus actif').to.eql(false);",
+                  "});",
+                  "pm.test('200 - Introspection - Un jeton revoque ne divulgue plus rien', function () {",
+                  "    // RFC 7662 : une reponse inactive ne porte aucun autre champ.",
+                  "    var body = pm.response.json();",
+                  "    pm.expect(body.client_id, 'aucun client_id sur un jeton inactif').to.be.undefined;",
+                  "    pm.expect(body.scope, 'aucun scope sur un jeton inactif').to.be.undefined;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Introspection - Jeton inconnu rapporte inactif sans erreur",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "postman-client"
+                },
+                {
+                  "key": "password",
+                  "value": "{{postmanSecret}}"
+                }
+              ]
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "token",
+                  "value": "un-jeton-qui-n-a-jamais-existe"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/oauth2/introspect",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "oauth2",
+                "introspect"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 - Introspection - Jeton inconnu rapporte inactif sans erreur', function () {",
+                  "    // RFC 7662 : un jeton inconnu se distingue d un jeton revoque par rien du",
+                  "    // tout -- meme statut, meme corps. Repondre 4xx ici donnerait un oracle.",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().active).to.eql(false);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4xx - Introspection - Client non authentifie refuse",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "token",
+                  "value": "{{platform_access_token}}"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/oauth2/introspect",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "oauth2",
+                "introspect"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('4xx - Introspection - Client non authentifie refuse', function () {",
+                  "    // L introspection revele l etat d un jeton : elle exige l authentification",
+                  "    // du client, sans quoi n importe qui sonderait n importe quel jeton.",
+                  "    // Le code exact n est volontairement pas fige : TenantResolutionFilter",
+                  "    // repond invalid_request/400 la ou son javadoc annonce invalid_client/401",
+                  "    // pour ce point de terminaison. Divergence heritee de TAS-GRANTS-01, en",
+                  "    // attente d arbitrage ; la propriete testee reste vraie dans les deux cas.",
+                  "    pm.expect(pm.response.code, 'le refus doit etre un 4xx').to.be.within(400, 499);",
+                  "    pm.expect(pm.response.json().active, 'un refus ne dit rien du jeton sonde').to.be.undefined;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Introspection - La revocation n a pas touche le jeton de la collection",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "postman-client"
+                },
+                {
+                  "key": "password",
+                  "value": "{{postmanSecret}}"
+                }
+              ]
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "token",
+                  "value": "{{platform_access_token}}"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/oauth2/introspect",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "oauth2",
+                "introspect"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 - Introspection - La revocation n a pas touche le jeton de la collection', function () {",
+                  "    // La revocation porte sur un jeton, pas sur le client : le jeton emis en",
+                  "    // section 00, du meme client, doit rester actif.",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().active).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "99 - Nettoyage",
       "item": [
         {
