@@ -87,6 +87,11 @@ takibo:
       cipher:
         active-key-id: ${TAKIBO_TAS_CIPHER_KEY_ID:}
         active-key: ${TAKIBO_TAS_CIPHER_KEY:}
+      # Cle HMAC distincte de celle du chiffrement au repos ci-dessus : voir UserCodeHmac.
+      # TAKIBO_TAS_USER_CODE_HMAC_KEY : 32 octets encodes en base64, jamais reutilises pour
+      # le chiffrement. Meme regle ephemeral que ci-dessus en developpement/test.
+      user-code-hmac:
+        key: ${TAKIBO_TAS_USER_CODE_HMAC_KEY:}
   guard:
     space:
       whitelist:

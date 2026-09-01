@@ -67,6 +67,11 @@ final class TasBaselineDataset {
         jdbc.update("DELETE FROM oauth2_client_scopes WHERE org_id = ?", ORG_ID);
         jdbc.update("DELETE FROM oauth2_client_grant_types WHERE org_id = ?", ORG_ID);
         jdbc.update("DELETE FROM oauth2_authorization WHERE org_id = ?", ORG_ID);
+        // postman-client (PLATFORM, in-memory, TAS-GRANTS-01) n'a pas d'org_id a filtrer :
+        // depuis que TAS-GRANTS-02 persiste reellement les autorisations, une ligne PLATFORM
+        // (org_id IS NULL) survivrait sinon a chaque reset et s'accumulerait au fil des tests.
+        jdbc.update("DELETE FROM oauth2_authorization WHERE org_id IS NULL");
+        jdbc.update("DELETE FROM oauth2_authorization_consent WHERE org_id IS NULL");
         jdbc.update("DELETE FROM oauth2_clients WHERE org_id = ?", ORG_ID);
         jdbc.update("DELETE FROM account_credentials WHERE org_id = ?", ORG_ID);
         jdbc.update("DELETE FROM spaces WHERE org_id = ?", ORG_ID);

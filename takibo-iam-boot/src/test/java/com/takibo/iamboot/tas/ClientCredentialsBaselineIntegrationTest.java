@@ -46,6 +46,14 @@ import static org.assertj.core.api.Assertions.assertThat;
  * son critere d'acceptation : « le test negatif tenant/frontiere incoherent, inatteignable
  * dans le recit 00, est actif et vert dans ce recit ».
  * <p>
+ * Deuxieme exception assumee : {@code given_current_wiring_then_no_authorization_service_bean_is_declared}
+ * et {@code given_successful_token_when_database_inspected_then_nothing_is_persisted}
+ * documentaient l'absence de persistance de TAS-GRANTS-00. Le recit 02 introduit exactement
+ * le bean et la persistance qu'elles constataient absents ; leurs remplacements
+ * ({@code given_current_wiring_then_authorization_and_consent_service_beans_are_declared},
+ * {@code given_successful_tokens_when_database_inspected_then_one_row_is_persisted_per_plan})
+ * constatent l'etat inverse, exactement comme prevu par le critere d'acceptation du recit 02.
+ * <p>
  * Deux clients, deux plans :
  * <ul>
  *   <li><b>PLATFORM</b> — {@code postman-client}, declare in-memory, sans organisation ni
@@ -152,32 +160,40 @@ class ClientCredentialsBaselineIntegrationTest extends TasPostgresBaseline {
         assertThat(jwt.hasClaim("permissions")).isFalse();
     }
 
-    // ---------- Etat actuel de la persistance : point de bascule vers TAS-GRANTS-02 ----------
+    // ---------- Persistance reelle (TAS-GRANTS-02) ----------
 
     @Test
-    void given_current_wiring_then_no_authorization_service_bean_is_declared() {
-        // Constat plus precis que "le stockage est en memoire" : l'application ne declare
-        // aucun bean. Spring Authorization Server fabrique lui-meme un
-        // InMemoryOAuth2AuthorizationService et le garde comme objet partage de son
-        // configurer, hors du contexte applicatif.
-        // Le recit 02 ne remplacera donc pas une implementation : il introduira le bean qui
-        // manque. La chute de ce test est le signal attendu, pas une regression.
+    void given_current_wiring_then_authorization_and_consent_service_beans_are_declared() {
+        // Le contraire exact de ce que TAS-GRANTS-00 constatait : le bean qui manquait est
+        // desormais declare (JpaOAuth2AuthorizationService/JpaOAuth2AuthorizationConsentService).
         assertThat(applicationContext.getBeanNamesForType(OAuth2AuthorizationService.class))
-                .isEmpty();
+                .isNotEmpty();
         assertThat(applicationContext.getBeanNamesForType(OAuth2AuthorizationConsentService.class))
-                .isEmpty();
+                .isNotEmpty();
     }
 
     @Test
-    void given_successful_token_when_database_inspected_then_nothing_is_persisted() {
-        // La table existe (Flyway l'a creee) mais rien ne l'alimente : aucune autorisation ne
-        // survit a un redemarrage, ni n'est partagee entre instances.
+    void given_successful_tokens_when_database_inspected_then_one_row_is_persisted_per_plan() {
+        // Le contraire exact de ce que TAS-GRANTS-00 constatait : une autorisation survit
+        // desormais au redemarrage, pour chacun des deux plans exerces par ce filet.
         requestToken(TasBaselineDataset.SPACE_CLIENT_ID,
                 TasBaselineDataset.SPACE_CLIENT_SECRET,
                 TasBaselineDataset.SPACE_CLIENT_SCOPE);
         requestToken(TasBaselineDataset.PLATFORM_CLIENT_ID, platformClientSecret, SCOPE_API_READ);
 
-        assertThat(dataset.countAuthorizationRows()).isZero();
+        assertThat(dataset.countAuthorizationRows()).isEqualTo(2L);
+
+        Long platformRows = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM oauth2_authorization
+                WHERE org_id IS NULL AND space_id IS NULL
+                """, Long.class);
+        assertThat(platformRows).isEqualTo(1L);
+
+        Long spaceRows = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM oauth2_authorization
+                WHERE org_id = ? AND space_id = ?
+                """, Long.class, TasBaselineDataset.ORG_ID, TasBaselineDataset.SPACE_ID);
+        assertThat(spaceRows).isEqualTo(1L);
     }
 
     // ---------- Refus ----------

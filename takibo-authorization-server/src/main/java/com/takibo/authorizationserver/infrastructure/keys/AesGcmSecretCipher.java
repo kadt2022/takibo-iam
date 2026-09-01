@@ -70,12 +70,10 @@ public class AesGcmSecretCipher implements SecretCipher {
     static final String FORMAT_SEPARATOR = "$";
     private static final int FORMAT_PART_COUNT = 3;
 
-    /**
-     * Message unique de tout echec de dechiffrement : chiffre absent, mal forme, de version
-     * inconnue, scelle par une cle inconnue, tronque, altere. Distinguer ces cas donnerait a
-     * qui sonde un oracle sur la structure de son entree. La cause reelle reste chainee.
-     */
-    private static final String DECRYPT_FAILED = "SECRET_CIPHER_DECRYPT_FAILED";
+    // Tout echec de dechiffrement — chiffre absent, mal forme, de version inconnue, scelle par
+    // une cle inconnue, tronque, altere — passe par SecretDecryptionException.opaque() et donc
+    // par un message unique, partage avec EncryptedTokenValue. Distinguer ces cas donnerait a
+    // qui sonde un oracle sur la structure de son entree. La cause reelle reste chainee.
 
     private final SecretCipherKey activeKey;
     private final Map<String, SecretKeySpec> keysById = new LinkedHashMap<>();
@@ -170,25 +168,25 @@ public class AesGcmSecretCipher implements SecretCipher {
             throw new IllegalArgumentException("SECRET_CIPHER_REQUIRES_CONTEXT");
         }
         if (ciphertext == null || ciphertext.isBlank()) {
-            throw new SecretDecryptionException(DECRYPT_FAILED);
+            throw SecretDecryptionException.opaque();
         }
         String[] parts = ciphertext.split("\\" + FORMAT_SEPARATOR, -1);
         if (parts.length != FORMAT_PART_COUNT || !FORMAT_VERSION.equals(parts[0])) {
-            throw new SecretDecryptionException(DECRYPT_FAILED);
+            throw SecretDecryptionException.opaque();
         }
         SecretKeySpec key = keysById.get(parts[1]);
         if (key == null) {
-            throw new SecretDecryptionException(DECRYPT_FAILED);
+            throw SecretDecryptionException.opaque();
         }
 
         byte[] decoded;
         try {
             decoded = Base64.getDecoder().decode(parts[2]);
         } catch (IllegalArgumentException e) {
-            throw new SecretDecryptionException(DECRYPT_FAILED, e);
+            throw SecretDecryptionException.opaque(e);
         }
         if (decoded.length <= IV_LENGTH_BYTES) {
-            throw new SecretDecryptionException(DECRYPT_FAILED);
+            throw SecretDecryptionException.opaque();
         }
         try {
             byte[] iv = Arrays.copyOfRange(decoded, 0, IV_LENGTH_BYTES);
@@ -203,7 +201,7 @@ public class AesGcmSecretCipher implements SecretCipher {
             cipher.updateAAD(associatedData(parts[1], context));
             return new String(cipher.doFinal(sealed), StandardCharsets.UTF_8);
         } catch (Exception e) {
-            throw new SecretDecryptionException(DECRYPT_FAILED, e);
+            throw SecretDecryptionException.opaque(e);
         }
     }
 

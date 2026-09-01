@@ -147,6 +147,50 @@ class TakiboRegisteredClientRepositoryTest {
     }
 
     @Test
+    void given_a_confidential_client_authorized_to_refresh_then_reuse_refresh_tokens_is_disabled() {
+        // TAS-GRANTS-02 : un refresh token qui ne tourne jamais resterait valide indefiniment
+        // tant qu'il n'expire pas -- un vol unique suffirait a un acces permanent.
+        when(resolvedOAuthClientResolver.resolve("busa-finance")).thenReturn(Optional.of(
+                aClient("busa-finance")
+                        .grantTypes("authorization_code", "refresh_token")
+                        .redirectUris("https://app.takibo.io/callback")
+                        .build()));
+
+        RegisteredClient rc = repository.findByClientId("busa-finance");
+
+        assertThat(rc.getTokenSettings().isReuseRefreshTokens()).isFalse();
+    }
+
+    @Test
+    void given_a_confidential_client_without_refresh_grant_then_reuse_refresh_tokens_keeps_the_default() {
+        when(resolvedOAuthClientResolver.resolve("busa-finance"))
+                .thenReturn(Optional.of(aClient("busa-finance").build()));
+
+        RegisteredClient rc = repository.findByClientId("busa-finance");
+
+        assertThat(rc.getTokenSettings().isReuseRefreshTokens())
+                .isEqualTo(org.springframework.security.oauth2.server.authorization.settings.TokenSettings
+                        .builder().build().isReuseRefreshTokens());
+    }
+
+    @Test
+    void given_a_public_client_authorized_to_refresh_then_reuse_refresh_tokens_keeps_the_default() {
+        // Une SPA publique n'en recoit jamais (SAS retourne silencieusement null), mais si la
+        // configuration listait tout de meme le grant, la regle ne s'applique qu'au CONFIDENTIAL.
+        when(resolvedOAuthClientResolver.resolve("public-client")).thenReturn(Optional.of(
+                aClient("public-client").publicClient()
+                        .grantTypes("authorization_code", "refresh_token")
+                        .redirectUris("https://app.takibo.io/callback")
+                        .build()));
+
+        RegisteredClient rc = repository.findByClientId("public-client");
+
+        assertThat(rc.getTokenSettings().isReuseRefreshTokens())
+                .isEqualTo(org.springframework.security.oauth2.server.authorization.settings.TokenSettings
+                        .builder().build().isReuseRefreshTokens());
+    }
+
+    @Test
     void given_resolved_client_when_find_by_client_id_then_maps_to_registered_client_with_scope_bound_settings() {
         when(resolvedOAuthClientResolver.resolve("busa-finance"))
                 .thenReturn(Optional.of(aClient("busa-finance").build()));
@@ -251,6 +295,45 @@ class TakiboRegisteredClientRepositoryTest {
         assertThat(rc).isNotNull();
         assertThat(rc.getId()).isEqualTo(ID.toString());
         assertThat(rc.getClientId()).isEqualTo("busa-finance");
+    }
+
+    @Test
+    void given_the_platform_clients_technical_id_when_find_by_id_then_it_resolves_via_the_resolver() {
+        // TAS-GRANTS-02 : OAuth2AuthorizationService relit une autorisation persistee par
+        // registeredClientId. postman-client n'a aucune ligne oauth2_clients a interroger ;
+        // sans ce detour, une autorisation PLATFORM redeviendrait introuvable ici.
+        UUID platformRegisteredClientId = UUID.fromString("22222222-2222-2222-2222-222222222222");
+        ResolvedOAuthClient platformClient = new ResolvedOAuthClient(
+                platformRegisteredClientId.toString(), "postman-client", ClientPlan.PLATFORM,
+                null, null, ClientType.CONFIDENTIAL, false, false, true, "hash",
+                "client_secret_basic", null, null, null, null, null, null,
+                Set.of("api.read"), Set.of("client_credentials"), Set.of(), Set.of());
+        when(resolvedOAuthClientResolver.resolve("postman-client"))
+                .thenReturn(Optional.of(platformClient));
+
+        RegisteredClient rc = repository.findById(platformRegisteredClientId.toString());
+
+        assertThat(rc).isNotNull();
+        assertThat(rc.getClientId()).isEqualTo("postman-client");
+        verifyNoInteractions(clients);
+    }
+
+    @Test
+    void given_a_technical_id_matching_neither_platform_nor_a_db_client_when_find_by_id_then_falls_through_to_the_database() {
+        // Le PLATFORM resolu porte un identifiant different de celui demande : la resolution
+        // ne doit jamais "gagner" par coincidence, seulement par correspondance exacte.
+        ResolvedOAuthClient platformClient = new ResolvedOAuthClient(
+                UUID.randomUUID().toString(), "postman-client", ClientPlan.PLATFORM,
+                null, null, ClientType.CONFIDENTIAL, false, false, true, "hash",
+                "client_secret_basic", null, null, null, null, null, null,
+                Set.of("api.read"), Set.of("client_credentials"), Set.of(), Set.of());
+        when(resolvedOAuthClientResolver.resolve("postman-client"))
+                .thenReturn(Optional.of(platformClient));
+        when(clients.findById(ID)).thenReturn(Optional.empty());
+
+        assertThat(repository.findById(ID.toString())).isNull();
+
+        verify(clients).findById(ID);
     }
 
     @Test

@@ -1,5 +1,6 @@
 package com.takibo.authorizationserver.infrastructure.springauthserver.client;
 
+import com.takibo.authorizationserver.domain.client.ClientType;
 import com.takibo.authorizationserver.domain.client.ResolvedOAuthClient;
 import com.takibo.authorizationserver.domain.client.ResolvedOAuthClientContextHolder;
 import com.takibo.authorizationserver.domain.client.ResolvedOAuthClientResolver;
@@ -23,6 +24,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -67,8 +69,28 @@ public class TakiboRegisteredClientRepository implements RegisteredClientReposit
                 "OAuth2 clients are managed via the management-service, not the authorization server");
     }
 
+    /**
+     * Seul client PLATFORM du récit (in-memory, {@link InMemoryPlatformOAuthClientResolver}) :
+     * {@code postman-client} n'a pas de ligne {@code oauth2_clients} à interroger par
+     * identifiant technique, {@link #findById} doit donc le reconnaître autrement. Migrer ce
+     * client vers TMS est explicitement hors périmètre (TAS-GRANTS-01/02) ; ce nom reste donc
+     * seul à porter cette identité, comme il l'est déjà dans
+     * {@link InMemoryPlatformOAuthClientResolver} et les fixtures de test.
+     */
+    private static final String PLATFORM_CLIENT_ID = "postman-client";
+
     @Override
     public RegisteredClient findById(String id) {
+        // TAS-GRANTS-02 : OAuth2AuthorizationService persiste registeredClientId et le relit
+        // pour reconstruire une autorisation. postman-client a un identifiant technique stable
+        // (InMemoryPlatformOAuthClientResolver.REGISTERED_CLIENT_ID) mais aucune ligne TMS :
+        // sans ce détour, une autorisation PLATFORM redeviendrait introuvable après ce point.
+        Optional<ResolvedOAuthClient> platformClient = resolvedOAuthClientResolver
+                .resolve(PLATFORM_CLIENT_ID)
+                .filter(client -> client.registeredClientId().equals(id));
+        if (platformClient.isPresent()) {
+            return toRegisteredClient(platformClient.get());
+        }
         return clients.findById(UUID.fromString(id))
                 .map(this::toRegisteredClient)
                 .orElse(null);
@@ -163,6 +185,12 @@ public class TakiboRegisteredClientRepository implements RegisteredClientReposit
      * {@link TakiboTokenClaims#ID_TOKEN_TTL_SECONDS}, que {@code TakiboOAuth2TokenCustomizer}
      * relit pour réécrire l'expiration de l'ID token à l'émission. Un TTL absent laisse le
      * défaut de Spring Authorization Server, jamais une valeur figée ici.
+     * <p>
+     * {@code reuseRefreshTokens(false)} est imposé à tout client {@code CONFIDENTIAL} autorisé
+     * au grant {@code refresh_token} (TAS-GRANTS-02) : un refresh token qui ne tourne jamais
+     * resterait valide indéfiniment tant qu'il n'expire pas, exposant un vol unique à un accès
+     * permanent. Un client {@code PUBLIC} n'en reçoit jamais (SAS retourne silencieusement
+     * {@code null} pour son refresh), la question ne se pose donc pas pour lui.
      */
     private RegisteredClient toRegisteredClient(ResolvedOAuthClient client) {
         ClientSettings.Builder clientSettings = ClientSettings.builder()
@@ -202,6 +230,15 @@ public class TakiboRegisteredClientRepository implements RegisteredClientReposit
         }
         if (client.idTokenTtl() != null) {
             tokenSettings.setting(TakiboTokenClaims.ID_TOKEN_TTL_SECONDS, client.idTokenTtl().toSeconds());
+        }
+        if (client.clientType() == ClientType.CONFIDENTIAL
+                && client.grantTypes().contains(AuthorizationGrantType.REFRESH_TOKEN.getValue())) {
+            // TAS-GRANTS-02 : un refresh token reutilisable resterait valide indefiniment tant
+            // qu'il n'expire pas — le voler une seule fois suffirait. Impose la rotation a
+            // chaque usage pour tout client confidentiel autorise au refresh ; ne s'applique
+            // pas a un client PUBLIC, qui n'en recoit jamais (voir la doctrine du lot :
+            // "une SPA publique... SAS peut retourner silencieusement null pour le refresh").
+            tokenSettings.reuseRefreshTokens(false);
         }
 
         RegisteredClient.Builder builder = RegisteredClient.withId(client.registeredClientId())

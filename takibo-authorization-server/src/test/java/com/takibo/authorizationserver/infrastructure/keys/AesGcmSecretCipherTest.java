@@ -305,7 +305,7 @@ class AesGcmSecretCipherTest {
                 messageOf(CONTEXT, new AesGcmSecretCipher(FOREIGN).encrypt(CONTEXT, A_PRIVATE_KEY)),
                 messageOf(ANOTHER_RECORD, sealed),
                 messageOf(ANOTHER_TYPE, sealed)))
-                .containsOnly("SECRET_CIPHER_DECRYPT_FAILED");
+                .containsOnly(SecretDecryptionException.FAILED);
     }
 
     @Test

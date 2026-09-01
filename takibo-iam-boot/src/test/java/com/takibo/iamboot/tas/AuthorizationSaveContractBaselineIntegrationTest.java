@@ -1,5 +1,6 @@
 package com.takibo.iamboot.tas;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -7,13 +8,10 @@ import org.junit.jupiter.api.condition.EnabledIf;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.context.annotation.Bean;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.core.OAuth2AccessToken;
-import org.springframework.security.oauth2.server.authorization.InMemoryOAuth2AuthorizationService;
 import org.springframework.security.oauth2.server.authorization.OAuth2Authorization;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationService;
 import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
@@ -28,33 +26,34 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Fige ce que Spring Authorization Server confie a {@code OAuth2AuthorizationService.save()}
- * apres une emission {@code client_credentials} reussie (TAS-GRANTS-00).
+ * Fige ce que {@code OAuth2AuthorizationService.save()} persiste réellement après une
+ * émission {@code client_credentials} réussie (TAS-GRANTS-00, mis à jour par TAS-GRANTS-02).
  * <p>
- * L'application ne declare aucun bean de ce type : SAS fabrique son implementation en memoire
- * et la garde comme objet partage de son configurer, hors du contexte. Le contrat de
- * sauvegarde est donc inobservable en l'etat.
- * <p>
- * Ce test declare un service enregistreur <b>cote test uniquement</b>. SAS traite un bean
- * fourni exactement comme son implementation par defaut : ce sont les memes providers qui
- * appellent {@code save()}, avec les memes arguments. Ce qui est observe ici est donc bien le
- * contrat de production, pas un artefact du test.
- * <p>
- * C'est ce contrat que le service persistant du recit 02 devra honorer a l'identique. Deux
- * points meritent l'attention a ce moment-la :
+ * TAS-GRANTS-00 observait ce contrat via un enregistreur déclaré côté test uniquement, faute
+ * de bean de production. Ce détour a disparu avec lui : {@code JpaOAuth2AuthorizationService}
+ * est désormais le bean réel du contexte, et un second bean de ce type déclaré ici l'aurait
+ * rendu ambigu pour Spring Authorization Server. Ce test observe donc directement la ligne
+ * {@code oauth2_authorization} laissée en base — la même persistance que verrait un
+ * redémarrage, pas un artefact de test.
  * <ul>
  *   <li>{@code registeredClientId} porte l'identifiant technique du client, jamais le
- *       {@code client_id} public — or la contrainte {@code fk_oauth2_authz_client_scope}
- *       reference aujourd'hui le second ;</li>
- *   <li>le client PLATFORM produit une autorisation sans organisation ni space, alors que
- *       {@code oauth2_authorization.org_id} est aujourd'hui {@code NOT NULL}.</li>
+ *       {@code client_id} public ;</li>
+ *   <li>le client PLATFORM produit une autorisation sans organisation ni space.</li>
  * </ul>
+ * <p>
+ * Porte aussi le parcours HTTP minimal émission → introspection active → révocation →
+ * introspection inactive. {@code /oauth2/introspect} et {@code /oauth2/revoke} sont les
+ * endpoints par défaut de {@code OAuth2AuthorizationServerConfigurer}, non désactivés ici ; ils
+ * ne fonctionnent qu'en s'appuyant sur {@code findByToken}/{@code remove} de
+ * {@code JpaOAuth2AuthorizationService} — exactement le contrat qu'un {@code save()} devenu
+ * no-op pour {@code client_credentials} aurait silencieusement cassé. La révocation avancée
+ * (famille de refresh tokens, époque de sécurité) reste hors périmètre, portée par
+ * TAS-GRANTS-07.
  */
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
@@ -69,54 +68,10 @@ class AuthorizationSaveContractBaselineIntegrationTest extends TasPostgresBaseli
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final HttpClient HTTP = HttpClient.newHttpClient();
 
-    @TestConfiguration
-    static class RecordingAuthorizationServiceConfiguration {
-        @Bean
-        RecordingOAuth2AuthorizationService oAuth2AuthorizationService() {
-            return new RecordingOAuth2AuthorizationService();
-        }
-    }
-
-    /** Delegue au service en memoire de SAS et conserve ce qui lui est confie. */
-    static class RecordingOAuth2AuthorizationService implements OAuth2AuthorizationService {
-
-        private final OAuth2AuthorizationService delegate = new InMemoryOAuth2AuthorizationService();
-        private final List<OAuth2Authorization> saved = new CopyOnWriteArrayList<>();
-
-        @Override
-        public void save(OAuth2Authorization authorization) {
-            saved.add(authorization);
-            delegate.save(authorization);
-        }
-
-        @Override
-        public void remove(OAuth2Authorization authorization) {
-            delegate.remove(authorization);
-        }
-
-        @Override
-        public OAuth2Authorization findById(String id) {
-            return delegate.findById(id);
-        }
-
-        @Override
-        public OAuth2Authorization findByToken(String token, OAuth2TokenType tokenType) {
-            return delegate.findByToken(token, tokenType);
-        }
-
-        List<OAuth2Authorization> saved() {
-            return List.copyOf(saved);
-        }
-
-        void reset() {
-            saved.clear();
-        }
-    }
-
     @LocalServerPort private int port;
     @Autowired private JdbcTemplate jdbc;
     @Autowired private PasswordEncoder passwordEncoder;
-    @Autowired private RecordingOAuth2AuthorizationService authorizationService;
+    @Autowired private OAuth2AuthorizationService authorizationService;
 
     @Value("${takibo.dev.postman-client.secret}")
     private String platformClientSecret;
@@ -127,7 +82,6 @@ class AuthorizationSaveContractBaselineIntegrationTest extends TasPostgresBaseli
     void seed() {
         dataset = new TasBaselineDataset(jdbc, passwordEncoder);
         dataset.reset();
-        authorizationService.reset();
     }
 
     @Test
@@ -136,22 +90,24 @@ class AuthorizationSaveContractBaselineIntegrationTest extends TasPostgresBaseli
                 TasBaselineDataset.PLATFORM_CLIENT_ID, platformClientSecret, "api.read");
         assertThat(response.statusCode()).isEqualTo(200);
 
-        assertThat(authorizationService.saved()).hasSize(1);
-        OAuth2Authorization authorization = authorizationService.saved().get(0);
+        Map<String, Object> row = singlePersistedAuthorizationRow();
 
-        assertThat(authorization.getPrincipalName())
-                .isEqualTo(TasBaselineDataset.PLATFORM_CLIENT_ID);
-        assertThat(authorization.getAuthorizationGrantType().getValue())
-                .isEqualTo("client_credentials");
-        assertThat(authorization.getAuthorizedScopes()).containsExactly("api.read");
+        assertThat(row)
+                .containsEntry("principal_name", TasBaselineDataset.PLATFORM_CLIENT_ID)
+                .containsEntry("authorization_grant_type", "client_credentials")
+                .containsEntry("authorized_scopes", "api.read")
+                .containsEntry("subject_type", "CLIENT_APP");
+        assertThat(row.get("principal_account_id")).isNull();
+        // PLATFORM : ni organisation, ni space.
+        assertThat(row.get("org_id")).isNull();
+        assertThat(row.get("space_id")).isNull();
 
         // Le client PLATFORM est in-memory : son identifiant technique ne correspond a
-        // aucune ligne de oauth2_clients. Persister cette autorisation telle quelle
-        // violerait fk_oauth2_authz_client_scope, en plus de org_id NOT NULL. Le recit 02
-        // doit traiter ce cas, pas le contourner.
+        // aucune ligne de oauth2_clients. fk_oauth2_authz_client_scope, qui referencait le
+        // client_id public, a ete retiree pour cette raison meme (V202608290001).
         Long matchingClientRows = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM oauth2_clients WHERE id = CAST(? AS uuid)",
-                Long.class, authorization.getRegisteredClientId());
+                Long.class, row.get("registered_client_id"));
         assertThat(matchingClientRows).isZero();
     }
 
@@ -163,37 +119,43 @@ class AuthorizationSaveContractBaselineIntegrationTest extends TasPostgresBaseli
                 TasBaselineDataset.SPACE_CLIENT_SCOPE);
         assertThat(response.statusCode()).isEqualTo(200);
 
-        assertThat(authorizationService.saved()).hasSize(1);
-        OAuth2Authorization authorization = authorizationService.saved().get(0);
+        Map<String, Object> row = singlePersistedAuthorizationRow();
 
-        // Identifiant technique, jamais le client_id public : le schema actuel fait pourtant
-        // pointer fk_oauth2_authz_client_scope vers oauth2_clients.client_id.
-        assertThat(authorization.getRegisteredClientId())
-                .isEqualTo(TasBaselineDataset.SPACE_CLIENT_UUID.toString());
-        assertThat(authorization.getPrincipalName())
-                .isEqualTo(TasBaselineDataset.SPACE_CLIENT_ID);
-        assertThat(authorization.getAuthorizedScopes())
-                .containsExactly(TasBaselineDataset.SPACE_CLIENT_SCOPE);
+        // Identifiant technique, jamais le client_id public.
+        assertThat(row)
+                .containsEntry("registered_client_id", TasBaselineDataset.SPACE_CLIENT_UUID.toString())
+                .containsEntry("principal_name", TasBaselineDataset.SPACE_CLIENT_ID)
+                .containsEntry("authorized_scopes", TasBaselineDataset.SPACE_CLIENT_SCOPE)
+                .containsEntry("org_id", TasBaselineDataset.ORG_ID)
+                .containsEntry("space_id", TasBaselineDataset.SPACE_ID);
     }
 
     @Test
-    void given_success_then_saved_access_token_matches_the_one_returned_to_the_client() {
+    void given_success_then_saved_access_token_is_encrypted_but_reads_back_as_the_one_returned() {
         HttpResponse<String> response = requestToken(
                 TasBaselineDataset.SPACE_CLIENT_ID,
                 TasBaselineDataset.SPACE_CLIENT_SECRET,
                 TasBaselineDataset.SPACE_CLIENT_SCOPE);
         String returned = accessToken(response);
 
-        OAuth2Authorization authorization = authorizationService.saved().get(0);
-        OAuth2Authorization.Token<OAuth2AccessToken> token =
-                authorization.getToken(OAuth2AccessToken.class);
+        Map<String, Object> row = singlePersistedAuthorizationRow();
 
-        assertThat(token).isNotNull();
-        assertThat(token.getToken().getTokenValue()).isEqualTo(returned);
-        assertThat(token.getToken().getIssuedAt()).isNotNull();
-        assertThat(token.getToken().getExpiresAt()).isNotNull();
+        // Jamais en clair en base...
+        assertThat(row).doesNotContainEntry("access_token_value", returned);
+        assertThat((String) row.get("access_token_value")).contains("$");
+        assertThat(row.get("access_token_hash")).isNotNull();
+        assertThat(row.get("access_token_issued_at")).isNotNull();
+        assertThat(row.get("access_token_expires_at")).isNotNull();
+        // ... mais OAuth2AuthorizationService.findByToken doit retrouver exactement ce qui a
+        // ete emis : c'est le contrat que Spring Authorization Server exige pour introspecter
+        // ou revoquer ce meme token plus tard.
+        OAuth2Authorization reloaded = authorizationService.findByToken(
+                returned, OAuth2TokenType.ACCESS_TOKEN);
+        assertThat(reloaded).isNotNull();
+        assertThat(reloaded.getToken(OAuth2AccessToken.class).getToken().getTokenValue())
+                .isEqualTo(returned);
         // Aucun refresh token en client_credentials : la RFC l'interdit.
-        assertThat(authorization.getRefreshToken()).isNull();
+        assertThat(row.get("refresh_token_value")).isNull();
     }
 
     @Test
@@ -201,39 +163,223 @@ class AuthorizationSaveContractBaselineIntegrationTest extends TasPostgresBaseli
         requestToken(TasBaselineDataset.SPACE_CLIENT_ID, "not-the-secret",
                 TasBaselineDataset.SPACE_CLIENT_SCOPE);
 
-        assertThat(authorizationService.saved()).isEmpty();
+        assertThat(dataset.countAuthorizationRows()).isZero();
+    }
+
+    @Test
+    void given_a_client_credentials_token_when_introspected_then_revoked_then_introspection_reports_inactive() {
+        // Justifie precisement le contrat que le pivot client_credentials aurait casse : sans
+        // ligne persistee, /oauth2/introspect et /oauth2/revoke n'auraient plus rien a trouver.
+        String token = accessToken(requestToken(
+                TasBaselineDataset.SPACE_CLIENT_ID,
+                TasBaselineDataset.SPACE_CLIENT_SECRET,
+                TasBaselineDataset.SPACE_CLIENT_SCOPE));
+
+        HttpResponse<String> beforeRevocation = introspect(
+                TasBaselineDataset.SPACE_CLIENT_ID, TasBaselineDataset.SPACE_CLIENT_SECRET, token);
+        assertThat(beforeRevocation.statusCode()).isEqualTo(200);
+        assertThat(isActive(beforeRevocation)).isTrue();
+
+        HttpResponse<String> revocation = revoke(
+                TasBaselineDataset.SPACE_CLIENT_ID, TasBaselineDataset.SPACE_CLIENT_SECRET, token);
+        assertThat(revocation.statusCode()).isEqualTo(200);
+
+        HttpResponse<String> afterRevocation = introspect(
+                TasBaselineDataset.SPACE_CLIENT_ID, TasBaselineDataset.SPACE_CLIENT_SECRET, token);
+        assertThat(afterRevocation.statusCode()).isEqualTo(200);
+        assertThat(isActive(afterRevocation)).isFalse();
+    }
+
+    @Test
+    void given_an_active_token_when_introspected_then_the_response_identifies_the_client_and_scope() {
+        String token = accessToken(requestToken(
+                TasBaselineDataset.SPACE_CLIENT_ID,
+                TasBaselineDataset.SPACE_CLIENT_SECRET,
+                TasBaselineDataset.SPACE_CLIENT_SCOPE));
+
+        HttpResponse<String> introspection = introspect(
+                TasBaselineDataset.SPACE_CLIENT_ID, TasBaselineDataset.SPACE_CLIENT_SECRET, token);
+
+        assertThat(field(introspection, "client_id")).isEqualTo(TasBaselineDataset.SPACE_CLIENT_ID);
+        assertThat(field(introspection, "scope")).contains(TasBaselineDataset.SPACE_CLIENT_SCOPE);
+    }
+
+    @Test
+    void given_an_unknown_token_when_introspected_then_it_reports_inactive_without_an_error() {
+        // RFC 7662 : un jeton inconnu ne se distingue pas d'un jeton revoque -- meme statut,
+        // meme corps. Repondre 4xx ici donnerait un oracle d'existence.
+        HttpResponse<String> introspection = introspect(
+                TasBaselineDataset.SPACE_CLIENT_ID, TasBaselineDataset.SPACE_CLIENT_SECRET,
+                "un-jeton-qui-n-a-jamais-existe");
+
+        assertThat(introspection.statusCode()).isEqualTo(200);
+        assertThat(isActive(introspection)).isFalse();
+    }
+
+    @Test
+    void given_an_inactive_token_when_introspected_then_the_response_discloses_nothing_else() {
+        HttpResponse<String> introspection = introspect(
+                TasBaselineDataset.SPACE_CLIENT_ID, TasBaselineDataset.SPACE_CLIENT_SECRET,
+                "un-jeton-qui-n-a-jamais-existe");
+
+        assertThat(field(introspection, "client_id")).isNull();
+        assertThat(field(introspection, "scope")).isNull();
+    }
+
+    @Test
+    void given_no_client_authentication_when_introspecting_then_it_is_refused_as_invalid_client() {
+        // RFC 7662 section 2.3 : une authentification cliente absente est un 401
+        // invalid_client, jamais un invalid_request/400 -- et jamais une reponse qui dirait
+        // quoi que ce soit du jeton sonde.
+        String token = accessToken(requestToken(
+                TasBaselineDataset.SPACE_CLIENT_ID,
+                TasBaselineDataset.SPACE_CLIENT_SECRET,
+                TasBaselineDataset.SPACE_CLIENT_SCOPE));
+
+        HttpResponse<String> introspection = postFormWithoutClientAuthentication(
+                "/oauth2/introspect", Map.of("token", token));
+
+        assertThat(introspection.statusCode()).isEqualTo(401);
+        assertThat(field(introspection, "error")).isEqualTo("invalid_client");
+        assertThat(introspection.headers().firstValue("WWW-Authenticate")).isPresent();
+        assertThat(field(introspection, "active"))
+                .as("un refus ne doit rien dire de l'etat du jeton sonde")
+                .isNull();
+    }
+
+    @Test
+    void given_no_client_authentication_when_revoking_then_it_is_refused_as_invalid_client() {
+        // RFC 7009 section 2.1 renvoie au modele d'erreurs OAuth 2.0 : meme contrat que
+        // l'introspection. Le jeton vise, lui, ne produit jamais d'erreur -- voir le test de
+        // revocation authentifiee.
+        String token = accessToken(requestToken(
+                TasBaselineDataset.SPACE_CLIENT_ID,
+                TasBaselineDataset.SPACE_CLIENT_SECRET,
+                TasBaselineDataset.SPACE_CLIENT_SCOPE));
+
+        HttpResponse<String> revocation = postFormWithoutClientAuthentication(
+                "/oauth2/revoke", Map.of("token", token));
+
+        assertThat(revocation.statusCode()).isEqualTo(401);
+        assertThat(field(revocation, "error")).isEqualTo("invalid_client");
+    }
+
+    @Test
+    void given_an_authenticated_client_when_revoking_an_unknown_token_then_it_still_answers_200() {
+        // RFC 7009 : un jeton inconnu ou deja revoque reste un 200. Repondre autrement
+        // donnerait un oracle d'existence -- exactement ce que le 401 ci-dessus ne doit pas
+        // etre confondu avec.
+        HttpResponse<String> revocation = revoke(
+                TasBaselineDataset.SPACE_CLIENT_ID, TasBaselineDataset.SPACE_CLIENT_SECRET,
+                "un-jeton-qui-n-a-jamais-existe");
+
+        assertThat(revocation.statusCode()).isEqualTo(200);
+    }
+
+    @Test
+    void given_two_tokens_when_one_is_revoked_then_the_other_stays_active() {
+        // La revocation porte sur un jeton, jamais sur le client : un second jeton du meme
+        // client doit survivre.
+        String revoked = accessToken(requestToken(
+                TasBaselineDataset.SPACE_CLIENT_ID,
+                TasBaselineDataset.SPACE_CLIENT_SECRET,
+                TasBaselineDataset.SPACE_CLIENT_SCOPE));
+        String kept = accessToken(requestToken(
+                TasBaselineDataset.SPACE_CLIENT_ID,
+                TasBaselineDataset.SPACE_CLIENT_SECRET,
+                TasBaselineDataset.SPACE_CLIENT_SCOPE));
+
+        revoke(TasBaselineDataset.SPACE_CLIENT_ID, TasBaselineDataset.SPACE_CLIENT_SECRET, revoked);
+
+        assertThat(isActive(introspect(
+                TasBaselineDataset.SPACE_CLIENT_ID, TasBaselineDataset.SPACE_CLIENT_SECRET, revoked)))
+                .isFalse();
+        assertThat(isActive(introspect(
+                TasBaselineDataset.SPACE_CLIENT_ID, TasBaselineDataset.SPACE_CLIENT_SECRET, kept)))
+                .isTrue();
+    }
+
+    private Map<String, Object> singlePersistedAuthorizationRow() {
+        List<Map<String, Object>> rows = jdbc.queryForList("SELECT * FROM oauth2_authorization");
+        assertThat(rows).hasSize(1);
+        return rows.get(0);
     }
 
     // ---------- Appel HTTP ----------
 
     private HttpResponse<String> requestToken(String clientId, String secret, String scope) {
+        return postForm("/oauth2/token", clientId, secret,
+                Map.of("grant_type", "client_credentials", "scope", scope));
+    }
+
+    private HttpResponse<String> introspect(String clientId, String secret, String token) {
+        return postForm("/oauth2/introspect", clientId, secret, Map.of("token", token));
+    }
+
+    private HttpResponse<String> revoke(String clientId, String secret, String token) {
+        return postForm("/oauth2/revoke", clientId, secret, Map.of("token", token));
+    }
+
+    private HttpResponse<String> postForm(
+            String path, String clientId, String secret, Map<String, String> form) {
         String credentials = Base64.getEncoder().encodeToString(
                 (clientId + ":" + secret).getBytes(StandardCharsets.UTF_8));
-        String form = Map.of("grant_type", "client_credentials", "scope", scope)
-                .entrySet().stream()
+        return send(HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:" + port + path))
+                .header("Authorization", "Basic " + credentials)
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .POST(HttpRequest.BodyPublishers.ofString(encode(form)))
+                .build(), path);
+    }
+
+    private HttpResponse<String> postFormWithoutClientAuthentication(
+            String path, Map<String, String> form) {
+        return send(HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:" + port + path))
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .POST(HttpRequest.BodyPublishers.ofString(encode(form)))
+                .build(), path);
+    }
+
+    private static String encode(Map<String, String> form) {
+        return form.entrySet().stream()
                 .map(e -> URLEncoder.encode(e.getKey(), StandardCharsets.UTF_8)
                         + "=" + URLEncoder.encode(e.getValue(), StandardCharsets.UTF_8))
                 .collect(Collectors.joining("&"));
+    }
 
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create("http://localhost:" + port + "/oauth2/token"))
-                .header("Authorization", "Basic " + credentials)
-                .header("Content-Type", "application/x-www-form-urlencoded")
-                .POST(HttpRequest.BodyPublishers.ofString(form))
-                .build();
+    private static HttpResponse<String> send(HttpRequest request, String path) {
         try {
             return HTTP.send(request, HttpResponse.BodyHandlers.ofString());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new IllegalStateException("Appel /oauth2/token interrompu", e);
+            throw new IllegalStateException("Appel " + path + " interrompu", e);
         } catch (Exception e) {
-            throw new IllegalStateException("Appel /oauth2/token en echec", e);
+            throw new IllegalStateException("Appel " + path + " en echec", e);
         }
     }
 
     private static String accessToken(HttpResponse<String> response) {
         try {
             return JSON.readTree(response.body()).path("access_token").asText();
+        } catch (Exception e) {
+            throw new IllegalStateException("Reponse illisible: " + response.body(), e);
+        }
+    }
+
+    private static boolean isActive(HttpResponse<String> introspectionResponse) {
+        try {
+            return JSON.readTree(introspectionResponse.body()).path("active").asBoolean();
+        } catch (Exception e) {
+            throw new IllegalStateException("Reponse illisible: " + introspectionResponse.body(), e);
+        }
+    }
+
+    /** {@code null} quand le champ est absent — ce que RFC 7662 impose pour un jeton inactif. */
+    private static String field(HttpResponse<String> response, String name) {
+        try {
+            JsonNode node = JSON.readTree(response.body()).get(name);
+            return node == null || node.isNull() ? null : node.asText();
         } catch (Exception e) {
             throw new IllegalStateException("Reponse illisible: " + response.body(), e);
         }
