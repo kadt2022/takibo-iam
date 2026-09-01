@@ -75,8 +75,8 @@ class HmacSha256UserCodeHmacTest {
 
     @Test
     void given_a_key_of_33_bytes_then_it_is_refused() {
-        // Plus longue que le bloc utile, HMAC la replie : deux cles differentes deviendraient
-        // silencieusement equivalentes.
+        // Au-dela de 32 octets, la cle n'ajoute plus de resistance : HMAC-SHA256 la complete
+        // par des zeros jusqu'au bloc de 64 octets. Une seule taille reste valable.
         assertThatThrownBy(() -> new HmacSha256UserCodeHmac(new byte[33]))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("USER_CODE_HMAC_KEY_MUST_BE_32_BYTES");

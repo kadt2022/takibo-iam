@@ -29,8 +29,10 @@ public class HmacSha256UserCodeHmac implements UserCodeHmac {
      *                    accepterait sans broncher n'importe quelle longueur non nulle — HMAC
      *                    est defini pour toute taille de cle — mais une cle plus courte que la
      *                    sortie de SHA-256 reduit d'autant la resistance recherchee, et une cle
-     *                    plus longue est repliee par HMAC, donc silencieusement equivalente a
-     *                    une autre. Refuser ici est le seul endroit ou l'ecart se voit.
+     *                    plus longue n'ajoute rien : HMAC-SHA256 la complete par des zeros
+     *                    jusqu'au bloc de 64 octets (et ne la hache qu'au-dela de ce bloc).
+     *                    N'admettre qu'une taille, refusee ici, est le seul endroit ou l'ecart
+     *                    de configuration se voit.
      */
     public HmacSha256UserCodeHmac(byte[] keyMaterial) {
         if (keyMaterial == null || keyMaterial.length != REQUIRED_KEY_LENGTH_BYTES) {
