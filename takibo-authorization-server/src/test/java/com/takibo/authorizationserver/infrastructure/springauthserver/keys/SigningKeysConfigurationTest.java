@@ -10,6 +10,7 @@ import com.takibo.authorizationserver.domain.keys.port.SigningKeyMaterialGenerat
 import com.takibo.authorizationserver.domain.keys.port.SigningKeyRepository;
 import com.takibo.authorizationserver.domain.keys.port.SigningKeyWriter;
 import com.takibo.authorizationserver.infrastructure.keys.RsaSigningKeyGenerator;
+import com.takibo.authorizationserver.infrastructure.keys.SigningKeyBootstrapInitializer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -51,10 +52,26 @@ class SigningKeysConfigurationTest {
 
     @Test
     void given_repository_cipher_and_clock_then_the_persistent_source_is_built() {
-        JWKSource<SecurityContext> source =
-                configuration.persistentJwkSource(signingKeyRepository, secretCipher, clock);
+        JWKSource<SecurityContext> source = configuration.persistentJwkSource(
+                signingKeyRepository, secretCipher, clock, bootstrapInitializer());
 
         assertThat(source).isNotNull();
+    }
+
+    /**
+     * L'amorcage est un parametre de la source persistante, et non une dependance implicite :
+     * ce test ne peut pas la construire sans lui, ce qui est exactement la garantie recherchee
+     * — l'ordre de demarrage est verifie a la compilation.
+     */
+    @Test
+    void given_the_key_ports_then_the_bootstrap_initializer_is_built() {
+        assertThat(bootstrapInitializer()).isNotNull();
+    }
+
+    private SigningKeyBootstrapInitializer bootstrapInitializer() {
+        return configuration.signingKeyBootstrapInitializer(
+                signingKeyRepository, signingKeyWriter, signingKeyMaterialGenerator,
+                secretCipher, clock);
     }
 
     @Test
@@ -82,6 +99,32 @@ class SigningKeysConfigurationTest {
         assertThatThrownBy(() -> configuration.secretCipher("k1", "*** pas du base64 ***"))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("SECRET_CIPHER_KEY_IS_NOT_VALID_BASE64");
+    }
+
+    @Test
+    void given_an_absent_key_id_then_the_cipher_bean_is_refused() {
+        // Le contrat d'installation, verifie ici plutot que decouvert au demarrage : une
+        // variable absente arrive sous la forme d'une chaine vide (valeur par defaut de
+        // application.yml), et l'identifiant vide ne satisfait pas SecretCipherKey.
+        String base64Key = Base64.getEncoder().encodeToString(new byte[32]);
+
+        assertThatThrownBy(() -> configuration.secretCipher("", base64Key))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("SECRET_CIPHER_KEY_ID_INVALID");
+    }
+
+    @Test
+    void given_an_absent_cipher_key_then_the_cipher_bean_is_refused() {
+        assertThatThrownBy(() -> configuration.secretCipher("k1", ""))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("SECRET_CIPHER_KEY_MUST_BE_32_BYTES");
+    }
+
+    @Test
+    void given_an_absent_user_code_hmac_key_then_the_hmac_bean_is_refused() {
+        assertThatThrownBy(() -> configuration.userCodeHmac(""))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("USER_CODE_HMAC_KEY_MUST_BE_32_BYTES");
     }
 
     @Test

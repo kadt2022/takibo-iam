@@ -22,6 +22,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -132,6 +133,71 @@ class JpaSigningKeyRepositoryTest {
         assertThatThrownBy(() -> repo.activateFirstIssuer(null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("SIGNING_KEY_ACTIVATION_REQUIRES_A_NEW_KEY");
+    }
+
+    // ---------- Ecriture : amorcage concurrent ----------
+
+    @Test
+    void given_the_insert_activated_the_key_then_the_bootstrap_reports_a_win() {
+        when(jpa.insertFirstPlatformIssuerIfAbsent(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(1);
+
+        assertThat(repository().tryActivateFirstIssuer(aNewSigningKey())).isTrue();
+    }
+
+    @Test
+    void given_a_concurrent_issuer_won_the_race_then_the_bootstrap_reports_a_loss_without_failing() {
+        // Zero ligne inseree n'est pas une erreur ici : c'est le resultat normal d'un second
+        // demarrage simultane, et l'appelant relira l'emettrice gagnante.
+        when(jpa.insertFirstPlatformIssuerIfAbsent(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(0);
+
+        assertThat(repository().tryActivateFirstIssuer(aNewSigningKey())).isFalse();
+    }
+
+    @Test
+    void given_a_new_key_then_the_atomic_insert_receives_its_public_jwk_as_json_text() {
+        // La requete est native : la forme publique doit traverser en texte, sans quoi le
+        // parametre jsonb serait rejete par PostgreSQL.
+        NewSigningKey newKey = aNewSigningKey();
+        when(jpa.insertFirstPlatformIssuerIfAbsent(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(1);
+
+        repository().tryActivateFirstIssuer(newKey);
+
+        ArgumentCaptor<String> jwk = ArgumentCaptor.forClass(String.class);
+        verify(jpa).insertFirstPlatformIssuerIfAbsent(
+                any(UUID.class), eq("kid-new"), eq("RS256"), eq("RSA"), eq("sig"),
+                jwk.capture(), eq(newKey.privateKeyEncrypted()));
+        assertThat(jwk.getValue()).contains("\"kty\":\"RSA\"").contains("kid-new");
+        // Jamais par save() : un conflit d'unicite n'y apparaitrait qu'au flush, laissant la
+        // transaction en rollback-only.
+        verify(jpa, never()).save(any());
+    }
+
+    @Test
+    void given_no_candidate_then_the_atomic_activation_is_refused() {
+        JpaSigningKeyRepository repo = repository();
+
+        assertThatThrownBy(() -> repo.tryActivateFirstIssuer(null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("SIGNING_KEY_ACTIVATION_REQUIRES_A_NEW_KEY");
+    }
+
+    // ---------- Lecture : historique ----------
+
+    @Test
+    void given_at_least_one_platform_key_then_a_history_is_reported() {
+        when(jpa.existsPlatformKey()).thenReturn(true);
+
+        assertThat(repository().hasPlatformKeyHistory()).isTrue();
+    }
+
+    @Test
+    void given_no_platform_key_at_all_then_no_history_is_reported() {
+        when(jpa.existsPlatformKey()).thenReturn(false);
+
+        assertThat(repository().hasPlatformKeyHistory()).isFalse();
     }
 
     // ---------- Ecriture : rotation ----------

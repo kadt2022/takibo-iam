@@ -1,5 +1,6 @@
 package com.takibo.authorizationserver.infrastructure.keys;
 
+import com.nimbusds.jose.util.JSONObjectUtils;
 import com.takibo.authorizationserver.domain.keys.model.KeyStatus;
 import com.takibo.authorizationserver.domain.keys.model.NewSigningKey;
 import com.takibo.authorizationserver.domain.keys.model.TasSigningKey;
@@ -14,6 +15,7 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -47,6 +49,11 @@ public class JpaSigningKeyRepository implements SigningKeyRepository, SigningKey
     }
 
     @Override
+    public boolean hasPlatformKeyHistory() {
+        return keys.existsPlatformKey();
+    }
+
+    @Override
     public List<TasSigningKey> findPublishable(Instant at) {
         return keys.findPublishable(atOffset(at)).stream()
                 .map(JpaSigningKeyRepository::toDomain)
@@ -66,6 +73,46 @@ public class JpaSigningKeyRepository implements SigningKeyRepository, SigningKey
             throw new IllegalArgumentException("SIGNING_KEY_ACTIVATION_REQUIRES_A_NEW_KEY");
         }
         keys.save(newIssuerEntity(newKey));
+    }
+
+    /**
+     * Insertion arbitree par la base : voir
+     * {@link SigningKeyWriter#tryActivateFirstIssuer} pour pourquoi l'unicite n'est pas
+     * verifiee ici, et {@code TasSigningKeyJpaRepository#insertFirstPlatformIssuerIfAbsent}
+     * pour la forme exacte du conflit infere.
+     * <p>
+     * Une transaction propre a cet appel : c'est elle qui rend la course observable du dehors
+     * — l'insertion en conflit attend la fin de la transaction concurrente, puis rend zero, et
+     * la ligne gagnante est alors visible pour la relecture de l'appelant.
+     */
+    @Override
+    @Transactional
+    public boolean tryActivateFirstIssuer(NewSigningKey candidate) {
+        if (candidate == null) {
+            throw new IllegalArgumentException("SIGNING_KEY_ACTIVATION_REQUIRES_A_NEW_KEY");
+        }
+        int inserted = keys.insertFirstPlatformIssuerIfAbsent(
+                UUID.randomUUID(),
+                candidate.kid(),
+                candidate.alg(),
+                candidate.kty(),
+                candidate.keyUse(),
+                serialize(candidate.publicJwkJson()),
+                candidate.privateKeyEncrypted());
+        return inserted == 1;
+    }
+
+    /**
+     * La colonne est un {@code jsonb} et la requete est native : la forme publique doit donc
+     * traverser en texte, la ou l'entite JPA laissait Hibernate s'en charger.
+     * <p>
+     * Serialisee par Nimbus, et non par un {@code ObjectMapper} injecte : le contexte en
+     * expose plusieurs — dont celui, specialement configure, du store d'autorisations — et
+     * en choisir un par autowiring ferait dependre la forme du JWK persiste d'un arbitrage
+     * sans rapport. Nimbus est de toute facon la source de cette carte.
+     */
+    private static String serialize(Map<String, Object> publicJwkJson) {
+        return JSONObjectUtils.toJSONString(publicJwkJson);
     }
 
     /**

@@ -38,4 +38,19 @@ public interface SigningKeyRepository {
      * revoquees. Inclut l'emettrice.
      */
     List<TasSigningKey> findPublishable(Instant at);
+
+    /**
+     * Existe-t-il la moindre cle de plateforme, quel que soit son statut ?
+     * <p>
+     * Question distincte de {@link #findActivePlatformIssuer} : c'est elle qui separe une
+     * installation vierge — legitimement amorcable — d'une installation dont l'histoire des
+     * cles existe mais n'a plus d'emettrice active. Le second cas denonce une corruption, une
+     * restauration partielle ou une rotation interrompue, et amorcer une cle neuve par-dessus
+     * le masquerait : TAS signerait avec une cle que rien n'a decidee, a cote d'un historique
+     * que personne n'aurait examine.
+     * <p>
+     * Aucune borne temporelle, contrairement aux deux lectures ci-dessus : une cle expiree ou
+     * revoquee reste une trace d'histoire, et c'est precisement ce que cette question cherche.
+     */
+    boolean hasPlatformKeyHistory();
 }
