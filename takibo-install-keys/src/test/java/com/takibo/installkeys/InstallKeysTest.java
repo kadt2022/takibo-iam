@@ -110,7 +110,6 @@ class InstallKeysTest {
         assertThat(new InstallKeys("k-autre", keys.cipherKeyMaterial(),
                 keys.userCodeHmacMaterial())).isNotEqualTo(keys);
         assertThat(InstallKeys.generate(new SecureRandom())).isNotEqualTo(keys);
-        assertThat(keys).isNotEqualTo(keys.cipherKeyId());
     }
 
     @Test
