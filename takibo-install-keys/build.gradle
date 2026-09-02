@@ -18,3 +18,13 @@ dependencies {
     // l'un des deux durcit sa regle.
     testImplementation project(':takibo-authorization-server')
 }
+
+// Jar executable : l'invocation documentee est `java -jar takibo-install-keys.jar init --out
+// <chemin>`, et elle doit marcher sur une machine ou seule une JVM est installee. Aucun
+// classpath externe n'est necessaire, ce module ne dependant de rien.
+jar {
+    archiveBaseName = 'takibo-install-keys'
+    manifest {
+        attributes 'Main-Class': 'com.takibo.installkeys.TakiboInstallKeysCli'
+    }
+}
