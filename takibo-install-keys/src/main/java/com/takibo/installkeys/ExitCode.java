@@ -31,7 +31,14 @@ enum ExitCode {
     UNSAFE_FILESYSTEM(4),
 
     /** Échec d'entrée-sortie : répertoire absent, disque plein, droits insuffisants. */
-    IO_FAILURE(5);
+    IO_FAILURE(5),
+
+    /**
+     * Un fichier {@code .pending} est là : une initialisation précédente a été interrompue,
+     * ou une autre est en cours. Rien n'a été régénéré et rien n'a été effacé — ce fichier
+     * peut porter des clés déjà utilisées ailleurs, et lui seul peut les rendre.
+     */
+    INTERRUPTED_INSTALLATION(6);
 
     private final int value;
 

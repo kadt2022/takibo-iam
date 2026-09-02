@@ -46,7 +46,7 @@ class SecretFileWriterTest {
     void given_a_free_target_then_the_content_is_written_whole() {
         Path target = directory.resolve("secrets.env");
 
-        SecretFileWriter.write(target, CONTENT);
+        SecretFileWriter.write(target, () -> CONTENT);
 
         assertThat(target).content(StandardCharsets.UTF_8).isEqualTo(CONTENT);
     }
@@ -55,7 +55,7 @@ class SecretFileWriterTest {
     void given_a_written_file_then_only_its_owner_can_read_it() throws Exception {
         Path target = directory.resolve("secrets.env");
 
-        SecretFileWriter.write(target, CONTENT);
+        SecretFileWriter.write(target, () -> CONTENT);
 
         assertThat(readableByOwnerOnly(target))
                 .as("le fichier de secrets doit rester illisible pour les autres")
@@ -66,7 +66,7 @@ class SecretFileWriterTest {
     void given_a_written_file_then_no_temporary_remains() {
         Path target = directory.resolve("secrets.env");
 
-        SecretFileWriter.write(target, CONTENT);
+        SecretFileWriter.write(target, () -> CONTENT);
 
         assertThat(fileNamesIn(directory)).containsExactly("secrets.env");
     }
@@ -76,7 +76,7 @@ class SecretFileWriterTest {
         Path target = directory.resolve("secrets.env");
         writeFile(target, "ancien\n");
 
-        assertThatThrownBy(() -> SecretFileWriter.write(target, CONTENT))
+        assertThatThrownBy(() -> SecretFileWriter.write(target, () -> CONTENT))
                 .isInstanceOf(SecretFileException.class)
                 .extracting(e -> ((SecretFileException) e).exitCode())
                 .isEqualTo(ExitCode.TARGET_EXISTS);
@@ -89,7 +89,7 @@ class SecretFileWriterTest {
     void given_a_missing_directory_then_the_write_is_refused() {
         Path target = directory.resolve("absent").resolve("secrets.env");
 
-        assertThatThrownBy(() -> SecretFileWriter.write(target, CONTENT))
+        assertThatThrownBy(() -> SecretFileWriter.write(target, () -> CONTENT))
                 .isInstanceOf(SecretFileException.class)
                 .extracting(e -> ((SecretFileException) e).exitCode())
                 .isEqualTo(ExitCode.IO_FAILURE);
@@ -116,10 +116,14 @@ class SecretFileWriterTest {
                         ready.countDown();
                         go.await();
                         try {
-                            SecretFileWriter.write(target, content);
+                            SecretFileWriter.write(target, () -> content);
                             return content;
                         } catch (SecretFileException e) {
-                            assertThat(e.exitCode()).isEqualTo(ExitCode.TARGET_EXISTS);
+                            // Deux refus possibles, et tous deux corrects : le .pending de la
+                            // gagnante tient encore (INTERRUPTED_INSTALLATION) ou elle a deja
+                            // publie et nettoye (TARGET_EXISTS). Aucun autre code n'est admis.
+                            assertThat(e.exitCode()).isIn(
+                                    ExitCode.INTERRUPTED_INSTALLATION, ExitCode.TARGET_EXISTS);
                             return null;
                         }
                     })
@@ -173,8 +177,87 @@ class SecretFileWriterTest {
         List<Integer> codes = results.stream().map(SecretFileWriterTest::get).toList();
         assertThat(codes).filteredOn(code -> code == ExitCode.SUCCESS.value()).hasSize(1);
         assertThat(codes).filteredOn(code -> code != ExitCode.SUCCESS.value())
-                .allMatch(code -> code == ExitCode.TARGET_EXISTS.value());
+                .allMatch(code -> code == ExitCode.TARGET_EXISTS.value()
+                        || code == ExitCode.INTERRUPTED_INSTALLATION.value());
         assertThat(fileNamesIn(directory)).containsExactly("secrets.env");
+    }
+
+    // ---------- Arret brutal ----------
+
+    @Test
+    void given_a_pending_file_without_a_target_then_nothing_is_regenerated() {
+        // Premier instant : la machine s'arrete entre l'ecriture et la publication. Le
+        // .pending porte des cles qui peuvent deja avoir servi ailleurs — les regenerer
+        // rendrait indechiffrable ce qu'elles ont scelle.
+        Path target = directory.resolve("secrets.env");
+        Path pending = directory.resolve("secrets.env" + SecretFileWriter.PENDING_SUFFIX);
+        writeFile(pending, "TAKIBO_TAS_CIPHER_KEY_ID=k-interrompu\n");
+
+        assertThatThrownBy(() -> SecretFileWriter.write(target, () -> CONTENT))
+                .isInstanceOf(SecretFileException.class)
+                .extracting(e -> ((SecretFileException) e).exitCode())
+                .isEqualTo(ExitCode.INTERRUPTED_INSTALLATION);
+
+        assertThat(target).doesNotExist();
+        // Jamais efface automatiquement : ce fichier est peut-etre la seule copie des cles.
+        assertThat(pending).content(StandardCharsets.UTF_8)
+                .isEqualTo("TAKIBO_TAS_CIPHER_KEY_ID=k-interrompu\n");
+    }
+
+    @Test
+    void given_a_pending_file_linked_to_the_target_then_only_the_pending_is_removed()
+            throws Exception {
+        // Second instant : la publication a reussi, seul le nettoyage manquait. Les deux noms
+        // designent le meme inode, l'installation est donc bel et bien faite.
+        Path target = directory.resolve("secrets.env");
+        Path pending = directory.resolve("secrets.env" + SecretFileWriter.PENDING_SUFFIX);
+        writeFile(target, CONTENT);
+        Files.createLink(pending, target);
+
+        assertThatThrownBy(() -> SecretFileWriter.write(target, () -> "regenere\n"))
+                .isInstanceOf(SecretFileException.class)
+                .extracting(e -> ((SecretFileException) e).exitCode())
+                .isEqualTo(ExitCode.TARGET_EXISTS);
+
+        assertThat(pending).doesNotExist();
+        assertThat(target).content(StandardCharsets.UTF_8).isEqualTo(CONTENT);
+    }
+
+    @Test
+    void given_a_pending_file_distinct_from_the_target_then_nothing_is_deleted() {
+        // Deux jeux de cles distincts : personne d'autre que l'operateur ne peut dire lequel
+        // fait foi, donc rien n'est efface et rien n'est produit.
+        Path target = directory.resolve("secrets.env");
+        Path pending = directory.resolve("secrets.env" + SecretFileWriter.PENDING_SUFFIX);
+        writeFile(target, "TAKIBO_TAS_CIPHER_KEY_ID=k-installe\n");
+        writeFile(pending, "TAKIBO_TAS_CIPHER_KEY_ID=k-autre\n");
+
+        assertThatThrownBy(() -> SecretFileWriter.write(target, () -> CONTENT))
+                .isInstanceOf(SecretFileException.class)
+                .extracting(e -> ((SecretFileException) e).exitCode())
+                .isEqualTo(ExitCode.INTERRUPTED_INSTALLATION);
+
+        assertThat(target).content(StandardCharsets.UTF_8)
+                .isEqualTo("TAKIBO_TAS_CIPHER_KEY_ID=k-installe\n");
+        assertThat(pending).content(StandardCharsets.UTF_8)
+                .isEqualTo("TAKIBO_TAS_CIPHER_KEY_ID=k-autre\n");
+    }
+
+    @Test
+    void given_a_losing_initialisation_then_it_never_drew_any_key() {
+        // Le .pending arbitre avant le tirage : la perdante ne consomme pas d'entropie et ne
+        // laisse aucune matiere derriere elle.
+        Path target = directory.resolve("secrets.env");
+        writeFile(directory.resolve("secrets.env" + SecretFileWriter.PENDING_SUFFIX), "occupe\n");
+        java.util.concurrent.atomic.AtomicBoolean drawn =
+                new java.util.concurrent.atomic.AtomicBoolean();
+
+        assertThatThrownBy(() -> SecretFileWriter.write(target, () -> {
+            drawn.set(true);
+            return CONTENT;
+        })).isInstanceOf(SecretFileException.class);
+
+        assertThat(drawn).isFalse();
     }
 
     // ---------- Fixtures ----------

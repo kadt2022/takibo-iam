@@ -58,8 +58,10 @@ public final class TakiboInstallKeysCli {
         }
 
         try {
-            SecretFileWriter.write(target, EnvFileContent.render(
-                    InstallKeys.generate(new SecureRandom())));
+            // Les cles sont tirees par le writer, apres qu'il a arbitre la concurrence : une
+            // initialisation perdante ne doit pas avoir consomme d'entropie pour rien.
+            SecretFileWriter.write(target,
+                    () -> EnvFileContent.render(InstallKeys.generate(new SecureRandom())));
         } catch (SecretFileException e) {
             err.println(e.getMessage());
             return e.exitCode().value();
