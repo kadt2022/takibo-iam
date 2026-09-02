@@ -88,9 +88,16 @@ final class SecretFileWriter {
         resolveLeftovers(target, pending);
 
         restriction.createRestrictedFile(pending);
+        // Le temoin de reprise ne sert a rien s'il ne survit pas a une coupure : son entree de
+        // repertoire doit atteindre le disque avant que des cles n'y soient ecrites.
+        syncDirectory(directory);
         try {
             writeFully(pending, content.get());
             publish(pending, target);
+            // Avant de retirer le second nom et d'annoncer le succes : sans cela, une coupure
+            // pourrait faire disparaitre les DEUX entrees alors que les cles ont deja ete
+            // remises a l'operateur, et le demarrage suivant en fabriquerait d'incompatibles.
+            syncDirectory(directory);
         } catch (SecretFileException e) {
             // Notre propre .pending, non publie : l'effacer est sans risque, et le laisser
             // serait abandonner un secret dans un repertoire.
@@ -150,6 +157,27 @@ final class SecretFileWriter {
             throw new SecretFileException(ExitCode.UNSAFE_FILESYSTEM,
                     "This filesystem cannot publish a file atomically without replacing an "
                             + "existing one; refusing to write secrets to " + target, e);
+        }
+    }
+
+    /**
+     * Force les entrées du répertoire sur le disque.
+     * <p>
+     * {@code force(true)} sur le fichier garantit son <b>contenu</b>, jamais son <b>nom</b> :
+     * après une coupure de courant, un fichier parfaitement écrit peut n'être rattaché à aucun
+     * répertoire. Ici, la conséquence serait grave — la CLI aurait annoncé un succès, ses clés
+     * seraient déjà en service, et le démarrage suivant, ne trouvant plus ni cible ni témoin,
+     * en fabriquerait d'incompatibles.
+     * <p>
+     * Tous les systèmes ne permettent pas d'ouvrir un répertoire en canal — Windows le refuse.
+     * L'échec est donc admis : c'est une garantie supplémentaire là où elle existe, jamais une
+     * condition de fonctionnement.
+     */
+    private static void syncDirectory(Path directory) {
+        try (FileChannel channel = FileChannel.open(directory, StandardOpenOption.READ)) {
+            channel.force(true);
+        } catch (IOException | UnsupportedOperationException e) {
+            // Systeme qui n'expose pas ses repertoires : rien a signaler, rien a corriger.
         }
     }
 

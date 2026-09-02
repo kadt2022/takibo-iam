@@ -93,6 +93,27 @@ class InstallKeysTest {
     }
 
     @Test
+    void given_two_instances_holding_the_same_material_then_they_are_equal() {
+        // Un record compare ses tableaux par reference : sans redefinition, deux instances
+        // portant la meme matiere seraient declarees differentes.
+        InstallKeys keys = InstallKeys.generate(new SecureRandom());
+        InstallKeys copy = new InstallKeys(
+                keys.cipherKeyId(), keys.cipherKeyMaterial(), keys.userCodeHmacMaterial());
+
+        assertThat(copy).isEqualTo(keys).hasSameHashCodeAs(keys);
+    }
+
+    @Test
+    void given_a_different_material_or_identifier_then_the_instances_differ() {
+        InstallKeys keys = InstallKeys.generate(new SecureRandom());
+
+        assertThat(new InstallKeys("k-autre", keys.cipherKeyMaterial(),
+                keys.userCodeHmacMaterial())).isNotEqualTo(keys);
+        assertThat(InstallKeys.generate(new SecureRandom())).isNotEqualTo(keys);
+        assertThat(keys).isNotEqualTo(keys.cipherKeyId());
+    }
+
+    @Test
     void given_a_generated_key_then_its_text_form_never_reveals_the_material() {
         // Un record imprime ses composants par defaut : sans redefinition, un simple log
         // suffirait a publier les deux secrets.

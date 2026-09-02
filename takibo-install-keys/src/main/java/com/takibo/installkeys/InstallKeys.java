@@ -83,6 +83,29 @@ public record InstallKeys(String cipherKeyId, byte[] cipherKeyMaterial,
     }
 
     /**
+     * Un record compare ses composants par référence lorsqu'ils sont des tableaux : deux
+     * instances portant la même matière seraient déclarées différentes, et une même instance
+     * dupliquée le serait aussi. La comparaison porte donc sur le contenu.
+     * <p>
+     * {@link java.util.Arrays#equals(byte[], byte[])} n'est pas à temps constant : c'est sans
+     * conséquence ici, où l'on compare deux valeurs que l'on possède déjà toutes les deux,
+     * jamais un secret contre une saisie d'attaquant.
+     */
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof InstallKeys keys
+                && cipherKeyId.equals(keys.cipherKeyId)
+                && Arrays.equals(cipherKeyMaterial, keys.cipherKeyMaterial)
+                && Arrays.equals(userCodeHmacMaterial, keys.userCodeHmacMaterial);
+    }
+
+    @Override
+    public int hashCode() {
+        return 31 * (31 * cipherKeyId.hashCode() + Arrays.hashCode(cipherKeyMaterial))
+                + Arrays.hashCode(userCodeHmacMaterial);
+    }
+
+    /**
      * Volontairement muet sur la matière : ce type ne doit jamais pouvoir être journalisé par
      * inadvertance, et l'implémentation par défaut d'un record imprimerait ses composants.
      */
