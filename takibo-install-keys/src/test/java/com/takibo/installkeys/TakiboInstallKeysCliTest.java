@@ -125,6 +125,16 @@ class TakiboInstallKeysCliTest {
     }
 
     @Test
+    void given_a_path_the_filesystem_cannot_represent_then_it_is_refused() {
+        // Le caractere nul est invalide dans un chemin sur tous les systemes vises : la CLI
+        // doit le refuser comme un argument, sans laisser remonter une exception brute.
+        int exitCode = run("init", "--out", "secrets\0.env");
+
+        assertThat(exitCode).isEqualTo(ExitCode.USAGE.value());
+        assertThat(err.toString(StandardCharsets.UTF_8)).contains("invalid path");
+    }
+
+    @Test
     void given_a_missing_output_directory_then_the_failure_is_reported_without_creating_it() {
         Path target = directory.resolve("absent").resolve("takibo-secrets.env");
 

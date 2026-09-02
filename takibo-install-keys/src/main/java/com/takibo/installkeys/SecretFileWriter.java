@@ -8,16 +8,12 @@ import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.nio.file.attribute.AclEntry;
-import java.nio.file.attribute.AclEntryPermission;
-import java.nio.file.attribute.AclEntryType;
 import java.nio.file.attribute.AclFileAttributeView;
 import java.nio.file.attribute.FileAttribute;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.nio.file.attribute.UserPrincipal;
 import java.util.EnumSet;
-import java.util.List;
 import java.util.Set;
 import java.util.function.Supplier;
 
@@ -218,42 +214,26 @@ final class SecretFileWriter {
             }
         },
 
-        /** ACL posée sur un fichier vide, puis relue : aucun secret n'existe entre les deux. */
+        /**
+         * ACL posée sur un fichier vide, puis relue : aucun secret n'existe entre les deux.
+         * La logique de restriction et de vérification vit dans {@link OwnerOnlyAcl}, où un
+         * test la couvre quel que soit le système — sans quoi elle ne serait exercée que sur
+         * un poste Windows, jamais en intégration continue.
+         */
         WINDOWS_ACL {
             @Override
             void createRestrictedFile(Path file) {
                 createExclusively(file);
                 try {
-                    restrictToOwner(file);
+                    OwnerOnlyAcl.restrict(
+                            Files.getFileAttributeView(file, AclFileAttributeView.class),
+                            Files.getOwner(file), file);
                 } catch (IOException | RuntimeException e) {
                     deleteQuietly(file);
                     throw e instanceof SecretFileException secretFileException
                             ? secretFileException
                             : new SecretFileException(ExitCode.UNSAFE_FILESYSTEM,
                                     "Failed to restrict " + file + " to its owner", e);
-                }
-            }
-
-            private void restrictToOwner(Path file) throws IOException {
-                AclFileAttributeView acl =
-                        Files.getFileAttributeView(file, AclFileAttributeView.class);
-                UserPrincipal owner = Files.getOwner(file);
-                acl.setAcl(List.of(AclEntry.newBuilder()
-                        .setType(AclEntryType.ALLOW)
-                        .setPrincipal(owner)
-                        .setPermissions(EnumSet.allOf(AclEntryPermission.class))
-                        .build()));
-
-                // Relire plutot que faire confiance : setAcl peut etre partiellement honore
-                // selon le volume, et une entree heritee laissee en place rendrait le secret
-                // lisible par d'autres.
-                boolean ownerOnly = acl.getAcl().stream()
-                        .allMatch(entry -> entry.principal().equals(owner)
-                                && entry.type() == AclEntryType.ALLOW);
-                if (!ownerOnly) {
-                    throw new SecretFileException(ExitCode.UNSAFE_FILESYSTEM,
-                            "This filesystem kept access entries for other principals; "
-                                    + "refusing to write secrets to " + file);
                 }
             }
         };

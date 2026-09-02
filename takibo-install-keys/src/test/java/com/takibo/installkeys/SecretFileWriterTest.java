@@ -182,6 +182,27 @@ class SecretFileWriterTest {
         assertThat(fileNamesIn(directory)).containsExactly("secrets.env");
     }
 
+    @Test
+    void given_a_target_that_appears_during_the_write_then_it_is_not_overwritten() {
+        // L'exigence la plus fine : la cible n'existait pas au depart, elle apparait pendant
+        // que nous ecrivons. Aucune verification prealable ne peut couvrir ce cas — seule la
+        // publication, arbitree par le systeme de fichiers, le refuse. Le fournisseur de
+        // contenu sert ici d'instant precis ou l'intrus s'installe.
+        Path target = directory.resolve("secrets.env");
+
+        assertThatThrownBy(() -> SecretFileWriter.write(target, () -> {
+            writeFile(target, "pose par un concurrent\n");
+            return CONTENT;
+        }))
+                .isInstanceOf(SecretFileException.class)
+                .extracting(e -> ((SecretFileException) e).exitCode())
+                .isEqualTo(ExitCode.TARGET_EXISTS);
+
+        assertThat(target).content(StandardCharsets.UTF_8).isEqualTo("pose par un concurrent\n");
+        // Et notre propre .pending, jamais publie, ne reste pas derriere : c'est un secret.
+        assertThat(fileNamesIn(directory)).containsExactly("secrets.env");
+    }
+
     // ---------- Arret brutal ----------
 
     @Test
