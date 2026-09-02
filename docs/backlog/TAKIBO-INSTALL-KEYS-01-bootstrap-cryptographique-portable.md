@@ -182,3 +182,18 @@ l'écriture.
   jamais de matière de signature.
 - Intégration directe à un coffre (écriture par API, sortie standard) — adaptateur explicite,
   récit séparé.
+
+## Documentation d'exploitation
+
+Elle vit avec l'outil, dans [`takibo-install-keys/README.md`](../../takibo-install-keys/README.md) :
+invocation, import dans `.env` / Docker / OpenShift, codes de sortie, conduite à tenir après une
+initialisation interrompue, et la règle de sauvegarde conjointe base + clé AES.
+
+## Clôture documentaire
+
+Lorsque ce récit est terminé et validé :
+
+1. passer son statut à `TERMINÉ` ;
+2. déplacer ce fichier de `docs/backlog` vers `docs/terminer` avec `git mv` ;
+3. mettre à jour les index et liens concernés ;
+4. inclure ce déplacement dans la PR de clôture du récit.
