@@ -3,6 +3,7 @@ package com.takibo.authorizationserver.infrastructure.springauthserver.keys;
 import com.nimbusds.jose.jwk.JWK;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
+import com.takibo.authorizationserver.domain.keys.PlatformSigningKeyBootstrap;
 import com.takibo.authorizationserver.domain.keys.SigningKeyRotationService;
 import com.takibo.authorizationserver.domain.keys.port.SecretCipher;
 import com.takibo.authorizationserver.domain.keys.port.SigningKeyMaterialGenerator;
@@ -14,6 +15,7 @@ import com.takibo.authorizationserver.infrastructure.keys.HmacSha256UserCodeHmac
 import com.takibo.authorizationserver.infrastructure.keys.PersistentJwkSource;
 import com.takibo.authorizationserver.infrastructure.keys.RsaSigningKeyGenerator;
 import com.takibo.authorizationserver.infrastructure.keys.SecretCipherKey;
+import com.takibo.authorizationserver.infrastructure.keys.SigningKeyBootstrapInitializer;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -46,10 +48,35 @@ public class SigningKeysConfiguration {
     @Bean
     @ConditionalOnProperty(name = "takibo.tas.keys.ephemeral", havingValue = "false",
             matchIfMissing = true)
-    public JWKSource<SecurityContext> persistentJwkSource(SigningKeyRepository signingKeys,
-                                                          SecretCipher secretCipher,
-                                                          Clock clock) {
+    public JWKSource<SecurityContext> persistentJwkSource(
+            SigningKeyRepository signingKeys,
+            SecretCipher secretCipher,
+            Clock clock,
+            SigningKeyBootstrapInitializer bootstrapped) {
+        // Le parametre bootstrapped n'est pas utilise : il est la dependance elle-meme. Spring
+        // n'injecte un bean qu'une fois completement initialise, donc l'amorcage a deja eu lieu
+        // quand cette source valide qu'une emettrice existe. L'exprimer par un type plutot que
+        // par @DependsOn("nom") le fait verifier a la compilation, et le fait survivre a un
+        // renommage.
         return new PersistentJwkSource(signingKeys, secretCipher, clock);
+    }
+
+    /**
+     * Amorcage de la premiere cle de signature (TAS-KEYS-BOOTSTRAP-01), sous la meme condition
+     * que la source persistante : en mode ephemere, il n'y a rien a amorcer puisque rien n'est
+     * conserve.
+     */
+    @Bean
+    @ConditionalOnProperty(name = "takibo.tas.keys.ephemeral", havingValue = "false",
+            matchIfMissing = true)
+    public SigningKeyBootstrapInitializer signingKeyBootstrapInitializer(
+            SigningKeyRepository signingKeys,
+            SigningKeyWriter signingKeyWriter,
+            SigningKeyMaterialGenerator generator,
+            SecretCipher secretCipher,
+            Clock clock) {
+        return new SigningKeyBootstrapInitializer(new PlatformSigningKeyBootstrap(
+                signingKeys, signingKeyWriter, generator, secretCipher, clock));
     }
 
     /**

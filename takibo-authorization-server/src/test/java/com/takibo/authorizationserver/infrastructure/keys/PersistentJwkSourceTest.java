@@ -292,6 +292,12 @@ class PersistentJwkSourceTest {
             return Optional.ofNullable(issuer).map(Row::toDomain);
         }
 
+        /** Hors sujet ici : l'amorcage est deja fait quand cette source est construite. */
+        @Override
+        public boolean hasPlatformKeyHistory() {
+            return issuer != null || !publishable.isEmpty();
+        }
+
         @Override
         public List<TasSigningKey> findPublishable(Instant at) {
             List<TasSigningKey> keys = new ArrayList<>();

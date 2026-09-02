@@ -52,4 +52,27 @@ public interface SigningKeyWriter {
      * deux émettrices coexister, jamais l'inverse.
      */
     void activateNewIssuer(NewSigningKey newKey, Instant retiredKeyExpiresAt);
+
+    /**
+     * Tente d'activer {@code candidate} comme premiere emettrice de plateforme, sans echouer
+     * si une autre instance a gagne la course.
+     * <p>
+     * Difference avec {@link #activateFirstIssuer} : celui-la considere qu'une emettrice deja
+     * presente est une erreur d'appel, celui-ci qu'elle est le resultat normal d'un demarrage
+     * concurrent. Deux instances amorcant la meme installation vide sont un cas ordinaire ;
+     * l'une doit gagner, l'autre doit continuer avec la cle de la gagnante, et aucune ne doit
+     * refuser de demarrer.
+     * <p>
+     * L'implementation doit rendre l'arbitrage a la base — {@code ON CONFLICT ... DO NOTHING}
+     * sur l'index unique partiel de l'emettrice active — et non capturer une violation
+     * d'unicite pour relire ensuite : sous JPA, cette violation peut n'apparaitre qu'au flush
+     * et laisser la transaction en rollback-only, ou la relecture echouerait pour une raison
+     * sans rapport avec le probleme reel. L'inference doit viser cet index precis, et lui
+     * seul : un {@code ON CONFLICT} generique avalerait aussi une collision de {@code kid} ou
+     * toute autre anomalie, qui doivent rester des echecs.
+     *
+     * @return {@code true} si cette insertion a active la cle, {@code false} si une emettrice
+     *         concurrente etait deja la — auquel cas l'appelant relit l'emettrice gagnante
+     */
+    boolean tryActivateFirstIssuer(NewSigningKey candidate);
 }

@@ -80,9 +80,17 @@ takibo:
       # TAKIBO_TAS_CIPHER_KEY_ID : identifiant stable, [A-Za-z0-9_-], inscrit dans chaque
       #   chiffre. Ne jamais le reutiliser pour une autre matiere.
       #
+      # Ces deux valeurs sont les SEULES que l'installation fournit. La cle de signature
+      # RSA, elle, est amorcee par TAS au premier demarrage (TAS-KEYS-BOOTSTRAP-01) : elle
+      # n'est pas un secret a saisir mais un etat cryptographique interne, chiffre en base
+      # avec la cle AES ci-dessus. Consequence d'exploitation : la sauvegarde de PostgreSQL
+      # et celle de la cle AES sont indissociables — restaurer l'une sans l'autre ne rend
+      # pas la cle de signature.
+      #
       # La generation ephemere exige un opt-in explicite et n'a sa place qu'en
       # developpement ou en test : elle regenere une paire a chaque demarrage, donc
-      # invalide tous les JWT en circulation a chaque deploiement.
+      # invalide tous les JWT en circulation a chaque deploiement. Ce n'est jamais un mode
+      # d'installation.
       ephemeral: ${TAKIBO_TAS_EPHEMERAL_KEYS:false}
       cipher:
         active-key-id: ${TAKIBO_TAS_CIPHER_KEY_ID:}

@@ -1,9 +1,7 @@
 package com.takibo.authorizationserver.domain.keys;
 
-import com.takibo.authorizationserver.domain.keys.model.GeneratedSigningKeyMaterial;
 import com.takibo.authorizationserver.domain.keys.model.NewSigningKey;
 import com.takibo.authorizationserver.domain.keys.port.SecretCipher;
-import com.takibo.authorizationserver.domain.keys.port.SecretContext;
 import com.takibo.authorizationserver.domain.keys.port.SigningKeyMaterialGenerator;
 import com.takibo.authorizationserver.domain.keys.port.SigningKeyWriter;
 
@@ -33,16 +31,14 @@ import java.time.Instant;
  */
 public class SigningKeyRotationService {
 
-    private final SigningKeyMaterialGenerator generator;
+    private final SigningKeySealer sealer;
     private final SigningKeyWriter writer;
-    private final SecretCipher cipher;
     private final Clock clock;
 
     public SigningKeyRotationService(SigningKeyMaterialGenerator generator, SigningKeyWriter writer,
                                       SecretCipher cipher, Clock clock) {
-        this.generator = generator;
+        this.sealer = new SigningKeySealer(generator, cipher);
         this.writer = writer;
-        this.cipher = cipher;
         this.clock = clock;
     }
 
@@ -56,7 +52,7 @@ public class SigningKeyRotationService {
      * @return le {@code kid} de la clé activée
      */
     public String initializeFirstIssuer() {
-        NewSigningKey newKey = sealedNewKey();
+        NewSigningKey newKey = sealer.seal();
         writer.activateFirstIssuer(newKey);
         return newKey.kid();
     }
@@ -79,22 +75,9 @@ public class SigningKeyRotationService {
             throw new IllegalArgumentException("SIGNING_KEY_ROTATION_REQUIRES_A_POSITIVE_OVERLAP");
         }
 
-        NewSigningKey newKey = sealedNewKey();
+        NewSigningKey newKey = sealer.seal();
         Instant now = clock.instant();
         writer.activateNewIssuer(newKey, now.plus(overlap));
         return newKey.kid();
-    }
-
-    private NewSigningKey sealedNewKey() {
-        GeneratedSigningKeyMaterial material = generator.generate();
-        String encryptedPrivateMaterial = cipher.encrypt(
-                SecretContext.signingKeyMaterial(material.kid()), material.privateKeyMaterial());
-        return new NewSigningKey(
-                material.kid(),
-                material.alg(),
-                material.kty(),
-                material.keyUse(),
-                material.publicJwkJson(),
-                encryptedPrivateMaterial);
     }
 }

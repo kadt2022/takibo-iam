@@ -265,6 +265,17 @@ class OAuth2AuthorizationRestartAcceptanceTest {
                     "JdbcFirstIssuerWriter n'amorce qu'une premiere emettrice");
         }
 
+        /**
+         * Sans concurrence dans ce test, l'amorcage tolerant a la course se ramene a
+         * l'amorcage simple ; l'arbitrage reel par la base est prouve dans
+         * {@code SigningKeyBootstrapIntegrationTest}.
+         */
+        @Override
+        public boolean tryActivateFirstIssuer(NewSigningKey candidate) {
+            activateFirstIssuer(candidate);
+            return true;
+        }
+
         private static String toJson(Map<String, Object> publicJwkJson) {
             return JSONObjectUtils.toJSONString(publicJwkJson);
         }
