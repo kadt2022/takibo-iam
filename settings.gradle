@@ -17,5 +17,6 @@ include(
         "takibo-outbox-jpa",
         "takibo-outbox-spring",
         "takibo-outbox-spring-starter",
-        "takibo-messaging"
+        "takibo-messaging",
+        "takibo-install-keys"
 )

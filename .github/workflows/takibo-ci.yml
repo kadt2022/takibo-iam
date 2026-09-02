@@ -216,7 +216,7 @@ jobs:
       - uses: ./.github/actions/takibo-test-group
         with:
           group: authorization
-          tasks: ':takibo-authorization-server:test'
+          tasks: ':takibo-authorization-server:test :takibo-install-keys:test'
 
   test-messaging-audit:
     name: Takibo Tests - messaging-audit

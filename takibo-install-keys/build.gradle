@@ -1,0 +1,20 @@
+plugins {
+    id 'java-library'
+    id 'io.spring.dependency-management'
+}
+
+// Aucune dependance applicative : ni Spring, ni JPA, ni le coeur TAKIBO. Cette CLI doit
+// s'executer sur une machine vierge, avec une JVM et rien d'autre — pas de base, pas de
+// contexte, pas de configuration. Le plugin de gestion de dependances n'est la que pour
+// aligner les versions de test sur celles du reste du depot.
+dependencies {
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testImplementation 'org.assertj:assertj-core'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+    // Dependance de TEST uniquement, et volontairement : la CLI doit satisfaire les
+    // invariants de SecretCipherKey et HmacSha256UserCodeHmac sans jamais les importer en
+    // production. Les confronter ici fait echouer ce module, a l'endroit exact, le jour ou
+    // l'un des deux durcit sa regle.
+    testImplementation project(':takibo-authorization-server')
+}
