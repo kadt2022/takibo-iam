@@ -101,6 +101,7 @@ de mettre ces clés en service.** C'est de toute façon ce qu'exige la règle ci
 | `4` | le système de fichiers ne peut pas protéger le fichier | écrire sur un volume qui porte des permissions POSIX ou des ACL |
 | `5` | échec d'entrée-sortie | répertoire absent, disque plein, droits insuffisants |
 | `6` | un `.pending` est présent | voir ci-dessous |
+| `7` | le tirage des clés a échoué | rien n'a été écrit et rien ne subsiste : relancer la commande |
 
 Le code `0` accompagné de la note de durabilité reste un succès : le fichier est écrit, publié
 et protégé. La note ne porte que sur la survie à une coupure survenant dans la seconde qui suit.

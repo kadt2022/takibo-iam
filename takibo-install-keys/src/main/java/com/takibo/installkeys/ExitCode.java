@@ -38,7 +38,18 @@ enum ExitCode {
      * ou une autre est en cours. Rien n'a été régénéré et rien n'a été effacé — ce fichier
      * peut porter des clés déjà utilisées ailleurs, et lui seul peut les rendre.
      */
-    INTERRUPTED_INSTALLATION(6);
+    INTERRUPTED_INSTALLATION(6),
+
+    /**
+     * Le tirage des clés a échoué — fournisseur cryptographique indisponible, par exemple.
+     * Rien n'a été écrit, et le fichier de travail a été retiré : relancer la commande suffit.
+     * <p>
+     * Distinct de {@link #INTERRUPTED_INSTALLATION} pour une raison qui compte : ce dernier dit
+     * « des clés existent peut-être déjà, ne régénérez pas », alors qu'ici aucune clé n'a
+     * jamais existé. Les confondre enverrait l'opérateur chercher une sauvegarde qui n'a pas
+     * lieu d'être.
+     */
+    GENERATION_FAILURE(7);
 
     private final int value;
 

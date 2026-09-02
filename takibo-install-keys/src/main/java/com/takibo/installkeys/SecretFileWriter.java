@@ -97,9 +97,15 @@ final class SecretFileWriter {
         // Le temoin de reprise ne sert a rien s'il ne survit pas a une coupure : son entree de
         // repertoire doit atteindre le disque avant que des cles n'y soient ecrites.
         boolean pendingEntryFlushed = syncDirectory(directory);
+        // Le tirage a sa propre phase de nettoyage : une exception du fournisseur laisserait
+        // sinon un .pending vide, que la prochaine execution lirait comme un amorcage
+        // interrompu — donc comme des cles peut-etre deja en service. Un faux diagnostic de
+        // cette gravite enverrait l'operateur chercher une sauvegarde inexistante.
+        String generated = generate(content, pending);
+
         boolean targetEntryFlushed;
         try {
-            writeFully(pending, content.get());
+            writeFully(pending, generated);
             publish(pending, target);
             // Avant de retirer le second nom et d'annoncer le succes : sans cela, une coupure
             // pourrait faire disparaitre les DEUX entrees alors que les cles ont deja ete
@@ -143,6 +149,25 @@ final class SecretFileWriter {
          * survie à une coupure immédiate dépend alors du système de fichiers seul.
          */
         BEST_EFFORT
+    }
+
+    /**
+     * Tire les valeurs, en retirant le fichier de travail si le tirage échoue.
+     * <p>
+     * Le fournisseur est du code arbitraire du point de vue de cette classe : il peut lever
+     * n'importe quelle {@link RuntimeException} — un fournisseur cryptographique absent, par
+     * exemple. Laisser cette exception traverser abandonnerait un {@code .pending} vide et
+     * transformerait une panne passagère, réparable par une simple relance, en soupçon de clés
+     * perdues.
+     */
+    private static String generate(Supplier<String> content, Path pending) {
+        try {
+            return content.get();
+        } catch (RuntimeException e) {
+            deleteQuietly(pending);
+            throw new SecretFileException(ExitCode.GENERATION_FAILURE,
+                    "Failed to generate the installation secrets; nothing was written", e);
+        }
     }
 
     /**

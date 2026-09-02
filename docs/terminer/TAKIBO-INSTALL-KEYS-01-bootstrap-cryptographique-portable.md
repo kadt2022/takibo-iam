@@ -107,17 +107,27 @@ valeurs, jamais quatre.
 Conséquence d'exploitation à documenter : la sauvegarde de PostgreSQL et celle de la clé AES
 sont indissociables — restaurer l'une sans l'autre ne rend pas la clé de signature.
 
-## Décision actée — restreindre à la création, ou refuser
+## Décision actée — aucun secret dans un fichier qu'un autre peut lire
 
-Les permissions du fichier ne sont pas posées après coup. Un fichier créé lisible puis corrigé
-est lisible pendant l'intervalle, et cet intervalle suffit.
+L'invariant n'est pas « poser les permissions à la création » : c'est **qu'aucun octet secret
+n'existe jamais dans un fichier accessible à un autre principal**. Formulé ainsi, il se tient
+sur les deux familles de systèmes, alors que la première formulation n'était vraie que sur
+l'une.
 
-- POSIX : attributs `rw-------` **fournis à la création**, jamais un `chmod` ultérieur ;
-- Windows : ACL restreinte au propriétaire dès la création, si le fournisseur de fichiers le
-  permet ;
-- si la restriction ne peut pas être garantie à la création, la CLI **refuse d'écrire** et le
-  dit. Java ne sait pas poser une ACL Windows atomiquement dans tous les cas, et il vaut mieux
-  un refus explicite qu'un fichier de secrets aux permissions inconnues.
+- **POSIX** : les attributs `rw-------` sont fournis à la **création**. Le fichier n'existe
+  jamais autrement, et aucun `chmod` ultérieur n'intervient.
+- **Systèmes à ACL** : l'API standard n'offre aucun attribut de création équivalent. Le fichier
+  est donc créé **vide**, son ACL est restreinte au propriétaire, puis **relue pour
+  vérification**, et ce n'est qu'ensuite que le contenu est écrit. Ce qui existe brièvement
+  sous les permissions héritées est un fichier vide — jamais un secret. Si la relecture montre
+  une entrée pour un autre principal, ou une entrée de refus, le fichier vide est effacé et
+  rien n'est publié.
+- **Ni l'un ni l'autre** : la CLI refuse d'écrire plutôt que de produire un fichier de secrets
+  aux permissions inconnues.
+
+La relecture n'est pas une précaution de style : `setAcl` peut être partiellement honoré selon
+le volume, sans lever la moindre exception, et une entrée héritée laissée en place —
+`Administrators`, `SYSTEM`, `Users` — rendrait le secret lisible par d'autres en silence.
 
 La création elle-même est exclusive (`CREATE_NEW`) : c'est le système de fichiers qui arbitre
 l'existence, pas une vérification préalable qui laisserait une fenêtre entre le test et
@@ -163,40 +173,67 @@ même : sauvegarder le fichier avant de mettre les clés en service.
 
 ## Critères d'acceptation
 
-- [ ] Le cœur TAKIBO (`takibo-authorization-server`, `takibo-iam-boot`) n'importe aucune
-      dépendance Docker, Kubernetes, Helm ou OpenShift.
-- [ ] L'outil produit une clé de 32 octets et un identifiant satisfaisant les invariants de
-      `SecretCipherKey` sans aucune modification de ce type.
-- [ ] L'outil produit une troisième valeur, `TAKIBO_TAS_USER_CODE_HMAC_KEY`, de 32 octets,
-      satisfaisant les invariants de `HmacSha256UserCodeHmac` sans modification de ce type.
-- [ ] `TAKIBO_TAS_USER_CODE_HMAC_KEY` et `TAKIBO_TAS_CIPHER_KEY` ne sont jamais identiques, et
-      sont tirées indépendamment plutôt que dérivées l'une de l'autre.
-- [ ] Relancer l'outil alors que le fichier de sortie existe est refusé explicitement, jamais
-      silencieusement écrasé, et aucune option n'existe pour forcer ce refus.
-- [ ] `--out` est obligatoire : aucun chemin de sortie implicite.
-- [ ] Le fichier produit contient exactement trois lignes `CLE=valeur`, en LF, avec saut de
+Tous validés. La preuve est nommée pour ceux qui ne se lisent pas dans le code seul — un
+comportement de concurrence, une garantie propre à une plateforme, une décision d'exploitation.
+
+- [x] Le cœur TAKIBO (`takibo-authorization-server`, `takibo-iam-boot`) n'importe aucune
+      dépendance Docker, Kubernetes, Helm ou OpenShift. — la CLI est un module séparé, sans
+      dépendance de production, pas même vers le cœur.
+- [x] L'outil produit une clé de 32 octets et un identifiant satisfaisant les invariants de
+      `SecretCipherKey` sans aucune modification de ce type. — `InstallKeysContractTest`
+      construit le vrai `SecretCipherKey` et fait un aller-retour de chiffrement.
+- [x] L'outil produit une troisième valeur, `TAKIBO_TAS_USER_CODE_HMAC_KEY`, de 32 octets,
+      satisfaisant les invariants de `HmacSha256UserCodeHmac` sans modification de ce type. —
+      même test, avec un HMAC réellement calculé.
+- [x] `TAKIBO_TAS_USER_CODE_HMAC_KEY` et `TAKIBO_TAS_CIPHER_KEY` ne sont jamais identiques, et
+      sont tirées indépendamment plutôt que dérivées l'une de l'autre. — deux tirages distincts,
+      refus à la construction si la matière est partagée.
+- [x] Relancer l'outil alors que le fichier de sortie existe est refusé explicitement, jamais
+      silencieusement écrasé, et aucune option n'existe pour forcer ce refus. — code 3 ;
+      `--force` tombe dans « option inconnue » et n'est jamais ignoré en silence.
+- [x] `--out` est obligatoire : aucun chemin de sortie implicite.
+- [x] Le fichier produit contient exactement trois lignes `CLE=valeur`, en LF, avec saut de
       ligne final, sans commentaire ni guillemets, et s'importe tel quel dans `.env` comme dans
-      un Secret OpenShift.
-- [ ] Les permissions restrictives sont posées à la création, jamais corrigées après coup ; si
-      la restriction ne peut pas être garantie, aucun fichier n'est écrit.
-- [ ] Aucun secret n'apparaît sur la sortie standard, sur la sortie d'erreur, ni dans aucun
-      journal — y compris en cas d'échec.
-- [ ] L'outil s'exécute sans démarrer TAS, sans base de données et sans contexte Spring.
-- [ ] L'identifiant de clé produit est de la forme `k-<UUID>`, opaque et sans composante
+      un Secret OpenShift. — vérifié aussi hors tests, sur le fichier produit par le jar :
+      trois lignes, aucun octet `\r`, dernier octet `\n`.
+- [x] **Aucun secret n'existe jamais dans un fichier accessible à un autre principal.** Sur
+      POSIX, les permissions restrictives sont un attribut de **création** : le fichier n'existe
+      jamais autrement. Sur un système à ACL, l'API standard n'offre aucun attribut de création
+      équivalent — le fichier est donc créé **vide**, son ACL restreinte au propriétaire, relue
+      pour vérification, et **aucun octet secret n'est écrit avant** que cette vérification
+      n'ait abouti. Si elle échoue, le fichier vide est effacé et rien n'est publié. Vérifié
+      hors tests avec `icacls` : une seule entrée, le propriétaire, aucune ACE héritée.
+- [x] Aucun secret n'apparaît sur la sortie standard, sur la sortie d'erreur, ni dans aucun
+      journal — y compris en cas d'échec. — un test compare chaque valeur écrite aux deux flux ;
+      `InstallKeys.toString()` tait sa matière, qu'un record publierait par défaut.
+- [x] L'outil s'exécute sans démarrer TAS, sans base de données et sans contexte Spring. — le
+      module n'a aucune dépendance de production ; le lien avec le cœur est une dépendance de
+      test.
+- [x] L'identifiant de clé produit est de la forme `k-<UUID>`, opaque et sans composante
       temporelle.
-- [ ] La documentation dit explicitement que la perte du fichier se répare par restauration de
+- [x] La documentation dit explicitement que la perte du fichier se répare par restauration de
       la sauvegarde, et jamais par une régénération contre une base existante.
-- [ ] Le contenu est écrit intégralement, quel que soit le nombre d'écritures que le canal
-      consent : un fichier tronqué n'est jamais publié ni annoncé comme un succès.
-- [ ] L'état laissé par une exécution précédente est examiné avant les capacités du volume :
+- [x] Le contenu est écrit intégralement, quel que soit le nombre d'écritures que le canal
+      consent : un fichier tronqué n'est jamais publié ni annoncé comme un succès. — prouvé par
+      un canal simulant des écritures de 7 octets, qu'un fichier local ne produit
+      pratiquement jamais.
+- [x] L'état laissé par une exécution précédente est examiné avant les capacités du volume :
       un `.pending` ou une cible existante ne doivent jamais être masqués par un diagnostic de
       système de fichiers.
-- [ ] Le niveau de durabilité atteint est déclaré à l'opérateur, jamais silencieusement
-      dégradé.
-- [ ] La documentation d'installation ne mentionne aucune plateforme de déploiement comme
+- [x] Le niveau de durabilité atteint est déclaré à l'opérateur, jamais silencieusement
+      dégradé. — vérifié sous Windows, où la note apparaît sur la sortie d'erreur et le code
+      reste 0.
+- [x] Un échec du tirage ne laisse rien derrière lui et ne se déguise pas en amorçage
+      interrompu : code 7, aucun fichier de travail, et une relance suffit.
+- [x] Deux initialisations simultanées ne produisent jamais deux fichiers ni un fichier écrasé.
+      — huit écritures concurrentes et quatre CLI concurrentes : une seule gagnante, contenu
+      jamais mélangé, les perdantes en 3 ou 6 et jamais un autre code.
+- [x] Les deux instants d'un arrêt brutal sont distingués : `.pending` seul ⇒ refus sans rien
+      effacer ; `.pending` lié à la cible ⇒ nettoyage et code 3. Vérifié hors tests avec le jar.
+- [x] La documentation d'installation ne mentionne aucune plateforme de déploiement comme
       prérequis ; elle décrit le contrat de sortie et laisse chaque adaptateur choisir sa
       cible.
-- [ ] Le mode éphémère et le mode persistant sont documentés comme deux choix explicites,
+- [x] Le mode éphémère et le mode persistant sont documentés comme deux choix explicites,
       sans dépréciation implicite de l'un par l'autre.
 
 ## Hors périmètre

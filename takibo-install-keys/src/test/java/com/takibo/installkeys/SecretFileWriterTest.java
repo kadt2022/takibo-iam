@@ -123,6 +123,42 @@ class SecretFileWriterTest {
         assertThat(channel.calls).isZero();
     }
 
+    @Test
+    void given_a_failing_key_generation_then_nothing_is_left_behind() {
+        // Une panne du fournisseur cryptographique ne doit pas se deguiser en amorcage
+        // interrompu : sans nettoyage, la prochaine execution lirait un .pending vide comme
+        // des cles peut-etre deja en service, et enverrait l'operateur chercher une
+        // sauvegarde inexistante.
+        Path target = directory.resolve("secrets.env");
+
+        assertThatThrownBy(() -> SecretFileWriter.write(target, () -> {
+            throw new IllegalStateException("fournisseur indisponible");
+        }))
+                .isInstanceOf(SecretFileException.class)
+                .extracting(e -> ((SecretFileException) e).exitCode())
+                .isEqualTo(ExitCode.GENERATION_FAILURE);
+
+        assertThat(fileNamesIn(directory)).isEmpty();
+    }
+
+    @Test
+    void given_a_failing_generation_then_a_later_run_still_succeeds() {
+        // La preuve qui compte pour l'operateur : relancer suffit.
+        Path target = directory.resolve("secrets.env");
+        try {
+            SecretFileWriter.write(target, () -> {
+                throw new IllegalStateException("fournisseur indisponible");
+            });
+        } catch (SecretFileException expected) {
+            // Le cas nominal de ce test est l'echec ; la suite verifie qu'il ne laisse rien.
+        }
+
+        SecretFileWriter.write(target, () -> CONTENT);
+
+        assertThat(target).content(StandardCharsets.UTF_8).isEqualTo(CONTENT);
+        assertThat(fileNamesIn(directory)).containsExactly("secrets.env");
+    }
+
     // ---------- Concurrence ----------
 
     @Test
