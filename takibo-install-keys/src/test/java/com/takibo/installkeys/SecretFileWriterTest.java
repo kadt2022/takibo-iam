@@ -95,6 +95,34 @@ class SecretFileWriterTest {
                 .isEqualTo(ExitCode.IO_FAILURE);
     }
 
+    // ---------- Ecriture complete ----------
+
+    @Test
+    void given_a_channel_that_writes_in_small_chunks_then_every_byte_still_reaches_it()
+            throws Exception {
+        // write() ne s'engage pas a consommer tout le tampon en une fois. Un unique appel
+        // publierait un fichier tronque — une cle coupee en son milieu — puis le forcerait sur
+        // le disque et annoncerait un succes. Un canal local ne produit pratiquement jamais
+        // d'ecriture partielle, donc seule une simulation peut le prouver.
+        byte[] content = ("TAKIBO_TAS_CIPHER_KEY_ID=k-partiel\n"
+                + "TAKIBO_TAS_CIPHER_KEY=" + "A".repeat(44) + "\n").getBytes(StandardCharsets.UTF_8);
+        ChunkedChannel channel = new ChunkedChannel(7);
+
+        SecretFileWriter.writeFully(channel, content);
+
+        assertThat(channel.written.toByteArray()).isEqualTo(content);
+        assertThat(channel.calls).isGreaterThan(1);
+    }
+
+    @Test
+    void given_an_empty_content_then_the_write_loop_terminates_immediately() throws Exception {
+        ChunkedChannel channel = new ChunkedChannel(7);
+
+        SecretFileWriter.writeFully(channel, new byte[0]);
+
+        assertThat(channel.calls).isZero();
+    }
+
     // ---------- Concurrence ----------
 
     @Test
@@ -282,6 +310,38 @@ class SecretFileWriterTest {
     }
 
     // ---------- Fixtures ----------
+
+    /** Canal qui n'accepte qu'un nombre borné d'octets par appel, comme le permet le contrat. */
+    private static final class ChunkedChannel implements java.nio.channels.WritableByteChannel {
+
+        private final int chunk;
+        private final java.io.ByteArrayOutputStream written = new java.io.ByteArrayOutputStream();
+        private int calls;
+
+        ChunkedChannel(int chunk) {
+            this.chunk = chunk;
+        }
+
+        @Override
+        public int write(java.nio.ByteBuffer source) {
+            calls++;
+            int count = Math.min(chunk, source.remaining());
+            byte[] slice = new byte[count];
+            source.get(slice);
+            written.write(slice, 0, count);
+            return count;
+        }
+
+        @Override
+        public boolean isOpen() {
+            return true;
+        }
+
+        @Override
+        public void close() {
+            // Rien a liberer : ce double n'ouvre aucune ressource.
+        }
+    }
 
     /**
      * Vérifie la restriction avec les moyens du système de fichiers qui l'a posée : permissions

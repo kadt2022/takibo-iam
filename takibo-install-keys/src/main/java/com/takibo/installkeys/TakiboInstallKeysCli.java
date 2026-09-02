@@ -57,10 +57,11 @@ public final class TakiboInstallKeysCli {
             return e.exitCode().value();
         }
 
+        SecretFileWriter.Durability durability;
         try {
             // Les cles sont tirees par le writer, apres qu'il a arbitre la concurrence : une
             // initialisation perdante ne doit pas avoir consomme d'entropie pour rien.
-            SecretFileWriter.write(target,
+            durability = SecretFileWriter.write(target,
                     () -> EnvFileContent.render(InstallKeys.generate(new SecureRandom())));
         } catch (SecretFileException e) {
             err.println(e.getMessage());
@@ -69,6 +70,16 @@ public final class TakiboInstallKeysCli {
 
         // Le chemin, jamais le contenu. Cette ligne finit dans les journaux d'un installateur.
         out.println("Wrote TAKIBO installation secrets to " + target.toAbsolutePath());
+        if (durability == SecretFileWriter.Durability.BEST_EFFORT) {
+            // Declare, jamais tu : la protection contre la coupure de courant repose sur le
+            // forcage des entrees de repertoire, que ce systeme n'expose pas. Le succes reste
+            // un succes — le fichier est ecrit et publie — mais l'operateur doit savoir que
+            // sur ce point precis, la garantie appartient au systeme de fichiers et non a
+            // TAKIBO.
+            err.println("Note: this filesystem does not allow flushing directory entries; "
+                    + "if power is lost immediately after this run, confirm that "
+                    + target.getFileName() + " still exists before using these keys.");
+        }
         return ExitCode.SUCCESS.value();
     }
 

@@ -3,6 +3,7 @@ package com.takibo.installkeys;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.channels.WritableByteChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
@@ -80,24 +81,30 @@ final class SecretFileWriter {
      *                une initialisation perdante ne doit pas avoir tiré de clés
      * @throws SecretFileException porteur du code de sortie décrivant le refus
      */
-    static void write(Path target, Supplier<String> content) {
+    static Durability write(Path target, Supplier<String> content) {
         Path directory = parentOf(target);
-        Restriction restriction = Restriction.of(directory);
         Path pending = target.resolveSibling(target.getFileName() + PENDING_SUFFIX);
 
+        // Avant d'interroger les capacites du volume : ce que cette installation a deja laisse
+        // derriere elle prime sur ce que le systeme de fichiers sait faire. Dans l'ordre
+        // inverse, une cible existante ou un amorcage interrompu sur un volume sans POSIX ni
+        // ACL sortirait en UNSAFE_FILESYSTEM, et l'operateur perdrait le diagnostic qui
+        // comptait — celui qui lui dit de restaurer plutot que de regenerer.
         resolveLeftovers(target, pending);
 
+        Restriction restriction = Restriction.of(directory);
         restriction.createRestrictedFile(pending);
         // Le temoin de reprise ne sert a rien s'il ne survit pas a une coupure : son entree de
         // repertoire doit atteindre le disque avant que des cles n'y soient ecrites.
-        syncDirectory(directory);
+        boolean pendingEntryFlushed = syncDirectory(directory);
+        boolean targetEntryFlushed;
         try {
             writeFully(pending, content.get());
             publish(pending, target);
             // Avant de retirer le second nom et d'annoncer le succes : sans cela, une coupure
             // pourrait faire disparaitre les DEUX entrees alors que les cles ont deja ete
             // remises a l'operateur, et le demarrage suivant en fabriquerait d'incompatibles.
-            syncDirectory(directory);
+            targetEntryFlushed = syncDirectory(directory);
         } catch (SecretFileException e) {
             // Notre propre .pending, non publie : l'effacer est sans risque, et le laisser
             // serait abandonner un secret dans un repertoire.
@@ -109,6 +116,33 @@ final class SecretFileWriter {
                     "Failed to write the secrets file: " + target, e);
         }
         deleteQuietly(pending);
+        return pendingEntryFlushed && targetEntryFlushed
+                ? Durability.FLUSHED_TO_DISK : Durability.BEST_EFFORT;
+    }
+
+    /**
+     * Le niveau de garantie réellement atteint, rendu à l'appelant plutôt que taire.
+     * <p>
+     * Toute l'architecture du {@code .pending} vise un scénario précis : un succès annoncé,
+     * des clés déjà mises en service, puis une coupure de courant qui ferait disparaître les
+     * deux noms — et une installation suivante qui en fabriquerait d'incompatibles. Cette
+     * protection repose sur la possibilité de forcer les entrées de répertoire sur le disque,
+     * que tous les systèmes n'offrent pas.
+     * <p>
+     * La doctrine du récit : la garantie est <b>déclarée</b>, jamais silencieusement dégradée.
+     * Là où elle ne peut pas être tenue, la CLI le dit — c'est le rôle de cette valeur.
+     */
+    enum Durability {
+
+        /** Les entrées de répertoire ont atteint le disque : la coupure ne peut plus effacer. */
+        FLUSHED_TO_DISK,
+
+        /**
+         * Le volume n'expose pas ses répertoires — Windows notamment, où l'API standard ne
+         * permet pas d'ouvrir un répertoire en canal. Le fichier est écrit et publié, mais sa
+         * survie à une coupure immédiate dépend alors du système de fichiers seul.
+         */
+        BEST_EFFORT
     }
 
     /**
@@ -173,21 +207,43 @@ final class SecretFileWriter {
      * L'échec est donc admis : c'est une garantie supplémentaire là où elle existe, jamais une
      * condition de fonctionnement.
      */
-    private static void syncDirectory(Path directory) {
+    private static boolean syncDirectory(Path directory) {
         try (FileChannel channel = FileChannel.open(directory, StandardOpenOption.READ)) {
             channel.force(true);
+            return true;
         } catch (IOException | UnsupportedOperationException e) {
-            // Systeme qui n'expose pas ses repertoires : rien a signaler, rien a corriger.
+            // Ni exception ni silence : l'echec remonte comme un niveau de garantie moindre,
+            // que l'appelant annonce a l'operateur.
+            return false;
         }
     }
 
     private static void writeFully(Path pending, String content) throws IOException {
         byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
         try (FileChannel channel = FileChannel.open(pending, StandardOpenOption.WRITE)) {
-            channel.write(ByteBuffer.wrap(bytes));
+            writeFully(channel, bytes);
             // Forcer avant de publier : le nom final ne doit jamais designer un contenu que le
             // disque n'a pas encore recu.
             channel.force(true);
+        }
+    }
+
+    /**
+     * Écrit <b>tout</b> le tampon, quel que soit le nombre d'appels nécessaires.
+     * <p>
+     * {@link WritableByteChannel#write} ne s'engage pas à consommer le tampon entier en une
+     * fois. Un unique appel publierait, dans le cas d'une écriture partielle, un fichier
+     * tronqué — une clé coupée en son milieu — puis le forcerait sur le disque et annoncerait
+     * un succès. Le contenu est donc bouclé jusqu'à épuisement.
+     * <p>
+     * Le canal est reçu en paramètre plutôt qu'ouvert ici : c'est ce qui permet à un test de
+     * simuler l'écriture partielle, qu'un fichier local ne produit pratiquement jamais — donc
+     * jamais au moment où on l'observerait.
+     */
+    static void writeFully(WritableByteChannel channel, byte[] bytes) throws IOException {
+        ByteBuffer buffer = ByteBuffer.wrap(bytes);
+        while (buffer.hasRemaining()) {
+            channel.write(buffer);
         }
     }
 

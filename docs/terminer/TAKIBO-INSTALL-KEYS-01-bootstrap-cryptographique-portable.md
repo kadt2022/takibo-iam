@@ -123,6 +123,27 @@ La création elle-même est exclusive (`CREATE_NEW`) : c'est le système de fich
 l'existence, pas une vérification préalable qui laisserait une fenêtre entre le test et
 l'écriture.
 
+## Décision actée — la durabilité est déclarée, jamais supposée
+
+Publier le fichier ne suffit pas : après une coupure de courant, un fichier parfaitement écrit
+peut n'être rattaché à aucun nom de répertoire. La CLI force donc les entrées du répertoire —
+après la création du `.pending`, puis après la publication, avant d'annoncer le succès.
+
+Tous les systèmes ne le permettent pas : l'API standard n'ouvre pas un répertoire en canal sous
+Windows. Deux conduites étaient possibles, et le choix n'est pas neutre pour un outil qui
+manipule la clé rendant une base lisible ou définitivement illisible :
+
+| Conduite | Conséquence |
+| --- | --- |
+| Fail-closed | la CLI deviendrait inutilisable sur Windows, plateforme d'installation légitime |
+| Dégradation silencieuse | l'outil promettrait une garantie qu'il ne tient pas |
+
+Ni l'une ni l'autre. La garantie est **déclarée** : l'écriture rend le niveau atteint, et la CLI
+l'annonce sur la sortie d'erreur quand il est moindre. Le succès reste un succès — le fichier
+est écrit, publié et protégé — mais l'opérateur sait sur quel point précis la garantie
+appartient au système de fichiers plutôt qu'à TAKIBO. Dans les deux cas, la conduite reste la
+même : sauvegarder le fichier avant de mettre les clés en service.
+
 ## Périmètre
 
 - Une CLI d'initialisation TAKIBO qui génère les trois valeurs du contrat de sortie : deux
@@ -165,6 +186,13 @@ l'écriture.
       temporelle.
 - [ ] La documentation dit explicitement que la perte du fichier se répare par restauration de
       la sauvegarde, et jamais par une régénération contre une base existante.
+- [ ] Le contenu est écrit intégralement, quel que soit le nombre d'écritures que le canal
+      consent : un fichier tronqué n'est jamais publié ni annoncé comme un succès.
+- [ ] L'état laissé par une exécution précédente est examiné avant les capacités du volume :
+      un `.pending` ou une cible existante ne doivent jamais être masqués par un diagnostic de
+      système de fichiers.
+- [ ] Le niveau de durabilité atteint est déclaré à l'opérateur, jamais silencieusement
+      dégradé.
 - [ ] La documentation d'installation ne mentionne aucune plateforme de déploiement comme
       prérequis ; elle décrit le contrat de sortie et laisse chaque adaptateur choisir sa
       cible.

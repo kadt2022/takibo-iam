@@ -68,6 +68,29 @@ invalidés à chaque redémarrage, et tout ce qui a été chiffré devient illis
 conséquence sur un poste de développement, et c'est ce que fait la CI. Ce n'est jamais un mode
 d'installation.
 
+## Durabilité : ce qui est garanti, et où
+
+L'outil écrit dans `<cible>.pending`, force son contenu sur le disque, puis le publie sous son
+nom final par un lien — jamais par un remplacement. Restent les **entrées de répertoire** : un
+fichier parfaitement écrit peut, après une coupure de courant, n'être rattaché à aucun nom.
+
+L'outil force donc aussi le répertoire, deux fois. Mais tous les systèmes ne le permettent pas :
+l'API Java n'ouvre pas un répertoire en canal sous Windows. La garantie est alors moindre, et
+**l'outil le dit** plutôt que de le taire :
+
+```
+Note: this filesystem does not allow flushing directory entries; if power is lost immediately
+after this run, confirm that takibo-secrets.env still exists before using these keys.
+```
+
+| Niveau | Quand | Ce que ça signifie |
+| --- | --- | --- |
+| forcé sur le disque | volumes qui exposent leurs répertoires (Linux, la plupart des montages POSIX) | après le code `0`, une coupure ne peut plus faire disparaître le fichier |
+| au mieux | volumes qui ne l'exposent pas (Windows) | le fichier est écrit et publié ; sa survie à une coupure **immédiate** dépend du système de fichiers seul |
+
+Dans les deux cas, la conduite est la même et elle ne coûte rien : **sauvegardez le fichier avant
+de mettre ces clés en service.** C'est de toute façon ce qu'exige la règle ci-dessus.
+
 ## Codes de sortie
 
 | Code | Situation | Conduite |
@@ -78,6 +101,9 @@ d'installation.
 | `4` | le système de fichiers ne peut pas protéger le fichier | écrire sur un volume qui porte des permissions POSIX ou des ACL |
 | `5` | échec d'entrée-sortie | répertoire absent, disque plein, droits insuffisants |
 | `6` | un `.pending` est présent | voir ci-dessous |
+
+Le code `0` accompagné de la note de durabilité reste un succès : le fichier est écrit, publié
+et protégé. La note ne porte que sur la survie à une coupure survenant dans la seconde qui suit.
 
 ## Quand une initialisation a été interrompue
 
