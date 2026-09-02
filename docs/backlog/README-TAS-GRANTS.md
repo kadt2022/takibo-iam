@@ -22,9 +22,9 @@ Une PR ouverte ne suffit pas à clôturer.
 | Ordre | Récit | Statut | Branche | Dépend de |
 |---:|---|---|---|---|
 | 00 | [Filet de sécurité `client_credentials`](../terminer/TAS-GRANTS-00-filet-securite-client-credentials.md) | **TERMINÉ** (PR #51, 2026-08-24) | `test/tas-client-credentials-baseline-00` | — |
-| 01 | [Résolution réelle du tenant](TAS-GRANTS-01-resolution-tenant.md) | à faire | `feat/tas-tenant-resolution-01` | 00 |
-| 02 | [Persistance OAuth 2.0](TAS-GRANTS-02-persistance-oauth.md) | à faire | `feat/tas-oauth-persistence-02` | 01, 02A |
-| 02A | [Clés de signature persistantes](TAS-GRANTS-02A-cles-signature-persistantes.md) | à faire | `feat/tas-signing-keys-02a` | 00; parallèle à 01 |
+| 01 | [Résolution réelle du tenant](../terminer/TAS-GRANTS-01-resolution-tenant.md) | **TERMINÉ** (PR #56, 2026-08-29) | `feat/tas-tenant-resolution-01` | 00 |
+| 02 | [Persistance OAuth 2.0](../terminer/TAS-GRANTS-02-persistance-oauth.md) | **TERMINÉ** (PR #57, 2026-09-01) | `feat/tas-oauth-persistence-02` | 01, 02A |
+| 02A | [Clés de signature persistantes](TAS-GRANTS-02A-cles-signature-persistantes.md) | code fusionné (PR #53, #54), **non clôturé** : 9/11 critères vérifiés | `feat/tas-signing-keys-02a` | 00; parallèle à 01 |
 | 02B | [Rétention des autorisations expirées](TAS-GRANTS-02B-retention-autorisations-oauth.md) | à faire | `feat/tas-oauth-retention-02b` | 02 — obligatoire avant production |
 | 03 | Authentification humaine SAS | à rédiger | `feat/tas-human-authentication-03` | 02, TIS-Core stable |
 | 04 | Authorization Code + PKCE | à rédiger | `feat/tas-authorization-code-pkce-04` | 03, 02A |

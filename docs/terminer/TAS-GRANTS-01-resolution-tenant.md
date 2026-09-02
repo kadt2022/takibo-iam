@@ -1,6 +1,6 @@
 # TAS-GRANTS-01 — Résolution réelle du tenant
 
-**Statut :** À FAIRE  
+**Statut :** TERMINÉ (PR #56, fusionnée le 2026-08-29)  
 **Branche :** `feat/tas-tenant-resolution-01`  
 **Dépendances :** TAS-GRANTS-00
 
@@ -24,21 +24,21 @@ En tant que TAS, nous voulons résoudre le tenant et la frontière d’un client
 
 ## Critères d’acceptation
 
-- [ ] Aucun fallback vers un tenant par défaut n’existe en profil de production.
-- [ ] Un client inconnu ou incohérent échoue en mode fail-closed. « Désactivé » en est délibérément absent — voir « Hors périmètre ».
-- [ ] Un contexte `PLATFORM` ne fabrique ni organisation ni espace.
-- [ ] Un contexte `ORGANIZATION` exige `org_id` et interdit un `space_id` implicite.
-- [ ] Un contexte `SPACE` exige des `org_id` et `space_id` cohérents.
-- [ ] La résolution lit directement PostgreSQL, sans cache : toute modification d’un client via TMS est donc reflétée à la résolution suivante, sans fenêtre à invalider.
-- [ ] `ResolvedOAuthClientResolver` est la seule dépendance des trois consommateurs vis-à-vis de la résolution : un décorateur de cache pourra s’intercaler plus tard sans les modifier.
-- [ ] `TakiboRegisteredClientRepository.findByClientId`, `TenantResolutionFilter` et PKCE utilisent le même port et le même `ResolvedOAuthClient`; aucun lookup parallèle par `(org_id, space_id, client_id)` ne subsiste.
-- [ ] `PkceEnforcementFilter` applique la politique issue du client résolu globalement par `client_id`; il n’exige pas que le tenant ait déjà été fourni ou deviné par la requête.
-- [ ] `postman-client` est résolu par la seule source in-memory dev comme PLATFORM; aucun accès à `oauth2_clients`, fallback générique ou source in-memory de production n’est introduit.
-- [ ] Un client TMS marqué PLATFORM alors que le schéma/mapping ne sait pas le représenter échoue explicitement; il n’est jamais converti silencieusement en SPACE.
-- [ ] Le test négatif « tenant/frontière incohérent », inatteignable dans le récit 00, est actif et vert dans ce récit.
-- [ ] Les scénarios PLATFORM et SPACE du récit 00 restent identiques et passent via `ResolvedOAuthClientResolver`; le récit ne remplace pas leur vérité attendue en même temps que le composant testé.
-- [ ] TAS ne dépend pas directement de l’implémentation TMS.
-- [ ] `client_credentials` reste vert pour PLATFORM et SPACE.
+- [x] Aucun fallback vers un tenant par défaut n’existe en profil de production. — `ResolvedOAuthClientResolverConfig` : `@Profile({"dev","test","ci"})` sur `inMemoryPlatformOAuthClientResolver` ; hors ces profils le composite ne recoit que `JpaResolvedOAuthClientResolver`.
+- [x] Un client inconnu ou incohérent échoue en mode fail-closed. « Désactivé » en est délibérément absent — voir « Hors périmètre ». — `TenantResolutionFilterTest.given_unknown_client_when_filter_then_invalid_client_without_a_description` ; `JpaResolvedOAuthClientResolverTest.given_an_unknown_client_id_then_nothing_resolves`.
+- [x] Un contexte `PLATFORM` ne fabrique ni organisation ni espace. — `ResolvedOAuthClientTest.given_platform_plan_without_tenant_then_accepted`, `given_platform_plan_with_organization_then_rejected`, `given_platform_plan_with_space_then_rejected`.
+- [x] Un contexte `ORGANIZATION` exige `org_id` et interdit un `space_id` implicite. — `ResolvedOAuthClientTest.given_organization_plan_with_organization_only_then_accepted`, `given_organization_plan_without_organization_then_rejected`, `given_organization_plan_with_space_then_rejected`.
+- [x] Un contexte `SPACE` exige des `org_id` et `space_id` cohérents. — `ResolvedOAuthClientTest.given_space_plan_with_both_then_accepted`, `given_space_plan_without_space_then_rejected`, `given_space_plan_without_organization_then_rejected`.
+- [x] La résolution lit directement PostgreSQL, sans cache : toute modification d’un client via TMS est donc reflétée à la résolution suivante, sans fenêtre à invalider. — `JpaResolvedOAuthClientResolverTest.given_the_resolve_method_then_it_is_wrapped_in_a_repeatable_read_read_only_transaction` ; `OAuth2ClientSnapshotConsistencyIntegrationTest` (PostgreSQL reel) ; aucun cache declare sur ce chemin.
+- [x] `ResolvedOAuthClientResolver` est la seule dépendance des trois consommateurs vis-à-vis de la résolution : un décorateur de cache pourra s’intercaler plus tard sans les modifier. — `ResolvedOAuthClientResolverConfig` : un seul bean `@Primary` de ce type, `CompositeResolvedOAuthClientResolver`, injecte par le port.
+- [x] `TakiboRegisteredClientRepository.findByClientId`, `TenantResolutionFilter` et PKCE utilisent le même port et le même `ResolvedOAuthClient`; aucun lookup parallèle par `(org_id, space_id, client_id)` ne subsiste. — `TakiboRegisteredClientRepositoryTest` (19 cas), `TenantResolutionFilterTest` (16 cas) et `PkceEnforcementFilterTest` (17 cas), tous sur `ResolvedOAuthClientResolver`.
+- [x] `PkceEnforcementFilter` applique la politique issue du client résolu globalement par `client_id`; il n’exige pas que le tenant ait déjà été fourni ou deviné par la requête. — `PkceEnforcementFilterTest` ; `ResolvedOAuthClientTest.given_public_client_then_pkce_is_required_even_when_not_configured` et `given_confidential_client_configured_for_pkce_then_pkce_is_required`.
+- [x] `postman-client` est résolu par la seule source in-memory dev comme PLATFORM; aucun accès à `oauth2_clients`, fallback générique ou source in-memory de production n’est introduit. — `InMemoryPlatformOAuthClientResolverTest` ; `TakiboRegisteredClientRepositoryTest.given_the_platform_clients_technical_id_when_find_by_id_then_it_resolves_via_the_resolver` ; `AuthorizationSaveContractBaselineIntegrationTest` verifie en base qu aucune ligne `oauth2_clients` ne correspond.
+- [x] Un client TMS marqué PLATFORM alors que le schéma/mapping ne sait pas le représenter échoue explicitement; il n’est jamais converti silencieusement en SPACE. — `ResolvedOAuthClient` rejette a la construction (`PLATFORM_CLIENT_MUST_NOT_CARRY_ORGANIZATION`, `CLIENT_PLAN_REQUIRES_ORGANIZATION`, `CLIENT_PLAN_REQUIRES_SPACE`, `CLIENT_PLAN_MUST_NOT_CARRY_SPACE`) ; `ResolvedOAuthClientTest.given_platform_plan_with_organization_then_rejected`.
+- [x] Le test négatif « tenant/frontière incohérent », inatteignable dans le récit 00, est actif et vert dans ce récit. — `ResolvedOAuthClientTest` : neuf cas plan/frontiere, dont six refus, couvrant chaque combinaison invalide de plan et de frontiere.
+- [x] Les scénarios PLATFORM et SPACE du récit 00 restent identiques et passent via `ResolvedOAuthClientResolver`; le récit ne remplace pas leur vérité attendue en même temps que le composant testé. — `ClientCredentialsBaselineIntegrationTest.given_platform_client_when_token_requested_then_signed_jwt_carries_no_tenant` et `given_space_client_when_token_requested_then_signed_jwt_carries_its_real_tenant`, inchanges depuis le recit 00.
+- [x] TAS ne dépend pas directement de l’implémentation TMS. — `takibo-authorization-server/build.gradle` ne declare aucune dependance vers `takibo-management-service` ; la resolution passe par le port `ResolvedOAuthClientResolver`.
+- [x] `client_credentials` reste vert pour PLATFORM et SPACE. — `ClientCredentialsBaselineIntegrationTest` (11 cas, PostgreSQL reel) ; parcours BVT "00 - Boot et environnement" de la collection Postman.
 
 ## Tests attendus
 

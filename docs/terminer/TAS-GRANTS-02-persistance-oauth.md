@@ -1,6 +1,6 @@
 # TAS-GRANTS-02 — Persistance OAuth 2.0
 
-**Statut :** À FAIRE  
+**Statut :** TERMINÉ (PR #57, fusionnée le 2026-09-01)  
 **Branche :** `feat/tas-oauth-persistence-02`  
 **Dépendances :** TAS-GRANTS-01 et TAS-GRANTS-02A (port de chiffrement au repos)
 
