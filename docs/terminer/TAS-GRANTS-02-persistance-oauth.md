@@ -2,7 +2,7 @@
 
 **Statut :** TERMINÉ (PR #57, fusionnée le 2026-09-01)  
 **Branche :** `feat/tas-oauth-persistence-02`  
-**Dépendances :** TAS-GRANTS-01 et TAS-GRANTS-02A (port de chiffrement au repos)
+**Dépendances :** TAS-GRANTS-01 et TAS-GRANTS-02A — **uniquement le port `SecretCipher`/`SecretContext`**, livre et consomme, et non les 11 criteres de 02A. C est pourquoi 02 est cloture alors que 02A ne l est pas : les ecarts restants de 02A portent sur les parcours de bout en bout des cles de signature, sans lien avec le chiffrement au repos des tokens.
 
 ## Récit
 
