@@ -128,5 +128,5 @@ organisation à le satisfaire, sans jamais faire entrer une plateforme dans le c
 
 | Récit | Titre | Statut |
 | --- | --- | --- |
-| [TAKIBO-INSTALL-KEYS-01](TAKIBO-INSTALL-KEYS-01-bootstrap-cryptographique-portable.md) | Bootstrap cryptographique portable | à faire |
+| [TAKIBO-INSTALL-KEYS-01](../terminer/TAKIBO-INSTALL-KEYS-01-bootstrap-cryptographique-portable.md) | Bootstrap cryptographique portable | **TERMINÉ** (PR #60, 2026-09-02) |
 | [TAS-KEYS-BOOTSTRAP-01](../terminer/TAS-KEYS-BOOTSTRAP-01-amorcage-premiere-cle-signature.md) | Amorçage automatique de la première clé de signature | **TERMINÉ** (PR #58, 2026-09-02) |

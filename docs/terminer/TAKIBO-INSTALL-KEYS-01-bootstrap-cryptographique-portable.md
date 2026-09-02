@@ -1,6 +1,6 @@
 # TAKIBO-INSTALL-KEYS-01 — Bootstrap cryptographique portable
 
-**Statut :** À FAIRE  
+**Statut :** TERMINÉ  
 **Branche :** `feat/takibo-install-keys-01`  
 **Dépendances :** TAS-GRANTS-02A et TAS-GRANTS-02 (contrats de configuration à consommer), TAS-KEYS-BOOTSTRAP-01 (clé de signature, désormais hors de ce récit)
 
