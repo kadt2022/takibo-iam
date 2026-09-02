@@ -1,6 +1,6 @@
 # TAS-GRANTS-02A — Clés de signature persistantes et rotation
 
-**Statut :** À FAIRE  
+**Statut :** NON CLOTURE - code fusionne (PR #53, #54), 8/11 criteres verifies le 2026-09-02. Trois ecarts restent a prouver : voir les cases non cochees.  
 **Branche :** `feat/tas-signing-keys-02a`  
 **Dépendances :** TAS-GRANTS-00; développement parallèle possible avec TAS-GRANTS-01
 
@@ -102,17 +102,20 @@ reste réservée à une future politique de cryptopériode, non utilisée aujour
 
 ## Critères d’acceptation
 
-- [ ] Deux démarrages successifs de TAS chargent la même clé active et le même `kid` tant qu’aucune rotation n’a lieu.
-- [ ] Un JWT émis avant redémarrage reste vérifiable jusqu’à son expiration.
-- [ ] La contrainte d’un unique émetteur actif est respectée lors d’activations concurrentes.
-- [ ] Après rotation, TAS signe avec la nouvelle clé et publie encore l’ancienne clé publique pendant la période de chevauchement.
-- [ ] Une clé privée n’apparaît jamais dans le JWKS, les logs, les métriques ou une erreur.
-- [ ] En profil non-dev, l’absence de clé active provoque un démarrage fail-closed avec un diagnostic exploitable.
-- [ ] Les dates `not_before`, `expires_at` et `publish_until`, le statut et `is_issuer` sont appliqués.
+- [x] Deux démarrages successifs de TAS chargent la même clé active et le même `kid` tant qu’aucune rotation n’a lieu. — `SigningKeyRestartAcceptanceTest.given_a_jwt_signed_before_the_context_closes_then_a_fresh_context_still_verifies_it` (deux contextes Spring successifs, PostgreSQL dedie) ; `SigningKeyBootstrapIntegrationTest.given_a_restart_then_the_same_key_is_reused_and_no_other_is_created`.
+- [x] Un JWT émis avant redémarrage reste vérifiable jusqu’à son expiration. — `SigningKeyRestartAcceptanceTest` ; `SigningKeyRotationIntegrationTest.given_a_token_signed_before_a_fresh_signing_chain_then_it_still_verifies_after`.
+- [x] La contrainte d’un unique émetteur actif est respectée lors d’activations concurrentes. — `SigningKeyRotationIntegrationTest.given_concurrent_rotations_then_exactly_one_active_platform_issuer_remains` ; `SigningKeyScopeConstraintsIntegrationTest.given_an_active_platform_issuer_when_a_second_one_is_activated_then_rejected` (contrainte `uk_tas_sk_platform_issuer_active`).
+- [x] Après rotation, TAS signe avec la nouvelle clé et publie encore l’ancienne clé publique pendant la période de chevauchement. — `SigningKeyRotationIntegrationTest.given_a_rotation_then_a_fresh_chain_signs_with_the_new_key_while_the_old_still_verifies`, `given_a_rotation_then_the_jwks_exposes_both_public_keys`, `given_an_old_key_past_its_publish_until_then_it_stops_being_published`.
+- [ ] Une cle privee n apparait jamais dans le JWKS, les logs, les metriques ou une erreur.
+      **Ecart releve a la verification de livraison (2026-09-02).** Ce critere est une conjonction de quatre surfaces ; seule la premiere est prouvee. Le JWKS l est solidement — `PersistentJwkSourceTest.given_a_retired_issuer_and_a_new_active_one_then_only_the_active_one_is_private`, `given_a_non_issuer_active_key_then_it_stays_public`, `given_a_publishable_non_issuer_key_with_private_parameters_then_startup_refuses`, `given_a_public_jwk_column_holding_private_parameters_then_it_is_refused`. Mais aucun test ne capture les journaux, les metriques ni le corps d une erreur pour y verifier l absence de matiere privee. Cocher sur la seule preuve JWKS traiterait une conjonction comme une disjonction.
+- [x] En profil non-dev, l’absence de clé active provoque un démarrage fail-closed avec un diagnostic exploitable. — `PersistentJwkSourceTest.given_no_active_issuer_then_the_context_refuses_to_start`, `given_an_issuer_without_private_material_then_the_context_refuses_to_start`, `given_undecryptable_private_material_then_the_context_refuses_to_start` ; `SigningKeyUnavailableExceptionTest`.
+- [x] Les dates `not_before`, `expires_at` et `publish_until`, le statut et `is_issuer` sont appliqués. — `SigningKeyRepositoryIntegrationTest` (15 cas, PostgreSQL reel) : `given_an_issuer_not_yet_valid_then_it_does_not_sign`, `given_a_key_past_its_cryptoperiod_then_it_does_not_sign_but_stays_published`, `given_a_retired_key_past_its_publish_until_then_it_stops_being_published`, `given_a_revoked_key_then_it_is_never_published`, `given_an_active_key_that_is_not_the_issuer_then_it_does_not_sign`.
 - [ ] `client_credentials` PLATFORM et SPACE reste vérifiable avant et après redémarrage/rotation.
-- [ ] La portée des clés est tranchée et écrite : soit single-issuer, et `tas_signing_keys.org_id` accueille la clé de plateforme sans organisation fabriquée ; soit multi-issuer, et le retrait de `.issuer(...)` ainsi que le changement d'URL d'issuer sont assumés avec leurs conséquences sur les JWT en circulation et la configuration des resource servers. Aucune organisation fictive n'est créée pour loger une clé globale.
-- [ ] Le port de chiffrement au repos est défini et documenté pour TAS-GRANTS-02 ; aucun secret de chiffrement n'est figé dans la configuration.
+      **Ecart releve a la verification de livraison (2026-09-02).** Le mecanisme est prouve — la cle survit au redemarrage (`SigningKeyRestartAcceptanceTest`) et a la rotation (`SigningKeyRotationIntegrationTest`) — mais aucun test ne fait passer un `client_credentials` PLATFORM ou SPACE *a travers `/oauth2/token`* de part et d autre d un redemarrage : le test de redemarrage signe via `JwtEncoder` directement. Le parcours de bout en bout reste donc non verifie.
+- [x] La portée des clés est tranchée et écrite : soit single-issuer, et `tas_signing_keys.org_id` accueille la clé de plateforme sans organisation fabriquée ; soit multi-issuer, et le retrait de `.issuer(...)` ainsi que le changement d'URL d'issuer sont assumés avec leurs conséquences sur les JWT en circulation et la configuration des resource servers. Aucune organisation fictive n'est créée pour loger une clé globale. — `SigningKeyScopeConstraintsIntegrationTest.given_a_platform_key_without_organization_then_it_is_accepted` et `given_active_issuers_in_two_distinct_organizations_then_both_are_accepted` : single-issuer retenu, `tas_signing_keys.org_id` accueille la cle de plateforme a NULL, aucune organisation fictive.
+- [x] Le port de chiffrement au repos est défini et documenté pour TAS-GRANTS-02 ; aucun secret de chiffrement n'est figé dans la configuration. — Port `SecretCipher` / `SecretContext` (paquet `domain.keys.port`), adaptateur `AesGcmSecretCipher` (`AesGcmSecretCipherTest`, 26 cas) ; consomme sans duplication par TAS-GRANTS-02. `application.yml` l.75-97 : aucune valeur par defaut, demarrage fail-closed sans `TAKIBO_TAS_CIPHER_KEY`.
 - [ ] Le parcours humain `/api/v1/auth/login` reste vérifiable avant et après redémarrage : les tokens humains et machine partagent la même clé, propriété que ce récit ne doit pas rompre.
+      **Ecart releve a la verification de livraison (2026-09-02).** `HumanLoginBaselineIntegrationTest` couvre `/api/v1/auth/login`, et `SigningKeyRestartAcceptanceTest` prouve que le `JwtEncoder` partage survit au redemarrage — `HumanTokenSigner` consomme ce meme bean, donc la propriete « tokens humains et machine partagent la meme cle » tient. Mais aucun test ne rejoue le parcours de connexion lui-meme apres redemarrage. Coche non validee : la conclusion serait une deduction, pas une observation.
 
 ## Tests attendus
 
