@@ -97,6 +97,27 @@ class PlatformSigningKeyBootstrapTest {
     }
 
     @Test
+    void given_a_concurrent_bootstrap_between_the_two_reads_then_the_winner_kid_is_adopted() {
+        // La course que les deux lectures ouvrent : elles ne partagent pas de transaction, et
+        // en READ COMMITTED une instance concurrente peut activer son émettrice juste après
+        // notre findActivePlatformIssuer et juste avant notre hasPlatformKeyHistory.
+        // L'historique alors visible est le sien. Sans relecture, ce démarrage échouerait en
+        // annonçant un historique corrompu qui n'a jamais existé.
+        when(keys.findActivePlatformIssuer(NOW))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(anActiveKey("kid-winner")));
+        when(keys.hasPlatformKeyHistory()).thenReturn(true);
+
+        PlatformSigningKeyBootstrap.Outcome outcome = bootstrap().ensurePlatformIssuer();
+
+        assertThat(outcome.kid()).isEqualTo("kid-winner");
+        assertThat(outcome.created()).isFalse();
+        // Adopter, jamais fabriquer : la clé de la gagnante fait autorité.
+        verify(writer, never()).tryActivateFirstIssuer(any());
+        verify(generator, never()).generate();
+    }
+
+    @Test
     void given_a_lost_race_then_the_winner_kid_is_adopted() {
         when(keys.findActivePlatformIssuer(NOW))
                 .thenReturn(Optional.empty())

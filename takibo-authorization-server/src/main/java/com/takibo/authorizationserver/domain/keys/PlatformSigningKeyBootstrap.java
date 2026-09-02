@@ -75,7 +75,13 @@ public class PlatformSigningKeyBootstrap {
         }
 
         if (keys.hasPlatformKeyHistory()) {
-            throw new IllegalStateException(
+            // Nos deux lectures ne partagent aucune transaction — JpaSigningKeyRepository est
+            // annoté au niveau classe, et cette méthode n'en ouvre pas — donc en READ
+            // COMMITTED une instance concurrente a pu activer son émettrice entre les deux.
+            // L'historique vu ici serait alors le sien, et non la corruption que ce refus
+            // décrit : relire avant de refuser, sinon un amorçage concurrent réussi ferait
+            // échouer ce démarrage en annonçant un historique cassé qui n'existe pas.
+            return adoptConcurrentWinnerOrThrow(
                     "PLATFORM_SIGNING_KEY_HISTORY_WITHOUT_ACTIVE_ISSUER: "
                             + "refusing to bootstrap over an existing key history");
         }
@@ -89,11 +95,24 @@ public class PlatformSigningKeyBootstrap {
         // notre écriture. Sa ligne est nécessairement visible ici — l'insertion en conflit a
         // attendu la fin de la transaction concurrente avant de rendre la main — donc cette
         // relecture aboutit, et les deux instances repartent avec le même kid.
+        return adoptConcurrentWinnerOrThrow(
+                "PLATFORM_SIGNING_KEY_BOOTSTRAP_LOST_ITS_RACE_AND_FOUND_NO_ISSUER");
+    }
+
+    /**
+     * Relit l'émettrice active et l'adopte, ou échoue fermé avec le diagnostic fourni.
+     * <p>
+     * Les deux appelants perdent la même course, à deux endroits différents — l'un entre ses
+     * deux lectures, l'autre entre sa lecture et son écriture — et en tirent la même
+     * conclusion : si une émettrice active est visible maintenant, une instance concurrente
+     * l'a créée, et il faut repartir avec son {@code kid}. Seul le diagnostic diffère lorsque
+     * la relecture ne trouve toujours rien, et c'est pourquoi il est passé en paramètre.
+     */
+    private Outcome adoptConcurrentWinnerOrThrow(String failure) {
         return keys.findActivePlatformIssuer(clock.instant())
                 .map(TasSigningKey::kid)
                 .map(Outcome::alreadyThere)
-                .orElseThrow(() -> new IllegalStateException(
-                        "PLATFORM_SIGNING_KEY_BOOTSTRAP_LOST_ITS_RACE_AND_FOUND_NO_ISSUER"));
+                .orElseThrow(() -> new IllegalStateException(failure));
     }
 
     /**
