@@ -2,7 +2,7 @@
 
 **Statut :** À FAIRE  
 **Branche :** `feat/takibo-install-keys-01`  
-**Dépendances :** TAS-GRANTS-02A et TAS-GRANTS-02 (contrats de configuration à consommer)
+**Dépendances :** TAS-GRANTS-02A et TAS-GRANTS-02 (contrats de configuration à consommer), TAS-KEYS-BOOTSTRAP-01 (clé de signature, désormais hors de ce récit)
 
 ## Récit
 
@@ -51,18 +51,91 @@ cœur. Ce récit produit l'outil d'initialisation générique et son contrat de 
 adaptateurs de packaging par plateforme sont hors périmètre et pourront être des récits
 séparés, un par cible.
 
+## Décision actée — CLI portable, et rien d'autre
+
+Le périmètre laissait le choix entre une CLI et une tâche de démarrage. C'est la **CLI** qui est
+retenue : une tâche de démarrage ferait dépendre la naissance des secrets d'un démarrage
+applicatif, donc d'une base, d'un contexte Spring et d'un ordre d'exécution — trois choses dont
+l'installation d'une machine vierge n'a pas à disposer. La CLI n'a besoin que d'une JVM.
+
+**Invocation.** `--out` est obligatoire : aucun chemin implicite, qui créerait un fichier de
+secrets au mauvais endroit sans que personne le remarque.
+
+```bash
+java -jar takibo-install-keys.jar init --out takibo-secrets.env
+```
+
+**Format de sortie.** Trois lignes `CLE=valeur`, LF, saut de ligne final, sans commentaire ni
+guillemets. C'est le seul format que `source`, `docker --env-file`,
+`oc create secret --from-env-file` et un coffre acceptent tous sans retouche ; un en-tête de
+commentaire le rendrait plus lisible et moins importable.
+
+**Pas de `--stdout` dans cette version.** Un secret sur la sortie standard finit dans les
+journaux d'un job CI, dans l'historique d'un terminal ou dans une capture d'écran. L'intégration
+directe à un coffre fera l'objet d'un adaptateur explicite, jamais d'un tuyau ouvert par défaut.
+
+**Identifiant de clé : `k-<UUID>`.** Opaque, et volontairement sans date : l'ordre temporel des
+clés doit venir des métadonnées de la base, jamais de la lecture d'un nom. Une date dans
+l'identifiant inviterait à raisonner sur l'ancienneté à partir d'une chaîne que rien ne
+garantit.
+
+## Décision actée — la seule garde est le fichier, et cette limite est assumée
+
+La CLI ne parle ni à la base ni à TAS. Elle ne peut donc constater qu'une seule chose :
+**son fichier de sortie existe déjà**. C'est sa seule garde, et elle refuse alors d'écrire.
+Il n'y a **aucun `--force`** : l'option n'existe pas, pour qu'elle ne puisse pas être utilisée
+sous pression.
+
+Ce que cette garde ne couvre pas doit être dit sans détour : si le fichier a été perdu alors
+que la base contient déjà des données chiffrées, la CLI n'a aucun moyen de le savoir et
+produirait des clés neuves qui rendraient tout indéchiffrable. **La conduite à tenir est de
+restaurer la sauvegarde, jamais de régénérer contre une base existante.** La documentation
+d'installation le formule ainsi, en toutes lettres.
+
+## Décision actée — la clé RSA ne concerne plus ce récit
+
+Au moment où ce récit a été écrit, la clé de signature était une question ouverte renvoyée à
+TAS-GRANTS-02A. Elle est close depuis TAS-KEYS-BOOTSTRAP-01 : **TAS amorce lui-même sa première
+clé de signature** au premier démarrage, la conserve chiffrée en base avec la clé AES, et refuse
+de démarrer par-dessus un historique incohérent.
+
+La séparation est donc devenue nette. Ce récit produit les **secrets externes** — ceux que le
+client range dans son coffre, sauvegarde et fait tourner. La clé RSA est un **état
+cryptographique interne persistant**, que le client ne manipule jamais. La CLI produit trois
+valeurs, jamais quatre.
+
+Conséquence d'exploitation à documenter : la sauvegarde de PostgreSQL et celle de la clé AES
+sont indissociables — restaurer l'une sans l'autre ne rend pas la clé de signature.
+
+## Décision actée — restreindre à la création, ou refuser
+
+Les permissions du fichier ne sont pas posées après coup. Un fichier créé lisible puis corrigé
+est lisible pendant l'intervalle, et cet intervalle suffit.
+
+- POSIX : attributs `rw-------` **fournis à la création**, jamais un `chmod` ultérieur ;
+- Windows : ACL restreinte au propriétaire dès la création, si le fournisseur de fichiers le
+  permet ;
+- si la restriction ne peut pas être garantie à la création, la CLI **refuse d'écrire** et le
+  dit. Java ne sait pas poser une ACL Windows atomiquement dans tous les cas, et il vaut mieux
+  un refus explicite qu'un fichier de secrets aux permissions inconnues.
+
+La création elle-même est exclusive (`CREATE_NEW`) : c'est le système de fichiers qui arbitre
+l'existence, pas une vérification préalable qui laisserait une fenêtre entre le test et
+l'écriture.
+
 ## Périmètre
 
-- Un outil d'initialisation TAKIBO (CLI ou tâche de démarrage dédiée, à trancher dans ce
-  récit) qui génère les trois valeurs du contrat de sortie : deux matières de 32 octets
-  cryptographiquement sûres et indépendantes l'une de l'autre, et un identifiant de clé
-  conforme au contrat de `SecretCipherKey`.
-- Sortie du bootstrap sous une forme neutre — flux standard, fichier, ou les deux — que
-  n'importe quel adaptateur de packaging peut rediriger vers son propre mécanisme de secret.
-- Détection et refus explicite d'un bootstrap relancé sur une installation déjà initialisée :
-  régénérer la clé de chiffrement sans plan de rotation rendrait indéchiffrable tout ce qui a
-  été chiffré avec l'ancienne, et régénérer la clé HMAC rendrait irretrouvable tout `user_code`
-  déjà haché.
+- Une CLI d'initialisation TAKIBO qui génère les trois valeurs du contrat de sortie : deux
+  matières de 32 octets cryptographiquement sûres et indépendantes l'une de l'autre, et un
+  identifiant de clé conforme au contrat de `SecretCipherKey`.
+- Sortie dans un fichier neutre — trois lignes `CLE=valeur` — que n'importe quel adaptateur de
+  packaging redirige vers son propre mécanisme de secret : `.env`, Secret OpenShift, coffre.
+- Création exclusive du fichier, permissions restreintes dès la création, et refus d'écrire si
+  cette restriction ne peut pas être garantie.
+- Refus explicite si le fichier de sortie existe déjà : régénérer la clé de chiffrement sans
+  plan de rotation rendrait indéchiffrable tout ce qui a été chiffré avec l'ancienne, et
+  régénérer la clé HMAC rendrait irretrouvable tout `user_code` déjà haché. Aucune option ne
+  permet de passer outre.
 - Documentation des deux modes d'exploitation, sans en préférer un dans le code :
   - les trois variables persistantes fournies par l'installation ;
   - `TAKIBO_TAS_EPHEMERAL_KEYS=true`, réservé au développement et aux tests.
@@ -77,8 +150,21 @@ séparés, un par cible.
       satisfaisant les invariants de `HmacSha256UserCodeHmac` sans modification de ce type.
 - [ ] `TAKIBO_TAS_USER_CODE_HMAC_KEY` et `TAKIBO_TAS_CIPHER_KEY` ne sont jamais identiques, et
       sont tirées indépendamment plutôt que dérivées l'une de l'autre.
-- [ ] Relancer l'outil sur une installation déjà initialisée est refusé explicitement,
-      jamais silencieusement écrasé.
+- [ ] Relancer l'outil alors que le fichier de sortie existe est refusé explicitement, jamais
+      silencieusement écrasé, et aucune option n'existe pour forcer ce refus.
+- [ ] `--out` est obligatoire : aucun chemin de sortie implicite.
+- [ ] Le fichier produit contient exactement trois lignes `CLE=valeur`, en LF, avec saut de
+      ligne final, sans commentaire ni guillemets, et s'importe tel quel dans `.env` comme dans
+      un Secret OpenShift.
+- [ ] Les permissions restrictives sont posées à la création, jamais corrigées après coup ; si
+      la restriction ne peut pas être garantie, aucun fichier n'est écrit.
+- [ ] Aucun secret n'apparaît sur la sortie standard, sur la sortie d'erreur, ni dans aucun
+      journal — y compris en cas d'échec.
+- [ ] L'outil s'exécute sans démarrer TAS, sans base de données et sans contexte Spring.
+- [ ] L'identifiant de clé produit est de la forme `k-<UUID>`, opaque et sans composante
+      temporelle.
+- [ ] La documentation dit explicitement que la perte du fichier se répare par restauration de
+      la sauvegarde, et jamais par une régénération contre une base existante.
 - [ ] La documentation d'installation ne mentionne aucune plateforme de déploiement comme
       prérequis ; elle décrit le contrat de sortie et laisse chaque adaptateur choisir sa
       cible.
@@ -91,4 +177,8 @@ séparés, un par cible.
   Compose, VM) — récits séparés, un par cible, si et quand une cible est retenue.
 - Rotation de la clé de chiffrement elle-même — portée par TAS-GRANTS-02A si le besoin
   apparaît, distincte du bootstrap initial que ce récit couvre.
-- Génération ou rotation des clés de signature — objet propre de TAS-GRANTS-02A.
+- Génération ou rotation des clés de signature : TAS amorce lui-même sa première clé
+  (TAS-KEYS-BOOTSTRAP-01, livré) et la rotation appartient à TAS-GRANTS-02A. La CLI ne produit
+  jamais de matière de signature.
+- Intégration directe à un coffre (écriture par API, sortie standard) — adaptateur explicite,
+  récit séparé.
