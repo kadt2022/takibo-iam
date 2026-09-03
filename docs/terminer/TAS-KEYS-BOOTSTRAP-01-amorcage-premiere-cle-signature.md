@@ -1,6 +1,6 @@
 # TAS-KEYS-BOOTSTRAP-01 — Amorçage automatique de la première clé de signature
 
-**Statut :** TERMINÉ techniquement (PR #58, fusionnee le 2026-09-02) — **exploitation bloquee par TAKIBO-INSTALL-KEYS-01**, qui n existe qu en documentation : TAS amorce sa cle de signature seul, mais rien ne produit encore les secrets externes (`TAKIBO_TAS_CIPHER_KEY`, `TAKIBO_TAS_CIPHER_KEY_ID`, `TAKIBO_TAS_USER_CODE_HMAC_KEY`) dont il depend pour demarrer.
+**Statut :** TERMINÉ (PR #58, fusionnée le 2026-09-02). Le blocage d'exploitation noté ici — TAS amorçait sa clé de signature seul, mais rien ne produisait les secrets externes dont il dépend pour démarrer — est levé depuis [TAKIBO-INSTALL-KEYS-01](TAKIBO-INSTALL-KEYS-01-bootstrap-cryptographique-portable.md) (PR #60), qui livre la CLI produisant `TAKIBO_TAS_CIPHER_KEY`, `TAKIBO_TAS_CIPHER_KEY_ID` et `TAKIBO_TAS_USER_CODE_HMAC_KEY`.
 **Branche :** `feat/tas-keys-bootstrap-01`
 **Dépendances :** TAS-GRANTS-02A (clés persistantes et rotation), TAKIBO-INSTALL-KEYS-01 (secrets externes)
 
