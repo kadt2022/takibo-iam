@@ -1,8 +1,12 @@
 package com.takibo.iamboot.tas;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nimbusds.jose.util.JSONObjectUtils;
 import com.takibo.authorizationserver.domain.keys.SigningKeyRotationService;
+import com.takibo.authorizationserver.domain.keys.model.GeneratedSigningKeyMaterial;
 import com.takibo.authorizationserver.domain.keys.model.NewSigningKey;
+import com.takibo.authorizationserver.domain.keys.port.SigningKeyMaterialGenerator;
 import com.takibo.authorizationserver.domain.keys.port.SigningKeyWriter;
 import com.takibo.authorizationserver.infrastructure.keys.AesGcmSecretCipher;
 import com.takibo.authorizationserver.infrastructure.keys.RsaSigningKeyGenerator;
@@ -17,6 +21,7 @@ import org.junit.jupiter.api.condition.EnabledIf;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
@@ -24,9 +29,20 @@ import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.testcontainers.containers.PostgreSQLContainer;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.PrintStream;
+import java.net.URI;
+import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -74,6 +90,26 @@ class SigningKeyRestartAcceptanceTest {
         }
     }
 
+    private static final ObjectMapper JSON = new ObjectMapper();
+    private static final HttpClient HTTP = HttpClient.newHttpClient();
+
+    /** Secret du client PLATFORM in-memory, tel que le fixe application-test.yml. */
+    private static final String PLATFORM_CLIENT_SECRET = "test-ci-secret-placeholder";
+
+    /** Parametres prives d'un JWK, RFC 7517 et RFC 7518. Aucun ne doit sortir. */
+    private static final List<String> PRIVATE_JWK_PARAMETERS =
+            List.of("d", "p", "q", "dp", "dq", "qi", "oth", "k");
+
+    /**
+     * Matiere privee <b>en clair</b> de la cle amorcee, retenue a la generation.
+     * <p>
+     * Sans elle, le test de non-fuite ne chercherait que la cle de chiffrement au repos, qui
+     * est un secret <i>different</i> : une trace qui ecrirait la cle RSA privee dechiffree
+     * passerait inapercue. C'est le seul endroit du depot ou cette matiere est conservee, et
+     * uniquement pour pouvoir affirmer qu'elle n'apparait nulle part ailleurs.
+     */
+    private static String seededPrivateJwkJson;
+
     private static PostgreSQLContainer<?> postgres;
 
     private static final String[] OVERRIDDEN_PROPERTIES = {
@@ -96,7 +132,7 @@ class SigningKeyRestartAcceptanceTest {
 
         overrideApplicationProperties();
         migrateSchema();
-        seedFirstIssuer();
+        seedFirstIssuerAndBaseline();
     }
 
     @AfterAll
@@ -140,6 +176,315 @@ class SigningKeyRestartAcceptanceTest {
             assertThat(decoded.getSubject()).isEqualTo("restart-subject");
         } finally {
             second.close();
+        }
+    }
+
+    /**
+     * Critere d'acceptation : « {@code client_credentials} PLATFORM et SPACE reste verifiable
+     * avant et apres redemarrage ».
+     * <p>
+     * Le test frere {@code OAuth2AuthorizationRestartAcceptanceTest} prouve que
+     * l'<i>autorisation</i> survit au redemarrage, en la retrouvant par {@code findByToken}.
+     * Ce n'est pas la meme propriete : retrouver une ligne en base n'exige aucune cle. Ici
+     * c'est la <b>signature</b> qui est verifiee par le second contexte, donc la cle privee
+     * rechargee depuis la base.
+     * <p>
+     * Les deux portees sont exercees parce qu'elles empruntent deux resolutions de client
+     * distinctes : le client SPACE vient de la base, le client PLATFORM est declare in-memory.
+     * Une regression qui ne toucherait qu'une des deux passerait inapercue si une seule
+     * etait testee.
+     */
+    @Test
+    void given_client_credentials_tokens_issued_before_the_restart_then_a_fresh_context_still_verifies_them() {
+        String spaceToken;
+        String platformToken;
+        ConfigurableApplicationContext first = bootApplication();
+        try {
+            int port = localPort(first);
+            spaceToken = clientCredentialsToken(port,
+                    TasBaselineDataset.SPACE_CLIENT_ID,
+                    TasBaselineDataset.SPACE_CLIENT_SECRET,
+                    TasBaselineDataset.SPACE_CLIENT_SCOPE);
+            platformToken = clientCredentialsToken(port,
+                    TasBaselineDataset.PLATFORM_CLIENT_ID,
+                    PLATFORM_CLIENT_SECRET,
+                    null);
+        } finally {
+            first.close();
+        }
+
+        ConfigurableApplicationContext second = bootApplication();
+        try {
+            JwtDecoder decoder = second.getBean(JwtDecoder.class);
+
+            Jwt space = decoder.decode(spaceToken);
+            Jwt platform = decoder.decode(platformToken);
+
+            assertThat(space.getSubject()).isEqualTo(TasBaselineDataset.SPACE_CLIENT_ID);
+            assertThat(platform.getSubject()).isEqualTo(TasBaselineDataset.PLATFORM_CLIENT_ID);
+        } finally {
+            second.close();
+        }
+    }
+
+    /**
+     * Critere d'acceptation : « le parcours humain {@code /api/v1/auth/login} reste verifiable
+     * avant et apres redemarrage ; les tokens humains et machine partagent la meme cle,
+     * propriete que ce recit ne doit pas rompre ».
+     * <p>
+     * Deux assertions distinctes, parce que ce sont deux risques distincts. La survie du token
+     * humain au redemarrage se prouve en le decodant avec le second contexte. Le partage de
+     * cle se prouve en comparant le {@code kid} de l'en-tete des deux tokens : une
+     * implementation qui se mettrait a signer les humains avec une seconde cle passerait la
+     * premiere assertion sans probleme.
+     */
+    @Test
+    void given_a_human_login_token_issued_before_the_restart_then_it_survives_and_shares_the_machine_key() {
+        String humanToken;
+        String machineToken;
+        ConfigurableApplicationContext first = bootApplication();
+        try {
+            int port = localPort(first);
+            humanToken = humanLoginToken(port);
+            machineToken = clientCredentialsToken(port,
+                    TasBaselineDataset.SPACE_CLIENT_ID,
+                    TasBaselineDataset.SPACE_CLIENT_SECRET,
+                    TasBaselineDataset.SPACE_CLIENT_SCOPE);
+        } finally {
+            first.close();
+        }
+
+        ConfigurableApplicationContext second = bootApplication();
+        try {
+            JwtDecoder decoder = second.getBean(JwtDecoder.class);
+
+            Jwt human = decoder.decode(humanToken);
+
+            assertThat(human.getSubject()).isEqualTo(TasBaselineDataset.ACCOUNT_ID.toString());
+            assertThat(human.getClaimAsString("subject_type")).isEqualTo("HUMAN");
+            assertThat(kidOf(humanToken))
+                    .as("les tokens humains et machine doivent etre signes par la meme cle")
+                    .isEqualTo(kidOf(machineToken));
+        } finally {
+            second.close();
+        }
+    }
+
+    /**
+     * Critere d'acceptation : « une cle privee n'apparait jamais dans le JWKS, les logs, les
+     * metriques ou une erreur ».
+     * <p>
+     * {@code JwkSetEndpointIntegrationTest} couvre deja la moitie JWKS, mais sur la source
+     * ephemere du profil de test. Ici la cle est persistante et chiffree au repos, donc deux
+     * materiaux distincts peuvent fuir : la cle RSA privee elle-meme, et la cle de chiffrement
+     * qui la protege.
+     * <p>
+     * Les surfaces sont exercees separement. Le JWKS est lu et fouille. La configuration et
+     * les metriques sont d'abord verifiees <b>fermees</b> — fouiller un corps de refus ne
+     * prouverait rien si la surface etait en realite ouverte — puis fouillees quand meme,
+     * parce qu'un refus mal ecrit peut lui aussi laisser fuir. Les logs sont captures pendant
+     * le demarrage et pendant une emission reelle, la ou une trace mal placee ecrirait la
+     * matiere.
+     */
+    @Test
+    void given_a_persistent_signing_key_then_no_private_material_leaks_through_any_public_surface() {
+        String cipherKeyBase64 = Base64.getEncoder().encodeToString(CIPHER_KEY_MATERIAL);
+        // Deux secrets distincts, donc deux jeux de valeurs recherchees. Ne chercher que la
+        // cle de chiffrement laisserait passer une trace qui ecrirait la cle RSA dechiffree.
+        List<String> signingMaterial = privateSigningMaterialFragments();
+        assertThat(signingMaterial)
+                .as("la matiere privee de la cle amorcee doit avoir ete retenue")
+                .isNotEmpty();
+
+        try (StreamCapture logs = new StreamCapture()) {
+            ConfigurableApplicationContext context = bootApplication();
+            try {
+                int port = localPort(context);
+
+                String jwks = get(port, "/oauth2/jwks").body();
+                JsonNode keys = readJson(jwks).path("keys");
+                assertThat(keys).isNotEmpty();
+                for (JsonNode key : keys) {
+                    for (String parameter : PRIVATE_JWK_PARAMETERS) {
+                        assertThat(key.has(parameter))
+                                .as("le JWKS ne doit jamais exposer le parametre prive '%s'", parameter)
+                                .isFalse();
+                    }
+                }
+                assertThat(jwks)
+                        .as("le JWKS ne doit pas non plus laisser fuir la cle de chiffrement au repos")
+                        .doesNotContain(cipherKeyBase64);
+                for (String fragment : signingMaterial) {
+                    assertThat(jwks)
+                            .as("le JWKS ne doit contenir aucune composante privee de la cle de signature")
+                            .doesNotContain(fragment);
+                }
+
+                // Une emission reelle : c'est le moment ou la cle privee est dechiffree et
+                // utilisee, donc le moment ou une trace la ferait fuir.
+                clientCredentialsToken(port,
+                        TasBaselineDataset.SPACE_CLIENT_ID,
+                        TasBaselineDataset.SPACE_CLIENT_SECRET,
+                        TasBaselineDataset.SPACE_CLIENT_SCOPE);
+
+                for (String path : new String[]{"/actuator/env", "/actuator/metrics"}) {
+                    HttpResponse<String> response = get(port, path);
+
+                    assertThat(response.statusCode())
+                            .as("%s doit rester ferme a un appelant anonyme (SEC-TMS-03)", path)
+                            .isEqualTo(401);
+                    assertThat(response.body())
+                            .as("meme un refus ne doit rien reveler sur %s", path)
+                            .doesNotContain(cipherKeyBase64);
+                    for (String fragment : signingMaterial) {
+                        assertThat(response.body())
+                                .as("aucune composante privee de la cle de signature sur %s", path)
+                                .doesNotContain(fragment);
+                    }
+                }
+
+                // Garde-fou : sans lui, une capture vide ferait passer l'assertion suivante
+                // sans rien verifier. C'est exactement ce qui s'est produit avec un
+                // ListAppender Logback, que Spring Boot detache en reconfigurant le logger.
+                String captured = logs.captured();
+                assertThat(captured)
+                        .as("la capture de flux doit avoir vu passer les traces du demarrage")
+                        .isNotBlank();
+                assertThat(captured)
+                        .as("la cle de chiffrement au repos ne doit pas apparaitre dans les logs")
+                        .doesNotContain(cipherKeyBase64);
+                for (String fragment : signingMaterial) {
+                    assertThat(captured)
+                            .as("aucune composante privee de la cle de signature dans les logs")
+                            .doesNotContain(fragment);
+                }
+            } finally {
+                context.close();
+            }
+        }
+    }
+
+    private static int localPort(ConfigurableApplicationContext context) {
+        return Integer.parseInt(context.getEnvironment().getProperty("local.server.port"));
+    }
+
+    /** En-tete JOSE du JWT, decodee sans verification : seul le {@code kid} est lu ici. */
+    private static String kidOf(String token) {
+        String header = new String(
+                Base64.getUrlDecoder().decode(token.substring(0, token.indexOf('.'))),
+                StandardCharsets.UTF_8);
+        return readJson(header).path("kid").asText();
+    }
+
+    private static String clientCredentialsToken(int port, String clientId, String secret, String scope) {
+        String credentials = Base64.getEncoder().encodeToString(
+                (clientId + ":" + secret).getBytes(StandardCharsets.UTF_8));
+        String form = "grant_type=client_credentials"
+                + (scope == null ? "" : "&scope=" + URLEncoder.encode(scope, StandardCharsets.UTF_8));
+        HttpResponse<String> response = send(HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:" + port + "/oauth2/token"))
+                .header("Authorization", "Basic " + credentials)
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .POST(HttpRequest.BodyPublishers.ofString(form))
+                .build());
+
+        assertThat(response.statusCode()).as("POST /oauth2/token pour %s", clientId).isEqualTo(200);
+        String token = readJson(response.body()).path("access_token").asText();
+        assertThat(token).isNotBlank();
+        return token;
+    }
+
+    private static String humanLoginToken(int port) {
+        String payload = "{\"orgCode\":\"" + TasBaselineDataset.ORG_CODE
+                + "\",\"email\":\"" + TasBaselineDataset.ACCOUNT_EMAIL
+                + "\",\"password\":\"" + TasBaselineDataset.ACCOUNT_PASSWORD + "\"}";
+        HttpResponse<String> response = send(HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:" + port + "/api/v1/auth/login"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(payload))
+                .build());
+
+        assertThat(response.statusCode()).as("POST /api/v1/auth/login").isEqualTo(200);
+        String token = readJson(response.body()).path("accessToken").asText();
+        assertThat(token).isNotBlank();
+        return token;
+    }
+
+    private static HttpResponse<String> get(int port, String path) {
+        return send(HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:" + port + path))
+                .GET()
+                .build());
+    }
+
+    private static HttpResponse<String> send(HttpRequest request) {
+        try {
+            return HTTP.send(request, HttpResponse.BodyHandlers.ofString());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Appel " + request.uri() + " interrompu", e);
+        } catch (Exception e) {
+            throw new IllegalStateException("Appel " + request.uri() + " en echec", e);
+        }
+    }
+
+    private static JsonNode readJson(String body) {
+        try {
+            return JSON.readTree(body);
+        } catch (Exception e) {
+            throw new IllegalStateException("Reponse illisible: " + body, e);
+        }
+    }
+
+    /**
+     * Capture de {@code System.out} et {@code System.err}.
+     * <p>
+     * Un {@code ListAppender} Logback ne convient pas ici, et l'essai l'a prouve : Spring Boot
+     * reconfigure Logback pendant le demarrage et detache tout appendeur pose avant, si bien
+     * que la capture restait vide et que l'assertion « aucun secret dans les logs » passait
+     * sans rien verifier. Les flux, eux, survivent : le {@code ConsoleAppender} reconfigure
+     * ecrit dans le {@code System.out} courant, donc dans ce tampon.
+     * <p>
+     * Les flux d'origine restent branches en parallele, pour ne pas rendre muet le rapport de
+     * test en cas d'echec.
+     */
+    private static final class StreamCapture implements AutoCloseable {
+
+        private final ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        private final PrintStream originalOut = System.out;
+        private final PrintStream originalErr = System.err;
+
+        StreamCapture() {
+            System.setOut(tee(originalOut));
+            System.setErr(tee(originalErr));
+        }
+
+        private PrintStream tee(PrintStream original) {
+            return new PrintStream(new OutputStream() {
+                @Override
+                public void write(int b) throws IOException {
+                    original.write(b);
+                    buffer.write(b);
+                }
+
+                @Override
+                public void write(byte[] bytes, int offset, int length) throws IOException {
+                    original.write(bytes, offset, length);
+                    buffer.write(bytes, offset, length);
+                }
+            }, true, StandardCharsets.UTF_8);
+        }
+
+        String captured() {
+            System.out.flush();
+            System.err.flush();
+            return buffer.toString(StandardCharsets.UTF_8);
+        }
+
+        @Override
+        public void close() {
+            System.setOut(originalOut);
+            System.setErr(originalErr);
         }
     }
 
@@ -201,18 +546,59 @@ class SigningKeyRestartAcceptanceTest {
      * {@code SigningKeysConfiguration} assemble, hors contexte Spring — seul le port
      * d'ecriture est une implementation JDBC minimale, ce test ne portant pas sur la
      * traduction entite-domaine deja couverte par {@code JpaSigningKeyRepositoryTest}.
+     * <p>
+     * Le jeu de donnees de reference suit, parce que les preuves de survie du
+     * {@code client_credentials} et du login humain passent par de vraies routes : sans
+     * organisation, sans compte et sans client, elles n'auraient rien a emettre.
      */
-    private static void seedFirstIssuer() {
+    private static void seedFirstIssuerAndBaseline() {
         try (HikariDataSource dataSource = dataSource()) {
             SecretCipherKey cipherKey = new SecretCipherKey(CIPHER_KEY_ID, CIPHER_KEY_MATERIAL);
             SigningKeyRotationService bootstrap = new SigningKeyRotationService(
-                    new RsaSigningKeyGenerator(),
+                    recordingGenerator(),
                     new JdbcFirstIssuerWriter(new JdbcTemplate(dataSource)),
                     new AesGcmSecretCipher(cipherKey),
                     Clock.systemUTC());
 
             bootstrap.initializeFirstIssuer();
+
+            new TasBaselineDataset(new JdbcTemplate(dataSource), new BCryptPasswordEncoder(4)).reset();
         }
+    }
+
+    /**
+     * Le generateur RSA de production, qui retient au passage la matiere privee en clair.
+     * <p>
+     * Elle ne traverse pas la couche de persistance — {@code SigningKeyRotationService} la
+     * chiffre avant l'ecriture — donc la relire depuis la base imposerait de dechiffrer, et
+     * donc de deviner le {@code SecretContext} employe. L'intercepter a la source est plus
+     * direct et plus sur : c'est exactement la valeur que le test doit ne pas retrouver.
+     */
+    private static SigningKeyMaterialGenerator recordingGenerator() {
+        RsaSigningKeyGenerator delegate = new RsaSigningKeyGenerator();
+        return () -> {
+            GeneratedSigningKeyMaterial material = delegate.generate();
+            seededPrivateJwkJson = material.privateKeyMaterial();
+            return material;
+        };
+    }
+
+    /**
+     * Composantes privees du JWK RSA amorce : {@code d} et les facteurs du theoreme des
+     * restes chinois. Chacune est une chaine base64url longue, donc une valeur de recherche
+     * discriminante. Les composantes publiques ({@code n}, {@code e}, {@code kid}) sont
+     * volontairement exclues : elles sont censees apparaitre dans le JWKS.
+     */
+    private static List<String> privateSigningMaterialFragments() {
+        JsonNode jwk = readJson(seededPrivateJwkJson);
+        List<String> fragments = new java.util.ArrayList<>();
+        for (String member : List.of("d", "p", "q", "dp", "dq", "qi")) {
+            String value = jwk.path(member).asText();
+            if (!value.isBlank()) {
+                fragments.add(value);
+            }
+        }
+        return List.copyOf(fragments);
     }
 
     private static HikariDataSource dataSource() {
