@@ -87,15 +87,15 @@ RBAC-01 → RBAC-02 → RBAC-03 → RBAC-04 → RBAC-05 → RBAC-06
 Récits sans lot numéroté, regroupés ici depuis `docs/recits` lors de la consolidation du
 backlog. Ils ne partagent pas de séquencement : chacun se prend indépendamment.
 
-| Récit | Sujet |
-| --- | --- |
-| [SEC-TMS-01](SEC-TMS-01-fermer-elevation-privileges-signup.md) | Fermer l'élévation de privilèges au signup |
-| [SEC-TMS-02](SEC-TMS-02-passer-routes-tms-default-deny.md) | Passer les routes TMS en default-deny |
-| [SEC-TMS-03](SEC-TMS-03-restreindre-actuator.md) | Restreindre Actuator |
-| [SEC-TMS-04](SEC-TMS-04-traduire-les-erreurs-de-configuration-client.md) | Traduire les erreurs de configuration client au lieu de renvoyer 500 |
-| [TMS-OAUTH-01](TMS-OAUTH-01-durcir-configuration-clients-oauth2.md) | Durcir la configuration des clients OAuth2 |
-| [TMS-VAL-01](TMS-VAL-01-validation-rest-contracts.md) | Validation des contrats REST |
-| [TMS-CLIENT-READ-01](TAKIBO_Recit_TMS_CLIENT_READ_01.md) | Lire les clients OAuth2 sans réexposer leurs secrets |
+| Récit | Sujet | Statut |
+| --- | --- | --- |
+| [SEC-TMS-01](../terminer/SEC-TMS-01-fermer-elevation-privileges-signup.md) | Fermer l’élévation de privilèges au signup | **TERMINÉ** (vérifié 2026-09-09) |
+| [SEC-TMS-02](../terminer/SEC-TMS-02-passer-routes-tms-default-deny.md) | Passer les routes TMS en default-deny | **TERMINÉ** (vérifié 2026-09-09) |
+| [SEC-TMS-03](../terminer/SEC-TMS-03-restreindre-actuator.md) | Restreindre Actuator | **TERMINÉ** (vérifié 2026-09-09) |
+| [SEC-TMS-04](SEC-TMS-04-traduire-les-erreurs-de-configuration-client.md) | Traduire les erreurs de configuration client au lieu de renvoyer 500 | à faire |
+| [TMS-OAUTH-01](../terminer/TMS-OAUTH-01-durcir-configuration-clients-oauth2.md) | Durcir la configuration des clients OAuth2 | **TERMINÉ** (vérifié 2026-09-09) |
+| [TMS-VAL-01](../terminer/TMS-VAL-01-validation-rest-contracts.md) | Validation des contrats REST | **TERMINÉ** (vérifié 2026-09-09) |
+| [TMS-CLIENT-READ-01](TAKIBO_Recit_TMS_CLIENT_READ_01.md) | Lire les clients OAuth2 sans réexposer leurs secrets | à faire |
 
 Outillage de vérification associé :
 [TAKIBO_Plan_Collection_Postman_Canonique.md](TAKIBO_Plan_Collection_Postman_Canonique.md).

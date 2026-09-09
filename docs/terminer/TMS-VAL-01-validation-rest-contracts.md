@@ -1,5 +1,9 @@
 # TMS-VAL-01 — Validation imbriquée et contrats REST
 
+**Statut** : TERMINÉ
+**Vérifié le** : 2026-09-09, critère par critère contre le code de `main`
+**Preuves** : `signup_rejects_invalid_nested_fields_before_calling_the_service` et `signup_returns_created_with_the_organization_location` ; `OAuthClientControllerTest` vérifie 201, `Location`, `Cache-Control`, `Pragma` et `X-Content-Type-Options`
+
 ## Contexte
 
 Le payload d'inscription d'une organisation contient quatre objets imbriqués. Ils

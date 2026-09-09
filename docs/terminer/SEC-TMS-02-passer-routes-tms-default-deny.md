@@ -1,5 +1,9 @@
 # SEC-TMS-02 — Passer les routes TMS en default-deny
 
+**Statut** : TERMINÉ
+**Vérifié le** : 2026-09-09, critère par critère contre le code de `main`
+**Preuves** : `PolicyEvaluator.denyUngovernedTmsSurface()` ; `PolicyEvaluatorTest` couvre AC-01 à AC-04, `PolicyBasedAuthorizationManagerTest.encodedOrParameterizedTmsUuid_cannotBypassPolicy` couvre AC-05
+
 ## Contexte
 
 Le `PolicyEvaluator` termine par `POL_DEFAULT_ALLOW` lorsqu'aucune politique ne

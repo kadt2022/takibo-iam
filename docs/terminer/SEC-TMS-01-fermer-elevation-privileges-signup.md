@@ -1,5 +1,9 @@
 # SEC-TMS-01 — Fermer l'élévation de privilèges du signup
 
+**Statut** : TERMINÉ
+**Vérifié le** : 2026-09-09, critère par critère contre le code de `main`
+**Preuves** : `OrganizationSignupService` lève `EXISTING_ORGANIZATION_SIGNUP_FORBIDDEN` ; `OrganizationSignupServiceTest` prouve AC-01, AC-02 (cinq `never()`) et AC-03
+
 ## Contexte
 
 `POST /api/v1/orgs/signup` est le flux de bootstrap d'une nouvelle organisation.
