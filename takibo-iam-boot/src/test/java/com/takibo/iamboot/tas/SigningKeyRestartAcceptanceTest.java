@@ -4,7 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nimbusds.jose.util.JSONObjectUtils;
 import com.takibo.authorizationserver.domain.keys.SigningKeyRotationService;
+import com.takibo.authorizationserver.domain.keys.model.GeneratedSigningKeyMaterial;
 import com.takibo.authorizationserver.domain.keys.model.NewSigningKey;
+import com.takibo.authorizationserver.domain.keys.port.SigningKeyMaterialGenerator;
 import com.takibo.authorizationserver.domain.keys.port.SigningKeyWriter;
 import com.takibo.authorizationserver.infrastructure.keys.AesGcmSecretCipher;
 import com.takibo.authorizationserver.infrastructure.keys.RsaSigningKeyGenerator;
@@ -97,6 +99,16 @@ class SigningKeyRestartAcceptanceTest {
     /** Parametres prives d'un JWK, RFC 7517 et RFC 7518. Aucun ne doit sortir. */
     private static final List<String> PRIVATE_JWK_PARAMETERS =
             List.of("d", "p", "q", "dp", "dq", "qi", "oth", "k");
+
+    /**
+     * Matiere privee <b>en clair</b> de la cle amorcee, retenue a la generation.
+     * <p>
+     * Sans elle, le test de non-fuite ne chercherait que la cle de chiffrement au repos, qui
+     * est un secret <i>different</i> : une trace qui ecrirait la cle RSA privee dechiffree
+     * passerait inapercue. C'est le seul endroit du depot ou cette matiere est conservee, et
+     * uniquement pour pouvoir affirmer qu'elle n'apparait nulle part ailleurs.
+     */
+    private static String seededPrivateJwkJson;
 
     private static PostgreSQLContainer<?> postgres;
 
@@ -277,6 +289,12 @@ class SigningKeyRestartAcceptanceTest {
     @Test
     void given_a_persistent_signing_key_then_no_private_material_leaks_through_any_public_surface() {
         String cipherKeyBase64 = Base64.getEncoder().encodeToString(CIPHER_KEY_MATERIAL);
+        // Deux secrets distincts, donc deux jeux de valeurs recherchees. Ne chercher que la
+        // cle de chiffrement laisserait passer une trace qui ecrirait la cle RSA dechiffree.
+        List<String> signingMaterial = privateSigningMaterialFragments();
+        assertThat(signingMaterial)
+                .as("la matiere privee de la cle amorcee doit avoir ete retenue")
+                .isNotEmpty();
 
         try (StreamCapture logs = new StreamCapture()) {
             ConfigurableApplicationContext context = bootApplication();
@@ -296,6 +314,11 @@ class SigningKeyRestartAcceptanceTest {
                 assertThat(jwks)
                         .as("le JWKS ne doit pas non plus laisser fuir la cle de chiffrement au repos")
                         .doesNotContain(cipherKeyBase64);
+                for (String fragment : signingMaterial) {
+                    assertThat(jwks)
+                            .as("le JWKS ne doit contenir aucune composante privee de la cle de signature")
+                            .doesNotContain(fragment);
+                }
 
                 // Une emission reelle : c'est le moment ou la cle privee est dechiffree et
                 // utilisee, donc le moment ou une trace la ferait fuir.
@@ -313,6 +336,11 @@ class SigningKeyRestartAcceptanceTest {
                     assertThat(response.body())
                             .as("meme un refus ne doit rien reveler sur %s", path)
                             .doesNotContain(cipherKeyBase64);
+                    for (String fragment : signingMaterial) {
+                        assertThat(response.body())
+                                .as("aucune composante privee de la cle de signature sur %s", path)
+                                .doesNotContain(fragment);
+                    }
                 }
 
                 // Garde-fou : sans lui, une capture vide ferait passer l'assertion suivante
@@ -323,8 +351,13 @@ class SigningKeyRestartAcceptanceTest {
                         .as("la capture de flux doit avoir vu passer les traces du demarrage")
                         .isNotBlank();
                 assertThat(captured)
-                        .as("aucune matiere secrete ne doit apparaitre dans les logs")
+                        .as("la cle de chiffrement au repos ne doit pas apparaitre dans les logs")
                         .doesNotContain(cipherKeyBase64);
+                for (String fragment : signingMaterial) {
+                    assertThat(captured)
+                            .as("aucune composante privee de la cle de signature dans les logs")
+                            .doesNotContain(fragment);
+                }
             } finally {
                 context.close();
             }
@@ -522,7 +555,7 @@ class SigningKeyRestartAcceptanceTest {
         try (HikariDataSource dataSource = dataSource()) {
             SecretCipherKey cipherKey = new SecretCipherKey(CIPHER_KEY_ID, CIPHER_KEY_MATERIAL);
             SigningKeyRotationService bootstrap = new SigningKeyRotationService(
-                    new RsaSigningKeyGenerator(),
+                    recordingGenerator(),
                     new JdbcFirstIssuerWriter(new JdbcTemplate(dataSource)),
                     new AesGcmSecretCipher(cipherKey),
                     Clock.systemUTC());
@@ -531,6 +564,41 @@ class SigningKeyRestartAcceptanceTest {
 
             new TasBaselineDataset(new JdbcTemplate(dataSource), new BCryptPasswordEncoder(4)).reset();
         }
+    }
+
+    /**
+     * Le generateur RSA de production, qui retient au passage la matiere privee en clair.
+     * <p>
+     * Elle ne traverse pas la couche de persistance — {@code SigningKeyRotationService} la
+     * chiffre avant l'ecriture — donc la relire depuis la base imposerait de dechiffrer, et
+     * donc de deviner le {@code SecretContext} employe. L'intercepter a la source est plus
+     * direct et plus sur : c'est exactement la valeur que le test doit ne pas retrouver.
+     */
+    private static SigningKeyMaterialGenerator recordingGenerator() {
+        RsaSigningKeyGenerator delegate = new RsaSigningKeyGenerator();
+        return () -> {
+            GeneratedSigningKeyMaterial material = delegate.generate();
+            seededPrivateJwkJson = material.privateKeyMaterial();
+            return material;
+        };
+    }
+
+    /**
+     * Composantes privees du JWK RSA amorce : {@code d} et les facteurs du theoreme des
+     * restes chinois. Chacune est une chaine base64url longue, donc une valeur de recherche
+     * discriminante. Les composantes publiques ({@code n}, {@code e}, {@code kid}) sont
+     * volontairement exclues : elles sont censees apparaitre dans le JWKS.
+     */
+    private static List<String> privateSigningMaterialFragments() {
+        JsonNode jwk = readJson(seededPrivateJwkJson);
+        List<String> fragments = new java.util.ArrayList<>();
+        for (String member : List.of("d", "p", "q", "dp", "dq", "qi")) {
+            String value = jwk.path(member).asText();
+            if (!value.isBlank()) {
+                fragments.add(value);
+            }
+        }
+        return List.copyOf(fragments);
     }
 
     private static HikariDataSource dataSource() {
