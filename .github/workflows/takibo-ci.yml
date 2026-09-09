@@ -1,10 +1,22 @@
 name: Takibo CI
 
+# Une modification purement documentaire ne peut casser aucun test : la CI ne
+# démarre donc pas pour elle. Le filtre ne s'applique que si TOUS les fichiers
+# modifiés correspondent — un lot mixte code + doc relance la chaîne complète.
+# Si `main` devient protégée avec des vérifications requises, ce filtre devra
+# être remplacé par des tâches factices, sinon les PR documentaires resteront
+# bloquées en attente d'une vérification qui ne démarrera jamais.
 on:
   push:
     branches: [main, develop]
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
   pull_request:
     branches: [main, develop]
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
 
 env:
   TAKIBO_APP_PORT: 8081

@@ -5,6 +5,22 @@ part dans [`../terminer`](../terminer), sans changer de nom. Il n'existe pas d'a
 emplacement : le préfixe du nom de fichier distingue les lots, l'arborescence ne les sépare
 pas.
 
+## Règles permanentes du backlog
+
+**Le dossier n'est jamais le seul porteur de l'état.** Toute fiche porte un bloc
+d'en-tête avec son `Statut` (`À FAIRE | EN COURS | TERMINÉ`) dès sa création. Un récit
+dont l'état ne se lit que dans son chemin devient un mensonge au premier déménagement :
+c'est exactement ce qui a fait passer cinq récits TMS livrés en juillet 2026 pour du
+travail à faire pendant six semaines.
+
+**Aucun déplacement en bloc sans relecture.** Consolider, réorganiser ou renommer un
+dossier de récits impose de vérifier le statut de chaque fiche déplacée. Un renommage
+mécanique n'est pas une opération neutre sur un backlog.
+
+**Une PR purement documentaire ne déclenche pas la CI.** Le workflow ignore `docs/**`
+et `**.md`. Le filtre ne s'applique que si tous les fichiers modifiés correspondent, donc
+un lot mixte code et documentation relance la chaîne complète.
+
 ## Lots
 
 | Lot | Préfixe | Index |
