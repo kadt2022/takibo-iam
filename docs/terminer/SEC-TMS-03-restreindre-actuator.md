@@ -1,5 +1,9 @@
 # SEC-TMS-03 — Restreindre Actuator
 
+**Statut** : TERMINÉ
+**Vérifié le** : 2026-09-09, critère par critère contre le code de `main`
+**Preuves** : `SecurityConfig` n'ouvre que les trois sondes health et réserve `/actuator/**` à `R_TAKIBO_PLATFORM_ADMIN` ; `application.yml` porte `show-details: when-authorized` et `springdoc.show-actuator: false`
+
 ## Contexte
 
 La chaîne Spring Security autorise publiquement `/actuator/**`. La configuration web

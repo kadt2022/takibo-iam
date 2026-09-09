@@ -1,5 +1,9 @@
 # TMS-OAUTH-01 — Durcir la configuration des clients OAuth2
 
+**Statut** : TERMINÉ
+**Vérifié le** : 2026-09-09, critère par critère contre le code de `main`
+**Preuves** : `OAuthClientInputHardeningTest` (AC-01, AC-02), `OAuthClientConfigurationValidatorTest` 11 tests (AC-03, AC-04), `OAuthClientControllerTest.register_rejects_unsafe_client_identifier_before_calling_the_service` (AC-05)
+
 ## Contexte
 
 L'enregistrement des clients accepte des configurations trop permissives : grant

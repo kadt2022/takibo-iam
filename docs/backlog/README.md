@@ -5,6 +5,22 @@ part dans [`../terminer`](../terminer), sans changer de nom. Il n'existe pas d'a
 emplacement : le préfixe du nom de fichier distingue les lots, l'arborescence ne les sépare
 pas.
 
+## Règles permanentes du backlog
+
+**Le dossier n'est jamais le seul porteur de l'état.** Toute fiche porte un bloc
+d'en-tête avec son `Statut` (`À FAIRE | EN COURS | TERMINÉ`) dès sa création. Un récit
+dont l'état ne se lit que dans son chemin devient un mensonge au premier déménagement :
+c'est exactement ce qui a fait passer cinq récits TMS livrés en juillet 2026 pour du
+travail à faire pendant six semaines.
+
+**Aucun déplacement en bloc sans relecture.** Consolider, réorganiser ou renommer un
+dossier de récits impose de vérifier le statut de chaque fiche déplacée. Un renommage
+mécanique n'est pas une opération neutre sur un backlog.
+
+**Une PR purement documentaire ne déclenche pas la CI.** Le workflow ignore `docs/**`
+et `**.md`. Le filtre ne s'applique que si tous les fichiers modifiés correspondent, donc
+un lot mixte code et documentation relance la chaîne complète.
+
 ## Lots
 
 | Lot | Préfixe | Index |
@@ -87,15 +103,15 @@ RBAC-01 → RBAC-02 → RBAC-03 → RBAC-04 → RBAC-05 → RBAC-06
 Récits sans lot numéroté, regroupés ici depuis `docs/recits` lors de la consolidation du
 backlog. Ils ne partagent pas de séquencement : chacun se prend indépendamment.
 
-| Récit | Sujet |
-| --- | --- |
-| [SEC-TMS-01](SEC-TMS-01-fermer-elevation-privileges-signup.md) | Fermer l'élévation de privilèges au signup |
-| [SEC-TMS-02](SEC-TMS-02-passer-routes-tms-default-deny.md) | Passer les routes TMS en default-deny |
-| [SEC-TMS-03](SEC-TMS-03-restreindre-actuator.md) | Restreindre Actuator |
-| [SEC-TMS-04](SEC-TMS-04-traduire-les-erreurs-de-configuration-client.md) | Traduire les erreurs de configuration client au lieu de renvoyer 500 |
-| [TMS-OAUTH-01](TMS-OAUTH-01-durcir-configuration-clients-oauth2.md) | Durcir la configuration des clients OAuth2 |
-| [TMS-VAL-01](TMS-VAL-01-validation-rest-contracts.md) | Validation des contrats REST |
-| [TMS-CLIENT-READ-01](TAKIBO_Recit_TMS_CLIENT_READ_01.md) | Lire les clients OAuth2 sans réexposer leurs secrets |
+| Récit | Sujet | Statut |
+| --- | --- | --- |
+| [SEC-TMS-01](../terminer/SEC-TMS-01-fermer-elevation-privileges-signup.md) | Fermer l’élévation de privilèges au signup | **TERMINÉ** (vérifié 2026-09-09) |
+| [SEC-TMS-02](../terminer/SEC-TMS-02-passer-routes-tms-default-deny.md) | Passer les routes TMS en default-deny | **TERMINÉ** (vérifié 2026-09-09) |
+| [SEC-TMS-03](../terminer/SEC-TMS-03-restreindre-actuator.md) | Restreindre Actuator | **TERMINÉ** (vérifié 2026-09-09) |
+| [SEC-TMS-04](SEC-TMS-04-traduire-les-erreurs-de-configuration-client.md) | Traduire les erreurs de configuration client au lieu de renvoyer 500 | à faire |
+| [TMS-OAUTH-01](../terminer/TMS-OAUTH-01-durcir-configuration-clients-oauth2.md) | Durcir la configuration des clients OAuth2 | **TERMINÉ** (vérifié 2026-09-09) |
+| [TMS-VAL-01](../terminer/TMS-VAL-01-validation-rest-contracts.md) | Validation des contrats REST | **TERMINÉ** (vérifié 2026-09-09) |
+| [TMS-CLIENT-READ-01](TAKIBO_Recit_TMS_CLIENT_READ_01.md) | Lire les clients OAuth2 sans réexposer leurs secrets | à faire |
 
 Outillage de vérification associé :
 [TAKIBO_Plan_Collection_Postman_Canonique.md](TAKIBO_Plan_Collection_Postman_Canonique.md).
