@@ -75,11 +75,23 @@ public class JdbcAuthorizationRetentionAdapter implements AuthorizationRetention
     }
 
     /**
-     * Duree passee en secondes plutot qu'en texte ISO-8601 : PostgreSQL accepte les deux,
-     * mais {@code PT2H} depend du reglage {@code IntervalStyle} de la session, alors que
-     * {@code 7200 seconds} est interprete de la meme facon partout.
+     * Duree passee en unites explicites plutot qu'en texte ISO-8601 : PostgreSQL accepte les
+     * deux, mais {@code PT2H} depend du reglage {@code IntervalStyle} de la session, alors
+     * que {@code 7200 seconds} est interprete de la meme facon partout.
+     * <p>
+     * La partie sous la seconde est ecrite separement, et ce n'est pas de la coquetterie :
+     * {@code toSeconds()} seul tronque vers le bas, donc {@code 1500ms} deviendrait une
+     * seconde et {@code 500ms} deviendrait zero. La purge s'executerait alors <b>plus tot</b>
+     * que la retention configuree — une troncature qui detruit plus vite que demande, dans le
+     * mauvais sens pour une operation irreversible.
+     * <p>
+     * La microseconde est la precision reelle du type {@code interval} de PostgreSQL :
+     * descendre plus bas ne servirait qu'a faire croire a une exactitude que la base ne
+     * garde pas.
      */
-    private static String toInterval(Duration gracePeriod) {
-        return gracePeriod.toSeconds() + " seconds";
+    static String toInterval(Duration gracePeriod) {
+        long seconds = gracePeriod.toSeconds();
+        int microseconds = gracePeriod.toNanosPart() / 1_000;
+        return seconds + " seconds " + microseconds + " microseconds";
     }
 }
