@@ -268,13 +268,20 @@ class OAuth2AuthorizationBoundariesConstraintsIntegrationTest extends TasPostgre
                 principalName);
     }
 
+    /**
+     * L'expiration accompagne l'empreinte depuis TAS-GRANTS-02B : un artefact present doit
+     * porter sa date, sans quoi l'echeance de purge consolidee ignorerait son absence. Ce
+     * test porte sur l'unicite des empreintes, pas sur les dates — la valeur choisie est
+     * donc arbitraire, elle doit seulement exister.
+     */
     private void insertAuthorizationWithAccessTokenHash(
             UUID id, UUID orgId, UUID spaceId, String accessTokenHash) {
         jdbc.update("""
                 INSERT INTO oauth2_authorization (
                     id, org_id, space_id, registered_client_id, principal_account_id,
-                    subject_type, principal_name, authorization_grant_type, access_token_hash)
-                VALUES (?, ?, ?, ?, NULL, 'CLIENT_APP', ?, 'client_credentials', ?)
+                    subject_type, principal_name, authorization_grant_type,
+                    access_token_hash, access_token_expires_at)
+                VALUES (?, ?, ?, ?, NULL, 'CLIENT_APP', ?, 'client_credentials', ?, NOW() + INTERVAL '1 hour')
                 """,
                 id, orgId, spaceId, "registered-" + id, "principal-" + id, accessTokenHash);
     }
