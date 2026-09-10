@@ -74,6 +74,16 @@ final class TasBaselineDataset {
         jdbc.update("DELETE FROM oauth2_authorization_consent WHERE org_id IS NULL");
         jdbc.update("DELETE FROM oauth2_clients WHERE org_id = ?", ORG_ID);
         jdbc.update("DELETE FROM account_credentials WHERE org_id = ?", ORG_ID);
+        // tas_audit_events.org_id est NOT NULL et fk_tae_org ne cascade pas : un evenement
+        // d'audit ecrit par un test retient l'organisation et fait echouer le DELETE final.
+        // Depuis V202609090002, le space se supprime bien (seul space_id est nulle) ; c'est
+        // l'organisation qui reste ancree, et c'est ici, pas dans le schema, que cela se solde.
+        jdbc.update("DELETE FROM tas_audit_events WHERE org_id = ?", ORG_ID);
+        // Meme raison pour les cles de signature scopees a l'organisation : une classe qui en
+        // insere (SigningKeyScopeConstraintsIntegrationTest) les laisse au suivant, le
+        // conteneur PostgreSQL etant partage par toute la JVM. Les cles PLATFORM
+        // (org_id IS NULL, V202608270001) ne sont pas concernees et restent intactes.
+        jdbc.update("DELETE FROM tas_signing_keys WHERE org_id = ?", ORG_ID);
         jdbc.update("DELETE FROM spaces WHERE org_id = ?", ORG_ID);
         jdbc.update("DELETE FROM accounts WHERE org_id = ?", ORG_ID);
         jdbc.update("DELETE FROM organizations WHERE id = ?", ORG_ID);
