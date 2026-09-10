@@ -55,13 +55,6 @@ class AuthorizationRetentionIntegrationTest extends TasPostgresBaseline {
 
     @BeforeEach
     void seed() {
-        // Avant le jeu de donnees, et pas apres : la cle etrangere de tas_audit_events vers
-        // spaces est en ON DELETE SET NULL sur le couple (org_id, space_id), alors que
-        // org_id est NOT NULL. Un evenement d'audit laisse par un test precedent ferait donc
-        // echouer la suppression du space au reset suivant. Defaut de schema anterieur a ce
-        // recit, hors de son perimetre — contourne ici, pas masque.
-        jdbc.update("DELETE FROM tas_audit_events WHERE org_id = ?", TasBaselineDataset.ORG_ID);
-
         dataset = new TasBaselineDataset(jdbc, new BCryptPasswordEncoder(4));
         dataset.reset();
     }

@@ -173,7 +173,7 @@ Takibo is built with:
 - Spring Security
 - Spring Data JPA
 - Hibernate
-- PostgreSQL
+- PostgreSQL 15 or later
 - Flyway
 - Gradle
 - OAuth2 / OpenID Connect concepts
@@ -189,8 +189,14 @@ You need:
 
 - JDK 21
 - Gradle Wrapper
-- PostgreSQL
+- PostgreSQL 15 or later
 - Git
+
+PostgreSQL 15 is a hard floor, not a recommendation. The Flyway migrations use
+`ON DELETE SET NULL (<column>)`, the per-column form of the referential action introduced in
+PostgreSQL 15. On an earlier server the migration itself fails and the application does not
+start. Continuous integration and the Testcontainers-based integration tests both run
+PostgreSQL 16.
 
 ### Clone the repository
 
