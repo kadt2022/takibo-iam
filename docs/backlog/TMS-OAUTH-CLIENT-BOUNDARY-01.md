@@ -280,6 +280,99 @@ La seconde branche est défendable. C'est l'absence de décision qui ne l'est pa
 
 ---
 
+## 7.4 Topologie réelle du schéma — six tables filles portent la même frontière
+
+Vérifié dans le schéma le 2026-09-11, avant toute écriture de migration. Le périmètre décrit
+jusqu'ici ne tenait pas : rendre les deux colonnes nullables dans `oauth2_clients` ne suffit
+pas, parce que **six tables filles dupliquent la frontière du parent** :
+
+```text
+oauth2_client_scopes
+oauth2_client_grant_types
+oauth2_client_redirect_uris
+oauth2_client_post_logout_redirect_uris
+oauth2_client_cors_origins
+oauth2_client_secret_history
+```
+
+Chacune porte `org_id NOT NULL`, `space_id NOT NULL`, et une FK composite :
+
+```sql
+FOREIGN KEY (org_id, space_id, client_id)
+  REFERENCES oauth2_clients(org_id, space_id, id) ON DELETE CASCADE
+```
+
+### Deux conséquences en chaîne
+
+**Un client PLATFORM ou ORGANIZATION serait représentable mais inutilisable.** Ses scopes et
+ses grant types ne pourraient pas être écrits, les filles exigeant une organisation et un
+space. Or `JpaResolvedOAuthClientResolver` traite un client sans grant type comme introuvable.
+
+**L'intégrité référentielle des filles disparaîtrait silencieusement.** La FK composite n'est
+pas vérifiée dès qu'une de ses colonnes est nulle (voir §21.1). Ce comportement arrange le
+parent ; côté filles, il ouvre la porte aux lignes orphelines.
+
+### Ces colonnes n'ont aucun usage indépendant
+
+Vérification faite sur tout le code de production :
+
+```text
+TAS  → lit les filles par le SEUL UUID technique du client
+        (findByClientId(UUID), cinq dépôts)
+
+TMS  → les mappe par un @ManyToOne composite qui ne fait que
+        recopier la frontière du parent
+
+aucune requête de production ne filtre une fille par org_id ou space_id
+```
+
+Seules des fixtures de test s'en servent, pour du nettoyage par organisation.
+
+### Stratégie retenue : supprimer la duplication, pas la rendre nullable
+
+Les colonnes `org_id` et `space_id` des six filles sont **supprimées**, et la FK composite
+remplacée par une FK simple :
+
+```sql
+FOREIGN KEY (client_id) REFERENCES oauth2_clients(id) ON DELETE CASCADE
+```
+
+Les unicités deviennent `(client_id, <valeur>)`.
+
+**Pourquoi supprimer plutôt que rendre nullable.** Une frontière dupliquée et *non vérifiée*
+est pire qu'absente : une fille pourrait déclarer une organisation différente de celle de son
+client, sans qu'aucune contrainte ne s'y oppose, puisque la FK composite cesse d'être
+appliquée dès qu'une colonne est nulle. La frontière d'une configuration de client est celle
+de son client, une seule fois, au seul endroit qui l'enforce.
+
+La FK simple, elle, est vérifiée dans tous les cas, y compris pour un client PLATFORM.
+
+### Ce que ce récit ne touche pas
+
+```text
+users, role_assignments, group_assignments et toute association RBAC
+→ restent SPACE-only, aucune modification, aucun élargissement implicite
+```
+
+Ces tables ne référencent pas `oauth2_clients`. Elles sont hors périmètre, et leur frontière
+n'est pas la question de ce récit.
+
+```text
+oauth2_authorization, oauth2_authorization_consent
+→ aucune FK vers oauth2_clients, et il ne faut surtout pas en réintroduire
+```
+
+TAS-GRANTS-02 les a supprimées délibérément (`V202608290001`), pour trois raisons écrites
+dans cette migration. L'une d'elles — le client PLATFORM n'a aucune ligne dans
+`oauth2_clients` — perdrait de sa force si ce récit rendait ce client persistable. Les deux
+autres restent décisives : `registered_client_id` porte l'identifiant technique de
+`RegisteredClient`, jamais le `client_id` public, et la résolvabilité se vérifie à la lecture
+par le résolveur, pas par une contrainte SQL.
+
+**Ce récit part donc de l'état final des migrations, pas du schéma initial.**
+
+---
+
 # 8. `client_id` reste globalement unique
 
 L'unicité globale de `client_id` est conservée.
@@ -719,6 +812,14 @@ I15. Une frontière structurellement valide ne peut être créée que par un act
 
 - [ ] **AC-18 — Autorisation de frontière.** Une requête ne peut pas créer ou administrer un client dans une frontière supérieure ou étrangère à celle que l'acteur est autorisé à gouverner. La validation SQL de la forme ne remplace jamais le contrôle d'autorisation applicatif.
 
+- [ ] **AC-19 — Configuration d'un client sans tenant.** Un client `PLATFORM` ou `ORGANIZATION` peut porter ses scopes, grant types, URI de redirection, URI de post-déconnexion et origines CORS. Sans cela il serait représentable mais introuvable, le résolveur traitant un client sans grant type comme inexistant.
+
+- [ ] **AC-20 — Intégrité des filles préservée.** Une ligne de configuration ne peut pas référencer un client inexistant, quelle que soit la frontière de ce client, et la suppression d'un client supprime ses lignes de configuration. La FK simple sur `client_id` est vérifiée dans tous les cas, contrairement à l'ancienne FK composite.
+
+- [ ] **AC-21 — Plus de frontière dupliquée.** Les six tables filles ne portent plus `org_id` ni `space_id`. Aucune ligne de configuration ne peut donc déclarer une frontière différente de celle de son client.
+
+- [ ] **AC-22 — Aucune FK TAS réintroduite.** `oauth2_authorization` et `oauth2_authorization_consent` restent sans clé étrangère vers `oauth2_clients`, conformément à la décision de `V202608290001`.
+
 ---
 
 # 20. Migration SQL attendue
@@ -726,6 +827,8 @@ I15. Une frontière structurellement valide ne peut être créée que par un act
 La migration doit être écrite de manière explicite et fail-closed.
 
 Elle doit notamment :
+
+**Sur `oauth2_clients` :**
 
 ```text
 1. rendre org_id nullable si la représentation PLATFORM est retenue dans le registre ;
@@ -737,6 +840,28 @@ Elle doit notamment :
 7. conserver les données existantes sans transformation de frontière ;
 8. être testée sur PostgreSQL réel.
 ```
+
+**Sur les six tables filles** (voir §7.4), pour chacune :
+
+```text
+ 9. remplacer la FK composite (org_id, space_id, client_id) par
+    FOREIGN KEY (client_id) REFERENCES oauth2_clients(id) ON DELETE CASCADE ;
+10. remplacer les unicités et index (org_id, space_id, client_id, …)
+    par leurs équivalents (client_id, …) ;
+11. supprimer les colonnes org_id et space_id ;
+12. adapter les entités JPA correspondantes, dont le @ManyToOne composite de TMS.
+```
+
+L'ordre compte : la FK simple est créée **avant** la suppression des colonnes, pour qu'aucune
+fenêtre de la migration ne laisse les filles sans contrainte d'intégrité.
+
+**Sur les tables TAS :** aucun changement. `oauth2_authorization` et
+`oauth2_authorization_consent` n'ont plus de FK vers `oauth2_clients` depuis `V202608290001`,
+et ce récit ne la réintroduit pas.
+
+**Fixtures de test à adapter.** `TasBaselineDataset` et
+`OAuth2ClientSnapshotConsistencyIntegrationTest` insèrent et nettoient les filles en nommant
+`org_id` et `space_id`. Ce sont les seuls usages de ces colonnes dans tout le dépôt.
 
 La migration ne doit pas dépendre de MySQL ou d'un mode H2.
 
