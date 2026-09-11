@@ -278,6 +278,24 @@ soit  il reste in-memory, et le récit écrit POURQUOI — par exemple parce qu'
 
 La seconde branche est défendable. C'est l'absence de décision qui ne l'est pas.
 
+### Décision prise : le client PLATFORM reste in-memory
+
+Le registre sait désormais le représenter. Il n'y sera pourtant pas migré, et voici pourquoi.
+
+**Son secret vient de la configuration, pas de la base.** `takibo.dev.postman-client.secret`
+est fourni par l'installateur. Le persister imposerait d'écrire une empreinte de secret au
+moment d'une migration Flyway, c'est-à-dire de faire entrer de la matière secrète dans le
+schéma. C'est exactement ce que la doctrine des clés TAS interdit : les secrets externes
+appartiennent à l'installateur, jamais au dépôt.
+
+**Un client d'amorçage ne doit pas dépendre d'une base déjà migrée.** Il sert à vérifier
+qu'une installation démarre. S'il vivait dans la table, il deviendrait indisponible
+précisément dans le cas où l'on a le plus besoin de lui.
+
+La capacité du registre n'est donc pas inutile : elle sert aux clients `ORGANIZATION` réels,
+et elle retire au client PLATFORM in-memory son statut de contournement. Il reste en mémoire
+par choix, plus par impossibilité.
+
 ---
 
 ## 7.4 Topologie réelle du schéma — six tables filles portent la même frontière

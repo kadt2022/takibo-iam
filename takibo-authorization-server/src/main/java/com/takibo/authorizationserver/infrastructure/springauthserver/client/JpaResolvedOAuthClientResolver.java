@@ -23,12 +23,12 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * Source TMS : clients SPACE persistés dans {@code oauth2_clients} (TAS-GRANTS-01).
+ * Source TMS : clients persistés dans {@code oauth2_clients} (TAS-GRANTS-01).
  * <p>
- * {@code org_id} et {@code space_id} y sont tous deux obligatoires — aucun client
- * ORGANIZATION-only n'existe encore dans ce schéma. Cette source ne résout donc que des
- * clients {@link ClientPlan#SPACE} ; représenter ORGANIZATION exige une migration de schéma
- * séparée, hors périmètre de ce récit.
+ * Depuis TMS-OAUTH-CLIENT-BOUNDARY-01, {@code org_id} et {@code space_id} sont nullables et
+ * portent la frontiere du client : cette source resout donc les trois plans, deduits de la
+ * paire par {@link ClientPlan#of}. Une paire incoherente est traitee comme un client
+ * introuvable.
  * <p>
  * Miroir de {@link TakiboRegisteredClientRepository}, dont c'est appelé à prendre la place
  * une fois les trois consommateurs branchés sur {@link ResolvedOAuthClientResolver} : mêmes
@@ -93,11 +93,24 @@ public class JpaResolvedOAuthClientResolver implements ResolvedOAuthClientResolv
 
         boolean requireClientSecret = Boolean.TRUE.equals(entity.getRequireClientSecret());
 
+        // La frontiere est deduite de la paire portee par la ligne, plus jamais supposee
+        // SPACE (TMS-OAUTH-CLIENT-BOUNDARY-01). Une paire incoherente leve plutot que de
+        // produire un plan approximatif ; elle est traitee comme un client introuvable, au
+        // meme titre qu'un client sans grant type.
+        ClientPlan plan;
+        try {
+            plan = ClientPlan.of(entity.getOrgId(), entity.getSpaceId());
+        } catch (IllegalArgumentException e) {
+            log.warn("OAuth2 client {} ({}) has an inconsistent boundary; treated as not found: {}",
+                    entity.getClientId(), entity.getId(), e.getMessage());
+            return Optional.empty();
+        }
+
         try {
             return Optional.of(new ResolvedOAuthClient(
                     entity.getId().toString(),
                     entity.getClientId(),
-                    ClientPlan.SPACE,
+                    plan,
                     entity.getOrgId(),
                     entity.getSpaceId(),
                     toDomainClientType(entity.getClientType()),

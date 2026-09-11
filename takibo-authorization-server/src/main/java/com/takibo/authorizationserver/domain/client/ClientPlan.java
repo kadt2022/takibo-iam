@@ -48,4 +48,34 @@ public enum ClientPlan {
     public boolean requiresSpace() {
         return this == SPACE;
     }
+
+    /**
+     * Deduit la frontiere d'un client a partir de sa seule paire (orgId, spaceId)
+     * (TMS-OAUTH-CLIENT-BOUNDARY-01).
+     * <p>
+     * Le plan n'est pas stocke : il n'existe aucune colonne {@code plan} dans
+     * {@code oauth2_clients}, et c'est deliberé. Une valeur stockée pourrait un jour
+     * contredire la frontiere reelle portee par les deux colonnes ; deduite, elle ne le peut
+     * pas. La base, de son cote, interdit la combinaison impossible par
+     * {@code ck_oauth2_clients_boundary}.
+     * <p>
+     * Aucun repli silencieux : une ligne qui aurait echappe a la contrainte — restauration
+     * partielle, migration manuelle, contrainte desactivee — ne produit pas un plan
+     * approximatif, elle leve.
+     *
+     * @throws IllegalArgumentException si la paire ne correspond a aucune frontiere TAKIBO
+     */
+    public static ClientPlan of(java.util.UUID orgId, java.util.UUID spaceId) {
+        if (orgId == null && spaceId == null) {
+            return PLATFORM;
+        }
+        if (orgId != null && spaceId == null) {
+            return ORGANIZATION;
+        }
+        if (orgId != null) {
+            return SPACE;
+        }
+        throw new IllegalArgumentException(
+                "CLIENT_BOUNDARY_INCONSISTENT: space sans organisation (spaceId=" + spaceId + ")");
+    }
 }
