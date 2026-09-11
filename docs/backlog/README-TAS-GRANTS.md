@@ -26,13 +26,13 @@ Une PR ouverte ne suffit pas à clôturer.
 | 02 | [Persistance OAuth 2.0](../terminer/TAS-GRANTS-02-persistance-oauth.md) | **TERMINÉ** (PR #57, 2026-09-01) | `feat/tas-oauth-persistence-02` | 01, 02A |
 | 02A | [Clés de signature persistantes](../terminer/TAS-GRANTS-02A-cles-signature-persistantes.md) | **TERMINÉ** (PR #53, #54 pour le code ; 11/11 critères vérifiés le 2026-09-09) | `feat/tas-signing-keys-02a` | 00; parallèle à 01 |
 | 02B | [Rétention des autorisations expirées](../terminer/TAS-GRANTS-02B-retention-autorisations-oauth.md) | **TERMINÉ** (9/9 critères, 2026-09-09) | `feat/tas-oauth-retention-02b` | 02 — obligatoire avant production |
-| 03 | Authentification humaine SAS | à rédiger | `feat/tas-human-authentication-03` | 02, TIS-Core stable |
-| 04 | Authorization Code + PKCE | à rédiger | `feat/tas-authorization-code-pkce-04` | 03, 02A |
+| 03 | [Authentification humaine SAS et session navigateur](TAS-GRANTS-03-authentification-humaine-sas.md) | à faire | `feat/tas-human-authentication-03` | 02, TIS-Core stable, TMS-OAUTH-CLIENT-BOUNDARY-01 |
+| 04 | Authorization Code + PKCE | à rédiger | `feat/tas-authorization-code-pkce-04` | 03, 02A, TMS-OAUTH-CLIENT-BOUNDARY-01 |
 | 05 | Refresh Token | à rédiger | `feat/tas-refresh-token-05` | 04, 02A |
 | 06 | Device Authorization Grant | à rédiger | `feat/tas-device-code-06` | 03, 02, 02A |
 | 07 | [Révocation](TAS-GRANTS-07-revocation-purge.md) | à faire | `feat/tas-revocation-purge-07` | 02B, 05, 06 |
 
-Les récits 03 à 06 sont ordonnancés mais pas encore rédigés. Le récit 04 ne peut pas
+Le récit 03 est rédigé ; 04 à 06 sont ordonnancés mais pas encore écrits. Le récit 04 ne peut pas
 démarrer avant que 03 existe : c'est lui qui décide de la forme du principal humain.
 
 ## Règles de livraison
@@ -66,4 +66,4 @@ démarrer avant que 03 existe : c'est lui qui décide de la forme du principal h
 - Redis obligatoire pour les sessions.
 - Resource Owner Password Credentials Grant.
 - Support et migrations MySQL.
-- Migration du client PLATFORM de développement vers `oauth2_clients`. Cette évolution exige un récit dédié couvrant la nullabilité du registre, le mapping du plan et les claims; elle ne fait pas partie de la résolution de tenant du récit 01.
+- Migration du client PLATFORM de développement vers `oauth2_clients`. Ce récit dédié existe désormais : [TMS-OAUTH-CLIENT-BOUNDARY-01](TMS-OAUTH-CLIENT-BOUNDARY-01.md), qui couvre la nullabilité du registre et le mapping du plan. Il reste hors de ce lot, et hors de la résolution de tenant du récit 01.
