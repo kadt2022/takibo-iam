@@ -253,9 +253,10 @@ est sans tenant.
 
 Ce récit rend le modèle persistant capable de représenter cette forme.
 
-Il ne migre cependant pas automatiquement le client PLATFORM de développement actuellement fourni par une source in-memory.
-
-Cette migration reste hors périmètre sauf décision explicite contraire.
+Il ne suppose pas automatiquement que le client PLATFORM de développement actuellement fourni
+par une source in-memory doit être migré. En revanche, la PR doit **trancher explicitement**
+son sort : soit le persister et retirer le contournement in-memory, soit le conserver en mémoire
+avec une justification écrite.
 
 ### Décision à prendre, pas à différer en silence
 
@@ -431,6 +432,60 @@ orgId   obligatoire
 spaceId obligatoire
 ```
 
+## 12.1 Autorisation de la frontière demandée
+
+La validité structurelle d'une frontière ne suffit pas à autoriser sa création.
+
+```text
+frontière SQL valide
+        ≠
+acteur autorisé à administrer cette frontière
+```
+
+Le cas d'usage doit donc vérifier **à la fois** :
+
+```text
+1. la forme PLATFORM / ORGANIZATION / SPACE ;
+2. l'autorité de l'acteur sur la frontière demandée.
+```
+
+Au minimum :
+
+```text
+création PLATFORM
+→ réservée à une autorité de niveau plateforme
+
+création ORGANIZATION
+→ réservée à une autorité habilitée à administrer cette Organization
+
+création SPACE
+→ réservée à une autorité habilitée à administrer ce Space
+  dans l'Organization correspondante
+```
+
+Un acteur situé dans un Space ne doit jamais pouvoir obtenir une frontière supérieure simplement
+en envoyant :
+
+```text
+boundary = PLATFORM
+orgId = null
+spaceId = null
+```
+
+ou :
+
+```text
+boundary = ORGANIZATION
+orgId = une organisation qu'il n'administre pas
+spaceId = null
+```
+
+La base protège la **forme** et l'intégrité référentielle. La couche d'autorisation protège
+**qui a le droit de demander cette forme**.
+
+Ce récit ne redéfinit pas le catalogue RBAC ; il doit utiliser les autorités canoniques existantes
+au moment de l'implémentation et rester cohérent avec les récits RBAC en vigueur.
+
 ---
 
 # 13. Compatibilité avec les clients existants
@@ -483,21 +538,25 @@ Ce récit ne traite pas non plus le **cycle de vie** d'un client : ce qu'il advi
 organisation ou son space disparaît, comment un client est révoqué, et qui nettoie les lignes
 devenues orphelines.
 
-Ce n'est pas un oubli. C'est une conséquence prévisible de la frontière que ce récit ouvre :
+Ce n'est pas un oubli. La nouvelle frontière rend possibles des clients `ORGANIZATION`, mais
+**elle n'impose aucune cardinalité entre Organization et client OAuth**.
+
+En particulier, ce récit ne décide jamais :
 
 ```text
-un client ORGANIZATION par organisation
-        ↓
-autant de clients que d'organisations
+1 Organization = 1 client OAuth
 ```
 
-Pour une installation à quelques dizaines d'organisations institutionnelles, la question ne se
-pose pas. Pour une installation grand public où chaque foyer est une organisation, elle
-deviendra réelle — non par le volume, que PostgreSQL absorbe sans difficulté avec un
-`client_id` unique et indexé, mais par le **provisionnement et le nettoyage**.
+Une Organization peut avoir zéro, un ou plusieurs clients selon les applications et les usages.
+Le provisionnement automatique d'un client pour chaque Organization est une décision produit /
+architecture distincte et ne doit pas être déduite de ce récit.
 
-Ce sujet appartient à un récit dédié, à ouvrir avant qu'une intégration grand public ne crée
-des clients en masse. Il est écrit ici pour qu'il ne soit pas découvert en production.
+Pour une intégration grand public où le nombre d'Organizations peut devenir très élevé, les
+questions de provisionnement automatique, de rotation, de révocation, de suppression et de
+nettoyage devront être traitées avant toute création massive de clients.
+
+Ce sujet appartient à un récit dédié. Il est nommé ici pour qu'il ne soit pas découvert en
+production, sans préjuger du nombre de clients réellement nécessaire.
 
 ---
 
@@ -577,7 +636,9 @@ orgId   = null
 spaceId = null
 ```
 
-La présence de cette représentation dans le schéma ne signifie pas que le client PLATFORM de développement existant doit être migré dans ce récit.
+La présence de cette représentation dans le schéma ne préjuge pas du sort du client PLATFORM
+de développement existant. La PR doit appliquer la décision explicite exigée par AC-14 :
+persistance + retrait du résolveur in-memory, ou maintien in-memory avec justification.
 
 ---
 
@@ -610,7 +671,12 @@ I12. TMS reste propriétaire de la création et de l'administration des clients 
 
 I13. TAS consomme le client résolu et ne recrée pas une seconde source de vérité.
 
-I14. Le client PLATFORM in-memory de développement n'est pas migré implicitement par ce récit.
+I14. Le client PLATFORM in-memory de développement n'est jamais migré implicitement :
+     son sort est tranché explicitement par la PR.
+
+I15. Une frontière structurellement valide ne peut être créée que par un acteur autorisé
+     à administrer cette frontière ; aucune élévation PLATFORM / ORGANIZATION / SPACE
+     n'est obtenue par simple choix des valeurs org_id / space_id.
 ```
 
 ---
@@ -650,6 +716,8 @@ I14. Le client PLATFORM in-memory de développement n'est pas migré impliciteme
 - [ ] **AC-16 — Documentation.** La doctrine `PLATFORM / ORGANIZATION / SPACE` du registre TMS est documentée dans le backlog et dans les commentaires de modèle pertinents.
 
 - [ ] **AC-17 — Mode de la clé étrangère documenté.** La migration porte en commentaire le fait que la FK composite vers `spaces` repose sur le comportement `MATCH SIMPLE` — non vérifiée dès qu'une colonne est nulle — et que la passer en `MATCH FULL` rendrait tout client `ORGANIZATION` impossible à écrire. AC-04 et AC-05 servent de test de non-régression à cette contrainte.
+
+- [ ] **AC-18 — Autorisation de frontière.** Une requête ne peut pas créer ou administrer un client dans une frontière supérieure ou étrangère à celle que l'acteur est autorisé à gouverner. La validation SQL de la forme ne remplace jamais le contrôle d'autorisation applicatif.
 
 ---
 
@@ -745,6 +813,9 @@ space sans org refusé
 org inconnu refusé
 space inconnu refusé
 space d'une autre org refusé
+acteur SPACE ne peut pas créer PLATFORM
+acteur non habilité ne peut pas créer dans une autre Organization
+acteur non habilité ne peut pas créer dans un autre Space
 ```
 
 ## Repository / JPA
@@ -824,10 +895,10 @@ création automatique de clients
   pour un produit particulier         → hors TMS-OAUTH-CLIENT-BOUNDARY-01
 logique métier Yamba                   → hors TAKIBO
 découverte du tenant par email         → hors périmètre
-Principal global                       → hors doctrine TAKIBO
+Principal global                       → hors périmètre de ce récit ;
+                                         aucune décision sur cette évolution
+                                         n'est prise ici
 fusion d'Accounts inter-Organization   → interdite
-migration du client PLATFORM dev
-  in-memory vers TMS                   → récit dédié
 ```
 
 ---
@@ -873,7 +944,9 @@ A. Client ORGANIZATION
 
 1. Une Organization existe.
 2. Aucun Space n'existe dans cette Organization.
-3. TMS crée un client OAuth avec org_id et space_id NULL.
+3. TMS crée un client OAuth avec :
+      org_id   = l'organisation
+      space_id = NULL.
 4. Le client est persisté.
 5. La résolution par client_id retourne :
       plan = ORGANIZATION
@@ -889,9 +962,11 @@ B. Client SPACE
 
 C. Client PLATFORM
 
-1. La forme sans org et sans space est reconnue comme PLATFORM
-   si elle est utilisée dans le registre.
+1. La forme sans org et sans space est reconnue comme PLATFORM.
 2. Aucun space sans org n'est accepté.
+3. Le sort du client PLATFORM de développement est explicitement documenté conformément à AC-14 :
+   soit il est persisté et le résolveur in-memory est retiré, soit il reste in-memory avec
+   une justification écrite.
 
 D. Unicité
 
