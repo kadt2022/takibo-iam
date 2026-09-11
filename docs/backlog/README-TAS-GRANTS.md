@@ -66,4 +66,4 @@ démarrer avant que 03 existe : c'est lui qui décide de la forme du principal h
 - Redis obligatoire pour les sessions.
 - Resource Owner Password Credentials Grant.
 - Support et migrations MySQL.
-- Migration du client PLATFORM de développement vers `oauth2_clients`. Ce récit dédié existe désormais : [TMS-OAUTH-CLIENT-BOUNDARY-01](TMS-OAUTH-CLIENT-BOUNDARY-01.md), qui couvre la nullabilité du registre et le mapping du plan. Il reste hors de ce lot, et hors de la résolution de tenant du récit 01.
+- Migration du client PLATFORM de développement vers `oauth2_clients`. Ce récit dédié existe désormais : [TMS-OAUTH-CLIENT-BOUNDARY-01](../terminer/TMS-OAUTH-CLIENT-BOUNDARY-01.md), qui couvre la nullabilité du registre et le mapping du plan. Il reste hors de ce lot, et hors de la résolution de tenant du récit 01.

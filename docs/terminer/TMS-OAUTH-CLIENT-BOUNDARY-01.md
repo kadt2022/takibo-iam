@@ -1,6 +1,6 @@
 # TMS-OAUTH-CLIENT-BOUNDARY-01 — Aligner le registre OAuth sur les frontières TAKIBO
 
-**Statut :** À faire  
+**Statut :** TERMINÉ — 24/24 critères, vérifiés sur PostgreSQL réel le 2026-09-11. AC-18 satisfait par absence de surface d'exposition, pas par une garde implémentée : voir la réserve dans les critères.  
 **Branche :** `feat/tms-oauth-client-boundary-01`  
 **Module principal :** TMS — Takibo Management Service  
 **Dépendances :** modèle OAuth TMS existant, TAS-GRANTS-01 terminé  
@@ -794,53 +794,53 @@ I15. Une frontière structurellement valide ne peut être créée que par un act
 
 # 19. Critères d'acceptation
 
-- [ ] **AC-01 — Nullabilité maîtrisée.** `oauth2_clients.org_id` et `oauth2_clients.space_id` permettent les formes nécessaires aux trois frontières.
+- [x] **AC-01 — Nullabilité maîtrisée.** `oauth2_clients.org_id` et `oauth2_clients.space_id` permettent les formes nécessaires aux trois frontières.
 
-- [ ] **AC-02 — Combinaison impossible refusée.** Une ligne avec `org_id = NULL` et `space_id != NULL` est rejetée par la base.
+- [x] **AC-02 — Combinaison impossible refusée.** Une ligne avec `org_id = NULL` et `space_id != NULL` est rejetée par la base.
 
-- [ ] **AC-03 — Client PLATFORM.** Une représentation `(NULL, NULL)` peut être interprétée comme `ClientPlan.PLATFORM`.
+- [x] **AC-03 — Client PLATFORM.** Une représentation `(NULL, NULL)` peut être interprétée comme `ClientPlan.PLATFORM`.
 
-- [ ] **AC-04 — Client ORGANIZATION.** Une ligne `(org_id, NULL)` peut être persistée et résolue comme `ClientPlan.ORGANIZATION`.
+- [x] **AC-04 — Client ORGANIZATION.** Une ligne `(org_id, NULL)` peut être persistée et résolue comme `ClientPlan.ORGANIZATION`.
 
-- [ ] **AC-05 — Client sans Space.** Un client `ORGANIZATION` peut être créé pour une organisation ne possédant encore aucun Space.
+- [x] **AC-05 — Client sans Space.** Un client `ORGANIZATION` peut être créé pour une organisation ne possédant encore aucun Space.
 
-- [ ] **AC-06 — Client SPACE.** Une ligne `(org_id, space_id)` continue d'être résolue comme `ClientPlan.SPACE`.
+- [x] **AC-06 — Client SPACE.** Une ligne `(org_id, space_id)` continue d'être résolue comme `ClientPlan.SPACE`.
 
-- [ ] **AC-07 — Isolation composite.** La base refuse un client `SPACE` dont `space_id` appartient à une autre organisation.
+- [x] **AC-07 — Isolation composite.** La base refuse un client `SPACE` dont `space_id` appartient à une autre organisation.
 
-- [ ] **AC-08 — Unicité globale.** Deux clients ne peuvent pas partager le même `client_id`, même dans deux organisations différentes.
+- [x] **AC-08 — Unicité globale.** Deux clients ne peuvent pas partager le même `client_id`, même dans deux organisations différentes.
 
-- [ ] **AC-09 — Entity JPA.** `OAuth2ClientEntity` supporte correctement les trois formes sans supposer un `spaceId` obligatoire.
+- [x] **AC-09 — Entity JPA.** `OAuth2ClientEntity` supporte correctement les trois formes sans supposer un `spaceId` obligatoire.
 
-- [ ] **AC-10 — Resolver.** `JpaResolvedOAuthClientResolver` produit le `ClientPlan` correspondant aux valeurs `orgId/spaceId`.
+- [x] **AC-10 — Resolver.** `JpaResolvedOAuthClientResolver` produit le `ClientPlan` correspondant aux valeurs `orgId/spaceId`.
 
-- [ ] **AC-11 — Fail-closed.** Une combinaison incohérente ne produit jamais de client résolu.
+- [x] **AC-11 — Fail-closed.** Une combinaison incohérente ne produit jamais de client résolu.
 
-- [ ] **AC-12 — Pas de régression SPACE.** Les tests existants de création, lecture et résolution des clients SPACE restent verts.
+- [x] **AC-12 — Pas de régression SPACE.** Les tests existants de création, lecture et résolution des clients SPACE restent verts.
 
-- [ ] **AC-13 — Pas de régression `client_credentials`.** Le flux machine existant reste inchangé.
+- [x] **AC-13 — Pas de régression `client_credentials`.** Le flux machine existant reste inchangé.
 
-- [ ] **AC-14 — Sort du PLATFORM in-memory tranché par écrit.** La PR dit explicitement si le client PLATFORM de développement devient persistable — et alors le résolveur in-memory est retiré — ou s'il reste en mémoire, avec la raison écrite. Aucune des deux branches n'est imposée ; c'est l'absence de décision qui est refusée, parce que ce contournement est la trace même de la dette corrigée ici.
+- [x] **AC-14 — Sort du PLATFORM in-memory tranché par écrit.** La PR dit explicitement si le client PLATFORM de développement devient persistable — et alors le résolveur in-memory est retiré — ou s'il reste en mémoire, avec la raison écrite. Aucune des deux branches n'est imposée ; c'est l'absence de décision qui est refusée, parce que ce contournement est la trace même de la dette corrigée ici.
 
-- [ ] **AC-15 — PostgreSQL réel.** Les contraintes de frontière et les migrations sont prouvées avec Testcontainers/PostgreSQL.
+- [x] **AC-15 — PostgreSQL réel.** Les contraintes de frontière et les migrations sont prouvées avec Testcontainers/PostgreSQL.
 
-- [ ] **AC-16 — Documentation.** La doctrine `PLATFORM / ORGANIZATION / SPACE` du registre TMS est documentée dans le backlog et dans les commentaires de modèle pertinents.
+- [x] **AC-16 — Documentation.** La doctrine `PLATFORM / ORGANIZATION / SPACE` du registre TMS est documentée dans le backlog et dans les commentaires de modèle pertinents.
 
-- [ ] **AC-17 — Mode de la clé étrangère documenté.** La migration porte en commentaire le fait que la FK composite vers `spaces` repose sur le comportement `MATCH SIMPLE` — non vérifiée dès qu'une colonne est nulle — et que la passer en `MATCH FULL` rendrait tout client `ORGANIZATION` impossible à écrire. AC-04 et AC-05 servent de test de non-régression à cette contrainte.
+- [x] **AC-17 — Mode de la clé étrangère documenté.** La migration porte en commentaire le fait que la FK composite vers `spaces` repose sur le comportement `MATCH SIMPLE` — non vérifiée dès qu'une colonne est nulle — et que la passer en `MATCH FULL` rendrait tout client `ORGANIZATION` impossible à écrire. AC-04 et AC-05 servent de test de non-régression à cette contrainte.
 
-- [ ] **AC-18 — Autorisation de frontière.** Une requête ne peut pas créer ou administrer un client dans une frontière supérieure ou étrangère à celle que l'acteur est autorisé à gouverner. La validation SQL de la forme ne remplace jamais le contrôle d'autorisation applicatif.
+- [x] **AC-18 — Autorisation de frontière.** ⚠️ **Satisfait dans le périmètre actuel par absence de surface d'exposition**, et non par une garde implémentée. Aucune API ne permet aujourd'hui de demander explicitement une frontière `PLATFORM` ou `ORGANIZATION` : le seul point de création prend son organisation et son space dans le chemin d'URL, déjà gouverné par le `PolicyEvaluator`. **Aucune garde spécifique n'a donc été ajoutée.** Toute future API permettant la création d'un client à ces frontières devra introduire le contrôle d'autorisation correspondant, faute de quoi un acteur situé dans un Space obtiendrait une frontière supérieure en choisissant simplement les valeurs `org_id` / `space_id`. La validation SQL de la forme ne remplace jamais le contrôle d'autorisation applicatif.
 
-- [ ] **AC-19 — Configuration d'un client sans tenant.** Un client `PLATFORM` ou `ORGANIZATION` peut porter ses scopes, grant types, URI de redirection, URI de post-déconnexion et origines CORS. Sans cela il serait représentable mais introuvable, le résolveur traitant un client sans grant type comme inexistant.
+- [x] **AC-19 — Configuration d'un client sans tenant.** Un client `PLATFORM` ou `ORGANIZATION` peut porter ses scopes, grant types, URI de redirection, URI de post-déconnexion et origines CORS. Sans cela il serait représentable mais introuvable, le résolveur traitant un client sans grant type comme inexistant.
 
-- [ ] **AC-20 — Intégrité des filles préservée.** Une ligne de configuration ne peut pas référencer un client inexistant, quelle que soit la frontière de ce client, et la suppression d'un client supprime ses lignes de configuration. La FK simple sur `client_id` est vérifiée dans tous les cas, contrairement à l'ancienne FK composite.
+- [x] **AC-20 — Intégrité des filles préservée.** Une ligne de configuration ne peut pas référencer un client inexistant, quelle que soit la frontière de ce client, et la suppression d'un client supprime ses lignes de configuration. La FK simple sur `client_id` est vérifiée dans tous les cas, contrairement à l'ancienne FK composite.
 
-- [ ] **AC-21 — Plus de frontière dupliquée.** Les six tables filles ne portent plus `org_id` ni `space_id`. Aucune ligne de configuration ne peut donc déclarer une frontière différente de celle de son client.
+- [x] **AC-21 — Plus de frontière dupliquée.** Les six tables filles ne portent plus `org_id` ni `space_id`. Aucune ligne de configuration ne peut donc déclarer une frontière différente de celle de son client.
 
-- [ ] **AC-22 — Aucune FK TAS réintroduite.** `oauth2_authorization` et `oauth2_authorization_consent` restent sans clé étrangère vers `oauth2_clients`, conformément à la décision de `V202608290001`.
+- [x] **AC-22 — Aucune FK TAS réintroduite.** `oauth2_authorization` et `oauth2_authorization_consent` restent sans clé étrangère vers `oauth2_clients`, conformément à la décision de `V202608290001`.
 
-- [ ] **AC-23 — Périmètre non élargi.** Aucune table d'association utilisateur ou RBAC — `users`, `role_assignments`, `group_assignments` et leurs semblables — n'est modifiée. Elles restent SPACE-only. La migration ne touche que `oauth2_clients` et ses six tables de configuration ; toute autre table modifiée est une dérive de périmètre, pas une conséquence de la doctrine des frontières.
+- [x] **AC-23 — Périmètre non élargi.** Aucune table d'association utilisateur ou RBAC — `users`, `role_assignments`, `group_assignments` et leurs semblables — n'est modifiée. Elles restent SPACE-only. La migration ne touche que `oauth2_clients` et ses six tables de configuration ; toute autre table modifiée est une dérive de périmètre, pas une conséquence de la doctrine des frontières.
 
-- [ ] **AC-24 — Les trois frontières prouvées bout en bout.** Un scénario d'intégration par frontière, sur PostgreSQL réel : un client `PLATFORM`, un `ORGANIZATION` et un `SPACE` s'écrivent avec leurs grant types et leurs scopes, se relisent par le résolveur avec le bon `ClientPlan`, et leur suppression emporte leur configuration.
+- [x] **AC-24 — Les trois frontières prouvées bout en bout.** Un scénario d'intégration par frontière, sur PostgreSQL réel : un client `PLATFORM`, un `ORGANIZATION` et un `SPACE` s'écrivent avec leurs grant types et leurs scopes, se relisent par le résolveur avec le bon `ClientPlan`, et leur suppression emporte leur configuration.
 
 ---
 
