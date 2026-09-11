@@ -820,6 +820,10 @@ I15. Une frontière structurellement valide ne peut être créée que par un act
 
 - [ ] **AC-22 — Aucune FK TAS réintroduite.** `oauth2_authorization` et `oauth2_authorization_consent` restent sans clé étrangère vers `oauth2_clients`, conformément à la décision de `V202608290001`.
 
+- [ ] **AC-23 — Périmètre non élargi.** Aucune table d'association utilisateur ou RBAC — `users`, `role_assignments`, `group_assignments` et leurs semblables — n'est modifiée. Elles restent SPACE-only. La migration ne touche que `oauth2_clients` et ses six tables de configuration ; toute autre table modifiée est une dérive de périmètre, pas une conséquence de la doctrine des frontières.
+
+- [ ] **AC-24 — Les trois frontières prouvées bout en bout.** Un scénario d'intégration par frontière, sur PostgreSQL réel : un client `PLATFORM`, un `ORGANIZATION` et un `SPACE` s'écrivent avec leurs grant types et leurs scopes, se relisent par le résolveur avec le bon `ClientPlan`, et leur suppression emporte leur configuration.
+
 ---
 
 # 20. Migration SQL attendue
@@ -852,8 +856,42 @@ Elle doit notamment :
 12. adapter les entités JPA correspondantes, dont le @ManyToOne composite de TMS.
 ```
 
-L'ordre compte : la FK simple est créée **avant** la suppression des colonnes, pour qu'aucune
-fenêtre de la migration ne laisse les filles sans contrainte d'intégrité.
+### Ordre exact, et pourquoi il ne se discute pas
+
+Ces opérations suppriment des colonnes qui participent aujourd'hui à des clés étrangères. Un
+ordre mal choisi laisserait une fenêtre pendant laquelle les filles n'ont plus aucune
+contrainte d'intégrité. La migration doit donc se lire comme une suite où chaque étape est
+couverte par la précédente :
+
+```text
+1. créer la FK simple client_id → oauth2_clients(id) ON DELETE CASCADE
+   sur chacune des six filles ;
+   → à partir d'ici, l'intégrité est assurée DEUX fois, jamais zéro
+
+2. créer les nouvelles unicités et index par (client_id, …) ;
+
+3. supprimer les anciennes unicités et index par (org_id, space_id, client_id, …) ;
+
+4. supprimer les FK composites vers oauth2_clients(org_id, space_id, id) ;
+   → la FK simple de l'étape 1 prend seule le relais, sans interruption
+
+5. supprimer les colonnes org_id et space_id des six filles ;
+
+6. rendre org_id et space_id nullables sur oauth2_clients,
+   et poser le CHECK des frontières valides ;
+   → jamais avant l'étape 4 : tant que les FK composites existent,
+     un NULL dans le parent casserait leur vérification côté filles
+
+7. vérifier l'absence d'orphelins et le nombre de lignes conservées.
+```
+
+Les étapes 1 à 5 concernent les filles, la 6 le parent. L'inversion des deux blocs est la
+seule erreur réellement dangereuse : nuller le parent avant d'avoir retiré les FK composites
+des filles ferait cesser leur vérification en silence, pendant la migration elle-même.
+
+Côté code, les mappings JPA et les fixtures de test s'adaptent avec la migration, dans la
+même PR. Ils ne peuvent pas être décalés : une entité qui déclare encore `org_id` sur une
+fille ne démarrerait pas contre le schéma migré, `ddl-auto` étant en `validate`.
 
 **Sur les tables TAS :** aucun changement. `oauth2_authorization` et
 `oauth2_authorization_consent` n'ont plus de FK vers `oauth2_clients` depuis `V202608290001`,
@@ -972,6 +1010,38 @@ FK composite space
 unicité globale client_id
 migration depuis un jeu de clients SPACE existants
 ```
+
+## Les trois frontières, bout en bout
+
+Un scénario d'intégration par frontière, sur PostgreSQL réel. Chacun écrit un client **avec
+sa configuration**, puis le relit par le résolveur. Un client qui ne porterait pas ses grant
+types serait traité comme introuvable : prouver la seule ligne parente ne prouverait donc
+rien d'utilisable.
+
+```text
+PLATFORM                      ORGANIZATION                  SPACE
+org_id   = NULL               org_id   = X                  org_id   = X
+space_id = NULL               space_id = NULL               space_id = Y
+    │                             │                             │
+    ├── grant type                ├── grant type                ├── grant type
+    ├── scope                     ├── scope                     ├── scope
+    └── redirect URI              └── redirect URI              └── redirect URI
+```
+
+Pour chacun des trois, le test prouve :
+
+```text
+1. la ligne parente s'écrit avec sa frontière ;
+2. ses lignes de configuration s'écrivent SANS org_id ni space_id ;
+3. le resolver rend le bon ClientPlan et la bonne frontière ;
+4. le client résolu porte bien ses grant types et ses scopes ;
+5. supprimer le client supprime sa configuration (cascade par la FK simple) ;
+6. une ligne de configuration référençant un client inexistant est refusée.
+```
+
+Le point 6 est le cœur de la manœuvre : c'est lui qui montre que l'intégrité est **gagnée**
+et non perdue en supprimant la frontière dupliquée. L'ancienne FK composite ne l'aurait pas
+refusée dès qu'une colonne était nulle.
 
 ## Régression
 
