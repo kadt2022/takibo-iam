@@ -18,10 +18,12 @@ public class OAuth2ClientLookupEntity {
     @Column(name = "id", nullable = false, updatable = false)
     private UUID id;
 
-    @Column(name = "org_id", nullable = false, updatable = false)
+    // Frontiere du client (TMS-OAUTH-CLIENT-BOUNDARY-01) : nullable depuis V202609110001.
+    // (NULL, NULL) = PLATFORM, (UUID, NULL) = ORGANIZATION, (UUID, UUID) = SPACE.
+    @Column(name = "org_id", updatable = false)
     private UUID orgId;
 
-    @Column(name = "space_id", nullable = false, updatable = false)
+    @Column(name = "space_id", updatable = false)
     private UUID spaceId;
 
     @Column(name = "client_id", nullable = false, updatable = false, length = 128)

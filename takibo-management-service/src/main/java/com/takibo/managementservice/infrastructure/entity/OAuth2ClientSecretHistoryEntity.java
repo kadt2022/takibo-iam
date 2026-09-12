@@ -15,7 +15,7 @@ import java.util.UUID;
 @Table(
     name = "oauth2_client_secret_history",
     indexes = {
-        @Index(name = "idx_ocsh_client", columnList = "org_id, space_id, client_id")
+        @Index(name = "idx_ocsh_client_v2", columnList = "client_id")
     }
 )
 @Getter
@@ -29,24 +29,12 @@ public class OAuth2ClientSecretHistoryEntity {
     @Column(name = "id", nullable = false, updatable = false)
     private UUID id;
 
-    @Column(name = "org_id", nullable = false, updatable = false)
-    private UUID orgId;
-
-    @Column(name = "space_id", nullable = false, updatable = false)
-    private UUID spaceId;
-
     @Column(name = "client_id", nullable = false, updatable = false)
     private UUID clientId;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumns({
-        @JoinColumn(name = "org_id", referencedColumnName = "org_id", 
-                    insertable = false, updatable = false),
-        @JoinColumn(name = "space_id", referencedColumnName = "space_id", 
-                    insertable = false, updatable = false),
-        @JoinColumn(name = "client_id", referencedColumnName = "id", 
-                    insertable = false, updatable = false)
-    })
+    @JoinColumn(name = "client_id", referencedColumnName = "id",
+                insertable = false, updatable = false)
     private OAuth2ClientEntity client;
 
     @Column(name = "secret_hash", nullable = false, length = 255)

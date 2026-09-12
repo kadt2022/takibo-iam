@@ -144,31 +144,31 @@ class OAuthClientJpaMapperTest {
 
     private static OAuth2ClientScopeEntity scope(OAuth2ClientEntity client, UUID id, String value) {
         return OAuth2ClientScopeEntity.builder()
-                .id(id).orgId(client.getOrgId()).spaceId(client.getSpaceId()).clientId(client.getId())
+                .id(id).clientId(client.getId())
                 .client(client).scope(value).build();
     }
 
     private static OAuth2ClientGrantTypeEntity grant(OAuth2ClientEntity client, UUID id, String value) {
         return OAuth2ClientGrantTypeEntity.builder()
-                .id(id).orgId(client.getOrgId()).spaceId(client.getSpaceId()).clientId(client.getId())
+                .id(id).clientId(client.getId())
                 .client(client).grantType(value).build();
     }
 
     private static OAuth2ClientRedirectUriEntity redirect(OAuth2ClientEntity client, UUID id, String value) {
         return OAuth2ClientRedirectUriEntity.builder()
-                .id(id).orgId(client.getOrgId()).spaceId(client.getSpaceId()).clientId(client.getId())
+                .id(id).clientId(client.getId())
                 .client(client).uri(value).build();
     }
 
     private static OAuth2ClientPostLogoutRedirectUriEntity postLogout(OAuth2ClientEntity client, UUID id, String value) {
         return OAuth2ClientPostLogoutRedirectUriEntity.builder()
-                .id(id).orgId(client.getOrgId()).spaceId(client.getSpaceId()).clientId(client.getId())
+                .id(id).clientId(client.getId())
                 .client(client).uri(value).build();
     }
 
     private static OAuth2ClientCorsOriginEntity cors(OAuth2ClientEntity client, UUID id, String value) {
         return OAuth2ClientCorsOriginEntity.builder()
-                .id(id).orgId(client.getOrgId()).spaceId(client.getSpaceId()).clientId(client.getId())
+                .id(id).clientId(client.getId())
                 .client(client).origin(value).build();
     }
 
