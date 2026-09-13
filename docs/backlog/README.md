@@ -109,6 +109,7 @@ backlog. Ils ne partagent pas de séquencement : chacun se prend indépendamment
 | [SEC-TMS-02](../terminer/SEC-TMS-02-passer-routes-tms-default-deny.md) | Passer les routes TMS en default-deny | **TERMINÉ** (vérifié 2026-09-09) |
 | [SEC-TMS-03](../terminer/SEC-TMS-03-restreindre-actuator.md) | Restreindre Actuator | **TERMINÉ** (vérifié 2026-09-09) |
 | [SEC-TMS-04](SEC-TMS-04-traduire-les-erreurs-de-configuration-client.md) | Traduire les erreurs de configuration client au lieu de renvoyer 500 | à faire |
+| [SEC-TMS-05](SEC-TMS-05-restreindre-origines-cors.md) | Restreindre les origines CORS à une liste configurée | à faire (avant TAS-GRANTS-03) |
 | [TMS-OAUTH-01](../terminer/TMS-OAUTH-01-durcir-configuration-clients-oauth2.md) | Durcir la configuration des clients OAuth2 | **TERMINÉ** (vérifié 2026-09-09) |
 | [TMS-VAL-01](../terminer/TMS-VAL-01-validation-rest-contracts.md) | Validation des contrats REST | **TERMINÉ** (vérifié 2026-09-09) |
 | [TMS-CLIENT-READ-01](TAKIBO_Recit_TMS_CLIENT_READ_01.md) | Lire les clients OAuth2 sans réexposer leurs secrets | à faire |
