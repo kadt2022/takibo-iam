@@ -1,11 +1,15 @@
 name: Takibo CI
 
-# Une modification purement documentaire ne peut casser aucun test : la CI ne
-# démarre donc pas pour elle. Le filtre ne s'applique que si TOUS les fichiers
-# modifiés correspondent — un lot mixte code + doc relance la chaîne complète.
-# Si `main` devient protégée avec des vérifications requises, ce filtre devra
-# être remplacé par des tâches factices, sinon les PR documentaires resteront
-# bloquées en attente d'une vérification qui ne démarrera jamais.
+# Une modification purement documentaire ne peut casser aucun test.
+#
+# - push : le filtre `paths-ignore` ne démarre pas la CI pour elle.
+# - pull_request : `main` exige la vérification « Takibo CI Status ». Un filtre au
+#   déclencheur empêcherait le workflow de démarrer, et la PR documentaire resterait
+#   bloquée en attente d'un statut qui n'arrive jamais. La tâche `changes` détecte
+#   donc le lot documentaire : la chaîne de build est écartée, mais
+#   « Takibo CI Status » s'exécute toujours et rend son verdict.
+#
+# Dans les deux cas, un lot mixte code + doc relance la chaîne complète.
 on:
   push:
     branches: [main, develop]
@@ -14,9 +18,6 @@ on:
       - '**.md'
   pull_request:
     branches: [main, develop]
-    paths-ignore:
-      - 'docs/**'
-      - '**.md'
 
 env:
   TAKIBO_APP_PORT: 8081
@@ -26,8 +27,50 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Takibo Changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      code: ${{ steps.detect.outputs.code }}
+
+    steps:
+      - uses: actions/checkout@v6
+        if: github.event_name == 'pull_request'
+        with:
+          fetch-depth: 2
+
+      - name: Detect code changes
+        id: detect
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+
+          # push : le déclencheur a déjà écarté les lots purement documentaires.
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # HEAD est le commit de fusion de la PR dans sa base : HEAD^1 est la base.
+          # --no-renames : du code déplacé vers docs/ compte comme une suppression de code.
+          changed="$(git -c core.quotepath=off diff --no-renames --name-only HEAD^1 HEAD)"
+          printf 'Fichiers modifiés :\n%s\n' "$changed"
+
+          # Aucun fichier détecté : rien n'est présumé, la chaîne complète s'exécute.
+          if [ -z "$changed" ] || grep -qvE '^docs/|\.md$' <<< "$changed"; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Lot purement documentaire : chaîne de build écartée."
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          fi
+
   preflight:
     name: Takibo Preflight
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -719,6 +762,7 @@ jobs:
   status-check:
     name: Takibo CI Status
     needs:
+      - changes
       - preflight
       - assemble
       - database-check
@@ -765,6 +809,15 @@ jobs:
                 ;;
             esac
           }
+
+          # `changes` décide seule d'écarter la chaîne : un résultat autre que success
+          # ne peut pas être toléré, sinon toutes les tâches sautées passeraient pour vertes.
+          if [ "${{ needs.changes.result }}" = "success" ]; then
+            echo "changes: success (code=${{ needs.changes.outputs.code }})"
+          else
+            echo "changes: ${{ needs.changes.result }}"
+            failed=1
+          fi
 
           check_result preflight             "${{ needs.preflight.result }}"
           check_result assemble              "${{ needs.assemble.result }}"
