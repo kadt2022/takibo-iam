@@ -11,6 +11,7 @@ import com.takibo.managementservice.infrastructure.entity.OAuth2ClientGrantTypeE
 import com.takibo.managementservice.infrastructure.entity.OAuth2ClientPostLogoutRedirectUriEntity;
 import com.takibo.managementservice.infrastructure.entity.OAuth2ClientRedirectUriEntity;
 import com.takibo.managementservice.infrastructure.entity.OAuth2ClientScopeEntity;
+import com.takibo.managementservice.infrastructure.entity.SpaceEntity;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -105,6 +106,45 @@ class OAuthClientJpaMapperTest {
                 .containsExactlyInAnyOrder("https://app.example", "https://new.example");
         assertThat(entity.getCorsOrigins()).filteredOn(e -> "https://app.example".equals(e.getOrigin()))
                 .singleElement().extracting(OAuth2ClientCorsOriginEntity::getId).isEqualTo(keptCorsId);
+    }
+
+    @Test
+    void toEntity_withoutSpace_neverAsksForSpaceReference() {
+        OAuthClientJpaMapper generated = new OAuthClientJpaMapperImpl();
+        UUID orgId = UUID.randomUUID();
+        SpaceRef refusesNull = id -> {
+            throw new IllegalArgumentException("getReference(SpaceEntity, " + id + ")");
+        };
+
+        OAuth2ClientEntity organizationClient = generated.toEntity(
+                OAuthClient.create(orgId, null, "org-client", "Org Client", ClientType.CONFIDENTIAL), refusesNull);
+        OAuth2ClientEntity platformClient = generated.toEntity(
+                OAuthClient.create(null, null, "platform-client", "Platform Client", ClientType.CONFIDENTIAL), refusesNull);
+
+        assertThat(organizationClient.getOrgId()).isEqualTo(orgId);
+        assertThat(organizationClient.getSpaceId()).isNull();
+        assertThat(organizationClient.getSpace()).isNull();
+        assertThat(platformClient.getOrgId()).isNull();
+        assertThat(platformClient.getSpaceId()).isNull();
+        assertThat(platformClient.getSpace()).isNull();
+    }
+
+    @Test
+    void toEntity_withSpace_referencesThatSpace() {
+        OAuthClientJpaMapper generated = new OAuthClientJpaMapperImpl();
+        UUID spaceId = UUID.randomUUID();
+        SpaceEntity reference = new SpaceEntity();
+
+        OAuth2ClientEntity entity = generated.toEntity(
+                OAuthClient.create(UUID.randomUUID(), SpaceId.of(spaceId), "space-client", "Space Client",
+                        ClientType.CONFIDENTIAL),
+                id -> {
+                    assertThat(id).isEqualTo(spaceId);
+                    return reference;
+                });
+
+        assertThat(entity.getSpaceId()).isEqualTo(spaceId);
+        assertThat(entity.getSpace()).isSameAs(reference);
     }
 
     private static OAuth2ClientEntity baseEntity() {

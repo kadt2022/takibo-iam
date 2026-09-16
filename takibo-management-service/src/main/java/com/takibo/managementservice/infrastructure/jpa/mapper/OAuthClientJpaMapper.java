@@ -17,7 +17,8 @@ public interface OAuthClientJpaMapper {
     @Mapping(target = "id", source = "id")
     @Mapping(target = "orgId", source = "orgId")
     @Mapping(target = "spaceId", source = "spaceId")
-    @Mapping(target = "space", expression = "java(spaceRef.getReference(map(client.getSpaceId())))")
+    // Client ORGANIZATION ou PLATFORM : aucun Space à référencer — JPA refuse getReference(…, null).
+    @Mapping(target = "space", expression = "java(client.getSpaceId() == null ? null : spaceRef.getReference(map(client.getSpaceId())))")
     @Mapping(target = "clientIdIssuedAt", expression = "java(java.time.Instant.now())")
     @Mapping(target = "tokenEndpointAuthMethod", source = "tokenEndpointAuthMethod")
     @Mapping(target = "scopes", ignore = true)
