@@ -64,8 +64,14 @@ final class TasBaselineDataset {
 
     /** Supprime uniquement les lignes de ce jeu ; le referentiel RBAC migre reste intact. */
     void clear() {
-        jdbc.update("DELETE FROM oauth2_client_scopes WHERE org_id = ?", ORG_ID);
-        jdbc.update("DELETE FROM oauth2_client_grant_types WHERE org_id = ?", ORG_ID);
+        // TMS-OAUTH-CLIENT-BOUNDARY-01 : les tables de configuration ne portent plus org_id.
+        // Leur FK simple vers oauth2_clients(id) cascade, donc le DELETE des clients plus bas
+        // les emporte. Nettoyage explicite conserve pour rester lisible et independant de
+        // l'ordre des instructions qui suivent.
+        jdbc.update("DELETE FROM oauth2_client_scopes WHERE client_id IN "
+                + "(SELECT id FROM oauth2_clients WHERE org_id = ?)", ORG_ID);
+        jdbc.update("DELETE FROM oauth2_client_grant_types WHERE client_id IN "
+                + "(SELECT id FROM oauth2_clients WHERE org_id = ?)", ORG_ID);
         jdbc.update("DELETE FROM oauth2_authorization WHERE org_id = ?", ORG_ID);
         // postman-client (PLATFORM, in-memory, TAS-GRANTS-01) n'a pas d'org_id a filtrer :
         // depuis que TAS-GRANTS-02 persiste reellement les autorisations, une ligne PLATFORM
@@ -135,13 +141,13 @@ final class TasBaselineDataset {
                 passwordEncoder.encode(SPACE_CLIENT_SECRET));
 
         jdbc.update("""
-                INSERT INTO oauth2_client_grant_types (id, org_id, space_id, client_id, grant_type)
-                VALUES (?, ?, ?, ?, 'client_credentials')
-                """, UUID.randomUUID(), ORG_ID, SPACE_ID, SPACE_CLIENT_UUID);
+                INSERT INTO oauth2_client_grant_types (id, client_id, grant_type)
+                VALUES (?, ?, 'client_credentials')
+                """, UUID.randomUUID(), SPACE_CLIENT_UUID);
 
         jdbc.update("""
-                INSERT INTO oauth2_client_scopes (id, org_id, space_id, client_id, scope)
-                VALUES (?, ?, ?, ?, ?)
-                """, UUID.randomUUID(), ORG_ID, SPACE_ID, SPACE_CLIENT_UUID, SPACE_CLIENT_SCOPE);
+                INSERT INTO oauth2_client_scopes (id, client_id, scope)
+                VALUES (?, ?, ?)
+                """, UUID.randomUUID(), SPACE_CLIENT_UUID, SPACE_CLIENT_SCOPE);
     }
 }

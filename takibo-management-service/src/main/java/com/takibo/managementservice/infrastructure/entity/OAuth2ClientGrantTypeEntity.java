@@ -13,12 +13,9 @@ import java.util.UUID;
 @Entity
 @Table(
     name = "oauth2_client_grant_types",
-    indexes = {
-        @Index(name = "idx_ocg_client", columnList = "org_id, space_id, client_id")
-    },
     uniqueConstraints = {
-        @UniqueConstraint(name = "uk_ocg_client_grant", 
-                         columnNames = {"org_id", "space_id", "client_id", "grant_type"})
+        @UniqueConstraint(name = "uk_ocg_client_grant_v2",
+                         columnNames = {"client_id", "grant_type"})
     }
 )
 @Getter
@@ -32,24 +29,12 @@ public class OAuth2ClientGrantTypeEntity {
     @Column(name = "id", nullable = false, updatable = false)
     private UUID id;
 
-    @Column(name = "org_id", nullable = false, updatable = false)
-    private UUID orgId;
-
-    @Column(name = "space_id", nullable = false, updatable = false)
-    private UUID spaceId;
-
     @Column(name = "client_id", nullable = false, updatable = false)
     private UUID clientId;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumns({
-        @JoinColumn(name = "org_id", referencedColumnName = "org_id", 
-                    insertable = false, updatable = false),
-        @JoinColumn(name = "space_id", referencedColumnName = "space_id", 
-                    insertable = false, updatable = false),
-        @JoinColumn(name = "client_id", referencedColumnName = "id", 
-                    insertable = false, updatable = false)
-    })
+    @JoinColumn(name = "client_id", referencedColumnName = "id",
+                insertable = false, updatable = false)
     private OAuth2ClientEntity client;
 
     @Column(name = "grant_type", nullable = false, length = 64)

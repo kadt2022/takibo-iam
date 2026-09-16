@@ -11,6 +11,7 @@ import com.takibo.managementservice.infrastructure.entity.OAuth2ClientGrantTypeE
 import com.takibo.managementservice.infrastructure.entity.OAuth2ClientPostLogoutRedirectUriEntity;
 import com.takibo.managementservice.infrastructure.entity.OAuth2ClientRedirectUriEntity;
 import com.takibo.managementservice.infrastructure.entity.OAuth2ClientScopeEntity;
+import com.takibo.managementservice.infrastructure.entity.SpaceEntity;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -107,6 +108,45 @@ class OAuthClientJpaMapperTest {
                 .singleElement().extracting(OAuth2ClientCorsOriginEntity::getId).isEqualTo(keptCorsId);
     }
 
+    @Test
+    void toEntity_withoutSpace_neverAsksForSpaceReference() {
+        OAuthClientJpaMapper generated = new OAuthClientJpaMapperImpl();
+        UUID orgId = UUID.randomUUID();
+        SpaceRef refusesNull = id -> {
+            throw new IllegalArgumentException("getReference(SpaceEntity, " + id + ")");
+        };
+
+        OAuth2ClientEntity organizationClient = generated.toEntity(
+                OAuthClient.create(orgId, null, "org-client", "Org Client", ClientType.CONFIDENTIAL), refusesNull);
+        OAuth2ClientEntity platformClient = generated.toEntity(
+                OAuthClient.create(null, null, "platform-client", "Platform Client", ClientType.CONFIDENTIAL), refusesNull);
+
+        assertThat(organizationClient.getOrgId()).isEqualTo(orgId);
+        assertThat(organizationClient.getSpaceId()).isNull();
+        assertThat(organizationClient.getSpace()).isNull();
+        assertThat(platformClient.getOrgId()).isNull();
+        assertThat(platformClient.getSpaceId()).isNull();
+        assertThat(platformClient.getSpace()).isNull();
+    }
+
+    @Test
+    void toEntity_withSpace_referencesThatSpace() {
+        OAuthClientJpaMapper generated = new OAuthClientJpaMapperImpl();
+        UUID spaceId = UUID.randomUUID();
+        SpaceEntity reference = new SpaceEntity();
+
+        OAuth2ClientEntity entity = generated.toEntity(
+                OAuthClient.create(UUID.randomUUID(), SpaceId.of(spaceId), "space-client", "Space Client",
+                        ClientType.CONFIDENTIAL),
+                id -> {
+                    assertThat(id).isEqualTo(spaceId);
+                    return reference;
+                });
+
+        assertThat(entity.getSpaceId()).isEqualTo(spaceId);
+        assertThat(entity.getSpace()).isSameAs(reference);
+    }
+
     private static OAuth2ClientEntity baseEntity() {
         return OAuth2ClientEntity.builder()
                 .id(UUID.randomUUID())
@@ -144,31 +184,31 @@ class OAuthClientJpaMapperTest {
 
     private static OAuth2ClientScopeEntity scope(OAuth2ClientEntity client, UUID id, String value) {
         return OAuth2ClientScopeEntity.builder()
-                .id(id).orgId(client.getOrgId()).spaceId(client.getSpaceId()).clientId(client.getId())
+                .id(id).clientId(client.getId())
                 .client(client).scope(value).build();
     }
 
     private static OAuth2ClientGrantTypeEntity grant(OAuth2ClientEntity client, UUID id, String value) {
         return OAuth2ClientGrantTypeEntity.builder()
-                .id(id).orgId(client.getOrgId()).spaceId(client.getSpaceId()).clientId(client.getId())
+                .id(id).clientId(client.getId())
                 .client(client).grantType(value).build();
     }
 
     private static OAuth2ClientRedirectUriEntity redirect(OAuth2ClientEntity client, UUID id, String value) {
         return OAuth2ClientRedirectUriEntity.builder()
-                .id(id).orgId(client.getOrgId()).spaceId(client.getSpaceId()).clientId(client.getId())
+                .id(id).clientId(client.getId())
                 .client(client).uri(value).build();
     }
 
     private static OAuth2ClientPostLogoutRedirectUriEntity postLogout(OAuth2ClientEntity client, UUID id, String value) {
         return OAuth2ClientPostLogoutRedirectUriEntity.builder()
-                .id(id).orgId(client.getOrgId()).spaceId(client.getSpaceId()).clientId(client.getId())
+                .id(id).clientId(client.getId())
                 .client(client).uri(value).build();
     }
 
     private static OAuth2ClientCorsOriginEntity cors(OAuth2ClientEntity client, UUID id, String value) {
         return OAuth2ClientCorsOriginEntity.builder()
-                .id(id).orgId(client.getOrgId()).spaceId(client.getSpaceId()).clientId(client.getId())
+                .id(id).clientId(client.getId())
                 .client(client).origin(value).build();
     }
 

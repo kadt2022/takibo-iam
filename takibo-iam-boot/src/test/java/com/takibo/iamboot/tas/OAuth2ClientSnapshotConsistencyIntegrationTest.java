@@ -48,8 +48,8 @@ class OAuth2ClientSnapshotConsistencyIntegrationTest extends TasPostgresBaseline
 
     @BeforeEach
     void seed() {
-        jdbc.update("DELETE FROM oauth2_client_scopes WHERE org_id = ?", TasBaselineDataset.ORG_ID);
-        jdbc.update("DELETE FROM oauth2_client_grant_types WHERE org_id = ?", TasBaselineDataset.ORG_ID);
+        // TMS-OAUTH-CLIENT-BOUNDARY-01 : la configuration ne porte plus org_id ; la FK simple
+        // vers oauth2_clients(id) cascade, donc le DELETE des clients suffit.
         jdbc.update("DELETE FROM oauth2_clients WHERE org_id = ?", TasBaselineDataset.ORG_ID);
         new TasBaselineDataset(jdbc, passwordEncoder).reset();
 
@@ -62,10 +62,9 @@ class OAuth2ClientSnapshotConsistencyIntegrationTest extends TasPostgresBaseline
                         TRUE, 'hash', 'client_secret_basic')
                 """, clientTableId, TasBaselineDataset.ORG_ID, TasBaselineDataset.SPACE_ID);
         jdbc.update("""
-                INSERT INTO oauth2_client_scopes (id, org_id, space_id, client_id, scope)
-                VALUES (?, ?, ?, ?, 'scope-a')
-                """, UUID.randomUUID(), TasBaselineDataset.ORG_ID, TasBaselineDataset.SPACE_ID,
-                clientTableId);
+                INSERT INTO oauth2_client_scopes (id, client_id, scope)
+                VALUES (?, ?, 'scope-a')
+                """, UUID.randomUUID(), clientTableId);
     }
 
     @Test
@@ -112,14 +111,12 @@ class OAuth2ClientSnapshotConsistencyIntegrationTest extends TasPostgresBaseline
         try (Connection connection = jdbc.getDataSource().getConnection()) {
             connection.setAutoCommit(true);
             try (PreparedStatement statement = connection.prepareStatement("""
-                    INSERT INTO oauth2_client_scopes (id, org_id, space_id, client_id, scope)
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO oauth2_client_scopes (id, client_id, scope)
+                    VALUES (?, ?, ?)
                     """)) {
                 statement.setObject(1, UUID.randomUUID());
-                statement.setObject(2, TasBaselineDataset.ORG_ID);
-                statement.setObject(3, TasBaselineDataset.SPACE_ID);
-                statement.setObject(4, clientTableId);
-                statement.setString(5, scope);
+                statement.setObject(2, clientTableId);
+                statement.setString(3, scope);
                 statement.executeUpdate();
             }
         } catch (java.sql.SQLException e) {

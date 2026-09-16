@@ -17,7 +17,8 @@ public interface OAuthClientJpaMapper {
     @Mapping(target = "id", source = "id")
     @Mapping(target = "orgId", source = "orgId")
     @Mapping(target = "spaceId", source = "spaceId")
-    @Mapping(target = "space", expression = "java(spaceRef.getReference(map(client.getSpaceId())))")
+    // Client ORGANIZATION ou PLATFORM : aucun Space à référencer — JPA refuse getReference(…, null).
+    @Mapping(target = "space", expression = "java(client.getSpaceId() == null ? null : spaceRef.getReference(map(client.getSpaceId())))")
     @Mapping(target = "clientIdIssuedAt", expression = "java(java.time.Instant.now())")
     @Mapping(target = "tokenEndpointAuthMethod", source = "tokenEndpointAuthMethod")
     @Mapping(target = "scopes", ignore = true)
@@ -30,15 +31,13 @@ public interface OAuthClientJpaMapper {
 
     @AfterMapping
     default void fillChildren(OAuthClient src, @MappingTarget OAuth2ClientEntity dst) {
-        UUID orgId = dst.getOrgId();
-        UUID spaceId = dst.getSpaceId();
+        // TMS-OAUTH-CLIENT-BOUNDARY-01 : la configuration ne porte plus la frontiere.
+        // Elle appartient au client, une seule fois, au seul endroit qui l'applique.
         UUID clientId = dst.getId();
 
         for (String s : src.getScopes()) {
             dst.getScopes().add(OAuth2ClientScopeEntity.builder()
                     .id(UUID.randomUUID())
-                    .orgId(orgId)
-                    .spaceId(spaceId)
                     .clientId(clientId)
                     .client(dst)
                     .scope(s)
@@ -47,8 +46,6 @@ public interface OAuthClientJpaMapper {
         for (String g : src.getGrantTypes()) {
             dst.getGrantTypes().add(OAuth2ClientGrantTypeEntity.builder()
                     .id(UUID.randomUUID())
-                    .orgId(orgId)
-                    .spaceId(spaceId)
                     .clientId(clientId)
                     .client(dst)
                     .grantType(g)
@@ -57,8 +54,6 @@ public interface OAuthClientJpaMapper {
         for (String u : src.getRedirectUris()) {
             dst.getRedirectUris().add(OAuth2ClientRedirectUriEntity.builder()
                     .id(UUID.randomUUID())
-                    .orgId(orgId)
-                    .spaceId(spaceId)
                     .clientId(clientId)
                     .client(dst)
                     .uri(u)
@@ -67,8 +62,6 @@ public interface OAuthClientJpaMapper {
         for (String u : src.getPostLogoutRedirectUris()) {
             dst.getPostLogoutRedirectUris().add(OAuth2ClientPostLogoutRedirectUriEntity.builder()
                     .id(UUID.randomUUID())
-                    .orgId(orgId)
-                    .spaceId(spaceId)
                     .clientId(clientId)
                     .client(dst)
                     .uri(u)
@@ -77,8 +70,6 @@ public interface OAuthClientJpaMapper {
         for (String o : src.getCorsOrigins()) {
             dst.getCorsOrigins().add(OAuth2ClientCorsOriginEntity.builder()
                     .id(UUID.randomUUID())
-                    .orgId(orgId)
-                    .spaceId(spaceId)
                     .clientId(clientId)
                     .client(dst)
                     .origin(o)
@@ -94,8 +85,7 @@ public interface OAuthClientJpaMapper {
     // synchronisés par différence (rien n'est touché quand les valeurs sont identiques,
     // cas de la rotation de secret).
     default void applyDomainState(OAuthClient src, OAuth2ClientEntity dst) {
-        UUID orgId = dst.getOrgId();
-        UUID spaceId = dst.getSpaceId();
+        // TMS-OAUTH-CLIENT-BOUNDARY-01 : la configuration ne porte plus la frontiere.
         UUID clientId = dst.getId();
 
         dst.setClientId(src.getClientId());
@@ -120,27 +110,27 @@ public interface OAuthClientJpaMapper {
         syncChildren(dst.getScopes(), src.getScopes(),
                 OAuth2ClientScopeEntity::getScope,
                 v -> OAuth2ClientScopeEntity.builder()
-                        .id(UUID.randomUUID()).orgId(orgId).spaceId(spaceId)
+                        .id(UUID.randomUUID())
                         .clientId(clientId).client(dst).scope(v).build());
         syncChildren(dst.getGrantTypes(), src.getGrantTypes(),
                 OAuth2ClientGrantTypeEntity::getGrantType,
                 v -> OAuth2ClientGrantTypeEntity.builder()
-                        .id(UUID.randomUUID()).orgId(orgId).spaceId(spaceId)
+                        .id(UUID.randomUUID())
                         .clientId(clientId).client(dst).grantType(v).build());
         syncChildren(dst.getRedirectUris(), src.getRedirectUris(),
                 OAuth2ClientRedirectUriEntity::getUri,
                 v -> OAuth2ClientRedirectUriEntity.builder()
-                        .id(UUID.randomUUID()).orgId(orgId).spaceId(spaceId)
+                        .id(UUID.randomUUID())
                         .clientId(clientId).client(dst).uri(v).build());
         syncChildren(dst.getPostLogoutRedirectUris(), src.getPostLogoutRedirectUris(),
                 OAuth2ClientPostLogoutRedirectUriEntity::getUri,
                 v -> OAuth2ClientPostLogoutRedirectUriEntity.builder()
-                        .id(UUID.randomUUID()).orgId(orgId).spaceId(spaceId)
+                        .id(UUID.randomUUID())
                         .clientId(clientId).client(dst).uri(v).build());
         syncChildren(dst.getCorsOrigins(), src.getCorsOrigins(),
                 OAuth2ClientCorsOriginEntity::getOrigin,
                 v -> OAuth2ClientCorsOriginEntity.builder()
-                        .id(UUID.randomUUID()).orgId(orgId).spaceId(spaceId)
+                        .id(UUID.randomUUID())
                         .clientId(clientId).client(dst).origin(v).build());
     }
 
