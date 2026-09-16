@@ -1,6 +1,6 @@
 # SEC-TMS-05 — Restreindre les origines CORS à une liste configurée
 
-**Statut** : À FAIRE
+**Statut** : TERMINÉ
 **Origine** : relecture de `CorsConfig`, prérequis du lot Mbuyamba `LOT-ACCES` (ACCES-04, ACCES-11)
 **Dépend de** : —
 **Bloque** : TAS-GRANTS-03 (authentification humaine SAS et session navigateur)
@@ -295,9 +295,22 @@ par un serveur de ressources) obtient le même statut qu'avant le récit.
 
 ### AC-07 — La chaîne TAS applique la même liste, explicitement
 
-Un preflight sur `/oauth2/token` est accepté pour l'origine configurée et refusé pour une
-origine inconnue. Le test prouve que la chaîne TAS déclare la source elle-même, et ne
-dépend plus de `applyCorsIfAvailable`.
+**Amendé le 2026-09-16, à l'implémentation.** Formulation initiale : « Un preflight sur
+`/oauth2/token` est accepté pour l'origine configurée et refusé pour une origine inconnue. »
+
+Un `POST /oauth2/token` en formulaire, sans en-tête `Authorization`, est refusé (`403`, sans
+`Access-Control-Allow-Origin`) pour une origine inconnue, et reçoit
+`Access-Control-Allow-Origin` pour l'origine configurée. C'est une requête CORS simple, sans
+preflight : la forme de l'échange de code d'une SPA publique (TAS-GRANTS-04). Le test prouve
+que la chaîne TAS déclare la source elle-même et ne dépend plus de `applyCorsIfAvailable` :
+aucun bean `UrlBasedCorsConfigurationSource` n'existe, et chaque chaîne porte un `CorsFilter`.
+
+Pourquoi l'amendement : le preflight `OPTIONS /oauth2/token` n'atteint jamais le CORS.
+`TenantResolutionFilter` (TAS-GRANTS-01), filtre servlet exécuté avant Spring Security, le
+rejette en `401 invalid_client` faute de `client_id`, sans en-tête CORS, quelle que soit
+l'origine. Le navigateur refuse donc tout appel `/oauth2/token` qui exigerait un preflight,
+dont un secret client envoyé en `Basic`. Ce récit consigne ce comportement, le fige par un
+test sur un vrai port, et ne le modifie pas : TAS-GRANTS-04 décide s'il faut l'ouvrir.
 
 ### AC-08 — Hors `dev`, une valeur interdite empêche le démarrage
 
@@ -338,6 +351,33 @@ Les suites existantes et la BVT restent vertes.
 - Suite complète `:takibo-security-management:test`.
 - Suite complète `:takibo-authorization-server:test`.
 - CI complète verte : la PR touche du code, le filtre documentaire ne s'applique pas.
+
+## Livraison
+
+Choix tranchés à l'implémentation, là où le récit les laissait ouverts :
+
+- **Validation reprise, pas importée.** `CorsAllowedOrigins` (`takibo-iam-boot`) applique
+  les règles de forme de `ClientCorsOrigin`. `takibo-iam-boot` n'importait aucune classe du
+  domaine TMS, et le contrat d'installation n'appartient pas à ce domaine.
+- **Port par défaut omis à la normalisation.** Un navigateur n'envoie jamais `:443` ni
+  `:80` dans `Origin` : `https://portail.example:443` configuré ne correspondrait à aucune
+  requête. Il est normalisé en `https://portail.example`.
+- **La source n'est pas un `UrlBasedCorsConfigurationSource`.** Aucune chaîne n'hérite
+  donc la politique d'office ; la chaîne API et la chaîne TAS la déclarent par
+  `cors.configurationSource(...)`.
+- **Motifs du profil `dev`** : `http://localhost:[*]` et `http://127.0.0.1:[*]`, syntaxe de
+  port de Spring, plus stricte que `http://localhost:*`.
+- **En-têtes autorisés** : `Authorization`, `Content-Type`, `Accept`, `Accept-Language`,
+  `X-Request-Id`, `X-Correlation-Id`, `X-Client-Id`, `X-KRYPTION-ID` — ceux que l'API lit.
+- **En-têtes exposés** : `Location`, `X-KRYPTION-ID`, `X-Trace-Id`. `X-Client-Ip` n'est pas
+  exposé : il rendrait au script l'adresse vue par le serveur.
+- **Méthodes** : `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`. `HEAD` est
+  ajouté : le processeur CORS vérifie aussi la méthode des requêtes réelles.
+- **Profil `ci`** : aucun fichier dédié, donc liste vide. La BVT n'envoie pas d'`Origin`.
+
+Tests : `CorsAllowedOriginsTest` (20), `CorsConfigStartupTest` (5, AC-08 à AC-11),
+`CorsPolicyIntegrationTest` (8, vrai port, filtres servlet compris), plus la déclaration
+CORS vérifiée dans `SecurityConfigTest` et `TakiboAuthorizationServerConfigurationTest`.
 
 ## Branche
 
