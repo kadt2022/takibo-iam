@@ -3,8 +3,10 @@ package com.takibo.iamboot.config;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 /**
  * Origines croisées acceptées par l'installation, validées au démarrage (SEC-TMS-05).
@@ -25,7 +27,7 @@ final class CorsAllowedOrigins {
     private final List<String> exactOrigins;
     private final List<String> originPatterns;
 
-    private CorsAllowedOrigins(List<String> exactOrigins, List<String> originPatterns) {
+    private CorsAllowedOrigins(Set<String> exactOrigins, List<String> originPatterns) {
         this.exactOrigins = List.copyOf(exactOrigins);
         this.originPatterns = List.copyOf(originPatterns);
     }
@@ -38,27 +40,16 @@ final class CorsAllowedOrigins {
      *                               la valeur
      */
     static CorsAllowedOrigins validate(List<String> rawValues, boolean devProfile) {
-        List<String> exact = new ArrayList<>();
+        Set<String> exact = new LinkedHashSet<>();
         List<String> patterns = new ArrayList<>();
-        if (rawValues == null) {
-            return new CorsAllowedOrigins(exact, patterns);
-        }
+        List<String> values = rawValues == null ? List.of() : rawValues;
 
-        for (String raw : rawValues) {
+        for (String raw : values) {
             String value = raw == null ? "" : raw.trim();
-            if (value.isEmpty()) {
-                continue;
-            }
             if (value.contains("*")) {
-                if (!devProfile) {
-                    throw refused(value, "un joker ou un motif n'est accepté que sous le profil dev");
-                }
-                patterns.add(value);
-                continue;
-            }
-            String origin = normalizeExactOrigin(value);
-            if (!exact.contains(origin)) {
-                exact.add(origin);
+                patterns.add(requirePatternAllowed(value, devProfile));
+            } else if (!value.isEmpty()) {
+                exact.add(normalizeExactOrigin(value));
             }
         }
         return new CorsAllowedOrigins(exact, patterns);
@@ -76,6 +67,13 @@ final class CorsAllowedOrigins {
         return exactOrigins.isEmpty() && originPatterns.isEmpty();
     }
 
+    private static String requirePatternAllowed(String value, boolean devProfile) {
+        if (!devProfile) {
+            throw refused(value, "un joker ou un motif n'est accepté que sous le profil dev");
+        }
+        return value;
+    }
+
     /**
      * Forme sérialisée d'une origine, celle qu'envoie un navigateur : schéma et hôte en
      * minuscules, port par défaut omis, sans slash final. La comparaison de Spring est exacte
@@ -85,21 +83,37 @@ final class CorsAllowedOrigins {
         if ("null".equalsIgnoreCase(value)) {
             throw refused(value, "une origine opaque ne désigne aucun site");
         }
+        URI uri = parse(value);
+        String scheme = requireHttpScheme(value, uri);
+        requireBareAuthority(value, uri);
 
-        URI uri;
+        String host = uri.getHost().toLowerCase(Locale.ROOT);
+        if ("http".equals(scheme) && !isLoopbackHost(host)) {
+            throw refused(value, "HTTP n'est accepté que pour une adresse de loopback");
+        }
+        return scheme + "://" + host + portSuffix(scheme, uri.getPort());
+    }
+
+    private static URI parse(String value) {
         try {
-            uri = new URI(value);
+            return new URI(value);
         } catch (URISyntaxException e) {
             throw refused(value, "ce n'est pas une origine valide");
         }
+    }
 
-        String scheme = uri.getScheme() == null ? null : uri.getScheme().toLowerCase(Locale.ROOT);
+    private static String requireHttpScheme(String value, URI uri) {
+        String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
         if (!"https".equals(scheme) && !"http".equals(scheme)) {
             throw refused(value, "seuls les schémas https et http sont acceptés");
         }
         if (uri.getHost() == null || uri.getHost().isBlank()) {
             throw refused(value, "l'hôte est obligatoire");
         }
+        return scheme;
+    }
+
+    private static void requireBareAuthority(String value, URI uri) {
         if (uri.getRawUserInfo() != null) {
             throw refused(value, "une origine ne porte pas d'information d'utilisateur");
         }
@@ -113,15 +127,11 @@ final class CorsAllowedOrigins {
         if (uri.getRawFragment() != null) {
             throw refused(value, "une origine ne porte pas de fragment");
         }
+    }
 
-        String host = uri.getHost().toLowerCase(Locale.ROOT);
-        if ("http".equals(scheme) && !isLoopbackHost(host)) {
-            throw refused(value, "HTTP n'est accepté que pour une adresse de loopback");
-        }
-
-        int port = uri.getPort();
+    private static String portSuffix(String scheme, int port) {
         boolean defaultPort = ("https".equals(scheme) && port == 443) || ("http".equals(scheme) && port == 80);
-        return scheme + "://" + host + (port == -1 || defaultPort ? "" : ":" + port);
+        return port == -1 || defaultPort ? "" : ":" + port;
     }
 
     private static boolean isLoopbackHost(String host) {
@@ -133,14 +143,17 @@ final class CorsAllowedOrigins {
             return false;
         }
         for (int index = 1; index < octets.length; index++) {
-            String octet = octets[index];
-            if (octet.isEmpty() || octet.length() > 3
-                    || !octet.chars().allMatch(Character::isDigit)
-                    || Integer.parseInt(octet) > 255) {
+            if (!isIpv4Octet(octets[index])) {
                 return false;
             }
         }
         return true;
+    }
+
+    private static boolean isIpv4Octet(String value) {
+        return !value.isEmpty() && value.length() <= 3
+                && value.chars().allMatch(Character::isDigit)
+                && Integer.parseInt(value) <= 255;
     }
 
     private static IllegalStateException refused(String value, String reason) {

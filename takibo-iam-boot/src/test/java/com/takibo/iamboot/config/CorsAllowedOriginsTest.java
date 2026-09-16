@@ -1,5 +1,6 @@
 package com.takibo.iamboot.config;
 
+import org.assertj.core.api.AbstractThrowableAssert;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -31,7 +32,7 @@ class CorsAllowedOriginsTest {
             "https://app example.test"
     })
     void outsideDev_refusesEveryValueThatIsNotAnExactOrigin(String value) {
-        assertThatThrownBy(() -> CorsAllowedOrigins.validate(List.of(value), false))
+        refusal(false, value)
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining(CorsAllowedOrigins.PROPERTY)
                 .hasMessageContaining("« " + value + " »");
@@ -39,8 +40,7 @@ class CorsAllowedOriginsTest {
 
     @Test
     void oneInvalidValueRefusesTheWholeList() {
-        assertThatThrownBy(() -> CorsAllowedOrigins.validate(
-                List.of("https://portail.example.test", "https://*.example.test"), false))
+        refusal(false, "https://portail.example.test", "https://*.example.test")
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("https://*.example.test");
     }
@@ -69,12 +69,12 @@ class CorsAllowedOriginsTest {
         for (String value : List.of(
                 "http://127.0.0.1.evil.test",
                 "http://localhost.evil.test")) {
-            assertThatThrownBy(() -> CorsAllowedOrigins.validate(List.of(value), false))
+            refusal(false, value)
                     .as(value)
                     .hasMessageContaining("loopback");
         }
         // java.net.URI ne reconnaît pas d'hôte dans 127.0.0.256 : refusé avant même la règle HTTP.
-        assertThatThrownBy(() -> CorsAllowedOrigins.validate(List.of("http://127.0.0.256"), false))
+        refusal(false, "http://127.0.0.256")
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("« http://127.0.0.256 »");
     }
@@ -94,9 +94,13 @@ class CorsAllowedOriginsTest {
         assertThat(origins.originPatterns()).containsExactly("http://localhost:[*]", "*");
         assertThat(origins.exactOrigins()).containsExactly("https://portail.example.test");
 
-        assertThatThrownBy(() -> CorsAllowedOrigins.validate(List.of("http://app.example.test"), true))
-                .hasMessageContaining("loopback");
-        assertThatThrownBy(() -> CorsAllowedOrigins.validate(List.of("null"), true))
-                .hasMessageContaining("opaque");
+        refusal(true, "http://app.example.test").hasMessageContaining("loopback");
+        refusal(true, "null").hasMessageContaining("opaque");
+    }
+
+    // La liste est construite hors du lambda : seule validate() peut y lever l'exception attendue.
+    private static AbstractThrowableAssert<?, ? extends Throwable> refusal(boolean devProfile, String... values) {
+        List<String> rawValues = List.of(values);
+        return assertThatThrownBy(() -> CorsAllowedOrigins.validate(rawValues, devProfile));
     }
 }
