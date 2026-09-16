@@ -45,10 +45,13 @@ public class OAuth2ClientEntity {
     @Column(name = "id", nullable = false, updatable = false)
     private UUID id;
 
-    @Column(name = "org_id", nullable = false, updatable = false)
+    // Frontiere du client (TMS-OAUTH-CLIENT-BOUNDARY-01) :
+    // (NULL, NULL) = PLATFORM, (UUID, NULL) = ORGANIZATION, (UUID, UUID) = SPACE.
+    // (NULL, UUID) est interdit par ck_oauth2_clients_boundary.
+    @Column(name = "org_id", updatable = false)
     private UUID orgId;
 
-    @Column(name = "space_id", nullable = false, updatable = false)
+    @Column(name = "space_id", updatable = false)
     private UUID spaceId;
 
     // ===== COMPOSITE FK TO SPACE =====
