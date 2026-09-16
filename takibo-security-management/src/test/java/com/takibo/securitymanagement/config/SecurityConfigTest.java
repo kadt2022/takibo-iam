@@ -12,6 +12,8 @@ import org.springframework.context.annotation.Import;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.junit.jupiter.web.SpringJUnitWebConfig;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.filter.CorsFilter;
 import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -40,11 +42,19 @@ class SecurityConfigTest {
     @MockitoBean
     private SentinelAccessDeniedHandler sentinelAccessDeniedHandler;
 
+    @MockitoBean
+    private CorsConfigurationSource corsConfigurationSource;
+
     @Autowired
     private SecurityFilterChain securityFilterChain;
 
     @Test
     void definesSecurityFilterChainWithActuatorBoundary() {
         assertThat(securityFilterChain).isNotNull();
+    }
+
+    @Test
+    void declaresCorsFromTheInjectedSource() {
+        assertThat(securityFilterChain.getFilters()).hasAtLeastOneElementOfType(CorsFilter.class);
     }
 }

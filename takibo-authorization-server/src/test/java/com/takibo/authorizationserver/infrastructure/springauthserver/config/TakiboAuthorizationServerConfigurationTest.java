@@ -6,11 +6,13 @@ import org.junit.jupiter.api.Test;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configurers.CorsConfigurer;
 import org.springframework.security.config.annotation.web.configurers.oauth2.server.authorization.OAuth2AuthorizationServerConfigurer;
 import org.springframework.security.oauth2.server.authorization.authentication.JwtClientAssertionAuthenticationProvider;
 import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
 import org.springframework.security.web.DefaultSecurityFilterChain;
 import org.springframework.security.web.util.matcher.RequestMatcher;
+import org.springframework.web.cors.CorsConfigurationSource;
 
 import java.util.List;
 
@@ -43,7 +45,14 @@ class TakiboAuthorizationServerConfigurationTest {
         DefaultSecurityFilterChain filterChain = mock(DefaultSecurityFilterChain.class);
         TakiboJwtClientAssertionDecoderFactory decoderFactory =
                 new TakiboJwtClientAssertionDecoderFactory();
+        CorsConfigurationSource corsConfigurationSource = request -> null;
+        CorsConfigurer<HttpSecurity> corsConfigurer = mock(CorsConfigurer.class);
         when(http.securityMatcher(any(RequestMatcher.class))).thenReturn(http);
+        when(http.cors(any(Customizer.class))).thenAnswer(invocation -> {
+            Customizer<CorsConfigurer<HttpSecurity>> customizer = invocation.getArgument(0);
+            customizer.customize(corsConfigurer);
+            return http;
+        });
         when(http.with(
                 any(OAuth2AuthorizationServerConfigurer.class),
                 any(Customizer.class)))
@@ -58,8 +67,10 @@ class TakiboAuthorizationServerConfigurationTest {
         when(http.build()).thenReturn(filterChain);
 
         assertThat(new TakiboAuthorizationServerConfiguration()
-                .authorizationServerSecurityFilterChain(http, decoderFactory))
+                .authorizationServerSecurityFilterChain(http, decoderFactory, corsConfigurationSource))
                 .isSameAs(filterChain);
+        // SEC-TMS-05 : la chaîne TAS déclare elle-même la politique CORS commune.
+        verify(corsConfigurer).configurationSource(corsConfigurationSource);
     }
 
     @Test
