@@ -13,6 +13,7 @@ import org.springframework.security.oauth2.server.authorization.settings.Authori
 import org.springframework.security.oauth2.server.authorization.authentication.JwtClientAssertionAuthenticationProvider;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.util.matcher.RequestMatcher;
+import org.springframework.web.cors.CorsConfigurationSource;
 
 import java.util.List;
 
@@ -24,12 +25,16 @@ public class TakiboAuthorizationServerConfiguration {
     @Order(1)
     public SecurityFilterChain authorizationServerSecurityFilterChain(
             HttpSecurity http,
-            TakiboJwtClientAssertionDecoderFactory jwtDecoderFactory) {
+            TakiboJwtClientAssertionDecoderFactory jwtDecoderFactory,
+            CorsConfigurationSource corsConfigurationSource) {
         OAuth2AuthorizationServerConfigurer authorizationServerConfigurer = new OAuth2AuthorizationServerConfigurer();
         RequestMatcher endpointsMatcher = authorizationServerConfigurer.getEndpointsMatcher();
 
         http
                 .securityMatcher(endpointsMatcher)
+                // SEC-TMS-05 : la chaîne TAS déclare la même politique que la chaîne API, au lieu
+                // d'en hériter ou non selon HttpSecurityConfiguration.applyCorsIfAvailable.
+                .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 .with(authorizationServerConfigurer, authorizationServer -> authorizationServer
                         .clientAuthentication(clientAuthentication -> clientAuthentication
                                 .authenticationProviders(providers -> configureJwtDecoderFactory(
