@@ -13,19 +13,31 @@ import com.takibo.securitycontext.spi.TakiboSecurityContextCarrier;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import com.takibo.identitycore.domain.exception.SpaceNotFoundException;
+import com.takibo.securitymanagement.domain.exception.BoundaryCheckFailedException;
+import com.takibo.securitymanagement.domain.exception.BoundaryCheckUnavailableException;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.EmptyResultDataAccessException;
+import org.springframework.jdbc.BadSqlGrammarException;
+import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
+import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -119,8 +131,8 @@ class BoundaryMembershipServiceTest {
     @Test
     void spaceToken_usesTheExplicitUser_neverTheAccountSubjectAsUser() {
         resolveSpaceOrg(ORG_ID);
-        when(jdbc.queryForObject(contains("WHERE u.id = ?"), eq(Integer.class), eq(USER_ID), eq(ORG_ID)))
-                .thenReturn(1);
+        when(jdbc.queryForObject(contains("u.account_id = ?"), eq(Integer.class),
+                eq(USER_ID), eq(ACCOUNT_ID), eq(ORG_ID))).thenReturn(1);
         Authentication auth = carrier(ACCOUNT_ID.toString(), SubjectNature.HUMAN, Map.of(
                 StandardAttributeKeys.ACCOUNT_ID, ACCOUNT_ID,
                 StandardAttributeKeys.USER_ID, USER_ID));
@@ -140,6 +152,195 @@ class BoundaryMembershipServiceTest {
                 .isInstanceOf(AccessDeniedException.class);
 
         verify(jdbc, never()).queryForObject(contains("WHERE u.id = ?"), eq(Integer.class), eq(USER_ID), any());
+    }
+
+    // --- SEC-TMS-06 : identité explicite, erreurs fiables, cache (R1-R8) ---
+
+    private Authentication spaceHuman() {
+        return carrier(ACCOUNT_ID.toString(), SubjectNature.HUMAN, Map.of(
+                StandardAttributeKeys.ACCOUNT_ID, ACCOUNT_ID,
+                StandardAttributeKeys.USER_ID, USER_ID));
+    }
+
+    private Authentication organizationHuman() {
+        return carrier(ACCOUNT_ID.toString(), SubjectNature.HUMAN,
+                Map.of(StandardAttributeKeys.ACCOUNT_ID, ACCOUNT_ID));
+    }
+
+    @Test
+    void r1_accountDifferentFromUser_isFoundByItsExplicitAccount() {
+        resolveSpaceOrg(ORG_ID);
+        when(jdbc.queryForObject(contains("WHERE u.account_id = ?"), eq(Integer.class), eq(ACCOUNT_ID), eq(ORG_ID)))
+                .thenReturn(1);
+
+        service.assertActorInSpaceOrg(SPACE_ID, organizationHuman());
+    }
+
+    @Test
+    void accountAndUserNotBelongingTogether_areRefusedWithoutAnyFallback() {
+        resolveSpaceOrg(ORG_ID);
+        when(jdbc.queryForObject(contains("u.account_id = ?"), eq(Integer.class),
+                eq(USER_ID), eq(ACCOUNT_ID), eq(ORG_ID))).thenReturn(0);
+        when(jdbc.queryForObject(contains("WHERE u.account_id = ?"), eq(Integer.class), eq(ACCOUNT_ID), eq(ORG_ID)))
+                .thenReturn(1);
+
+        assertThatThrownBy(() -> service.assertActorInSpaceOrg(SPACE_ID, spaceHuman()))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessage("ACTOR_NOT_IN_SPACE_ORG");
+
+        verify(jdbc, never()).queryForObject(contains("WHERE u.account_id = ?"), eq(Integer.class), any(), any());
+    }
+
+    @Test
+    void r2_spaceHuman_isAcceptedWhenUserBelongsToAccountAndOrg() {
+        resolveSpaceOrg(ORG_ID);
+        when(jdbc.queryForObject(contains("u.account_id = ?"), eq(Integer.class),
+                eq(USER_ID), eq(ACCOUNT_ID), eq(ORG_ID))).thenReturn(1);
+
+        service.assertActorInSpaceOrg(SPACE_ID, spaceHuman());
+    }
+
+    @Test
+    void r3_accountWithoutProjectionInTheTargetOrg_isRefused() {
+        resolveSpaceOrg(ORG_ID);
+        when(jdbc.queryForObject(contains("FROM users u"), eq(Integer.class), any(), any())).thenReturn(0);
+
+        assertThatThrownBy(() -> service.assertActorInSpaceOrg(SPACE_ID, organizationHuman()))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessage("ACTOR_NOT_IN_SPACE_ORG");
+    }
+
+    @Test
+    void humanWithoutAnyExplicitIdentifier_isRefusedWithoutQuerying() {
+        resolveSpaceOrg(ORG_ID);
+
+        assertThatThrownBy(() -> service.assertActorInSpaceOrg(SPACE_ID,
+                carrier("alice", SubjectNature.HUMAN, Map.of())))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessage("ACTOR_IDENTITY_MISSING");
+
+        verify(jdbc, never()).queryForObject(contains("FROM users u"), eq(Integer.class), any());
+    }
+
+    @Test
+    void r4_unavailableDatabaseOnMembership_isNeitherARefusalNorASuccess() {
+        resolveSpaceOrg(ORG_ID);
+        when(jdbc.queryForObject(contains("FROM users u"), eq(Integer.class), any(), any(), any()))
+                .thenThrow(new DataAccessResourceFailureException("down"));
+        when(jdbc.queryForObject(contains("FROM users u"), eq(Integer.class), any(), any()))
+                .thenThrow(new DataAccessResourceFailureException("down"));
+
+        assertThatThrownBy(() -> service.assertActorInSpaceOrg(SPACE_ID, spaceHuman()))
+                .isInstanceOf(BoundaryCheckUnavailableException.class);
+        assertThatThrownBy(() -> service.assertActorInSpaceOrg(SPACE_ID, organizationHuman()))
+                .isInstanceOf(BoundaryCheckUnavailableException.class);
+    }
+
+    @Test
+    void r4_structuralSqlErrorOnMembership_isAnInternalFailure() {
+        resolveSpaceOrg(ORG_ID);
+        when(jdbc.queryForObject(contains("FROM users u"), eq(Integer.class), any(), any()))
+                .thenThrow(new BadSqlGrammarException("task", "sql", new java.sql.SQLException("bad")));
+
+        assertThatThrownBy(() -> service.assertActorInSpaceOrg(SPACE_ID, organizationHuman()))
+                .isInstanceOf(BoundaryCheckFailedException.class)
+                .isNotInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
+    void r5_failureOfTheUserCheck_neverFallsThroughToAnotherIdentifier() {
+        resolveSpaceOrg(ORG_ID);
+        when(jdbc.queryForObject(contains("u.account_id = ?"), eq(Integer.class), eq(USER_ID), eq(ACCOUNT_ID), eq(ORG_ID)))
+                .thenThrow(new DataAccessResourceFailureException("down"));
+        when(jdbc.queryForObject(contains("WHERE u.account_id = ?"), eq(Integer.class), eq(ACCOUNT_ID), eq(ORG_ID)))
+                .thenReturn(1);
+
+        assertThatThrownBy(() -> service.assertActorInSpaceOrg(SPACE_ID, spaceHuman()))
+                .isInstanceOf(BoundaryCheckUnavailableException.class);
+
+        verify(jdbc, never()).queryForObject(contains("WHERE u.account_id = ?"), eq(Integer.class), any(), any());
+    }
+
+    @Test
+    void r6_resolutionFailures_areNotSpaceNotFound() {
+        when(jdbc.queryForObject(anyString(), any(RowMapper.class), eq(SPACE_ID)))
+                .thenThrow(new DataAccessResourceFailureException("down"));
+        assertThatThrownBy(() -> service.assertActorInSpaceOrg(SPACE_ID, spaceHuman()))
+                .isInstanceOf(BoundaryCheckUnavailableException.class);
+
+        BoundaryMembershipService other = new BoundaryMembershipService(jdbc);
+        org.mockito.Mockito.doThrow(new IllegalArgumentException("Invalid UUID string"))
+                .when(jdbc).queryForObject(anyString(), any(RowMapper.class), eq(SPACE_ID));
+        assertThatThrownBy(() -> other.assertActorInSpaceOrg(SPACE_ID, spaceHuman()))
+                .isInstanceOf(BoundaryCheckFailedException.class);
+    }
+
+    @Test
+    void r6_spaceWithoutOrganization_isInconsistentDataNotAMissingSpace() {
+        resolveSpaceOrg(null);
+
+        assertThatThrownBy(() -> service.assertActorInSpaceOrg(SPACE_ID, spaceHuman()))
+                .isInstanceOf(BoundaryCheckFailedException.class);
+    }
+
+    @Test
+    void r7_reallyAbsentSpace_isSpaceNotFound() {
+        when(jdbc.queryForObject(anyString(), any(RowMapper.class), eq(SPACE_ID)))
+                .thenThrow(new EmptyResultDataAccessException(1));
+
+        assertThatThrownBy(() -> service.assertActorInSpaceOrg(SPACE_ID, spaceHuman()))
+                .isInstanceOf(SpaceNotFoundException.class);
+    }
+
+    @Test
+    void r8_cache_servesResolvedOrgOnlyUntilTtl_andNeverStoresAFailure() {
+        MutableClock clock = new MutableClock();
+        BoundaryMembershipService cached = new BoundaryMembershipService(jdbc, clock);
+        resolveSpaceOrg(ORG_ID);
+        when(jdbc.queryForObject(contains("FROM users u"), eq(Integer.class), any(), any())).thenReturn(1);
+        cached.assertActorInSpaceOrg(SPACE_ID, organizationHuman());
+
+        org.mockito.Mockito.doThrow(new DataAccessResourceFailureException("down"))
+                .when(jdbc).queryForObject(anyString(), any(RowMapper.class), eq(SPACE_ID));
+        clock.advance(Duration.ofSeconds(5));
+        cached.assertActorInSpaceOrg(SPACE_ID, organizationHuman());
+
+        clock.advance(Duration.ofSeconds(6));
+        assertThatThrownBy(() -> cached.assertActorInSpaceOrg(SPACE_ID, organizationHuman()))
+                .isInstanceOf(BoundaryCheckUnavailableException.class);
+
+        org.mockito.Mockito.doReturn(ORG_ID)
+                .when(jdbc).queryForObject(anyString(), any(RowMapper.class), eq(SPACE_ID));
+        cached.assertActorInSpaceOrg(SPACE_ID, organizationHuman());
+    }
+
+    @Test
+    void unsupportedAuthenticationForm_isRefusedNotGuessed() {
+        resolveSpaceOrg(ORG_ID);
+        Authentication auth = new UsernamePasswordAuthenticationToken(
+                USER_ID.toString(), "n/a", List.of(new SimpleGrantedAuthority("ROLE_USER")));
+
+        assertThatThrownBy(() -> service.assertActorInSpaceOrg(SPACE_ID, auth))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessage("ACTOR_IDENTITY_MISSING");
+    }
+
+    @Test
+    void unauthenticated_isAnAuthenticationFailure() {
+        assertThatThrownBy(() -> service.assertActorInSpaceOrg(SPACE_ID, null))
+                .isInstanceOf(AuthenticationCredentialsNotFoundException.class);
+    }
+
+    private static final class MutableClock extends Clock {
+        private Instant now = Instant.parse("2026-10-20T12:00:00Z");
+
+        void advance(Duration d) {
+            now = now.plus(d);
+        }
+
+        @Override public java.time.ZoneId getZone() { return ZoneOffset.UTC; }
+        @Override public Clock withZone(java.time.ZoneId zone) { return this; }
+        @Override public Instant instant() { return now; }
     }
 
     private void resolveSpaceOrg(UUID orgId) {

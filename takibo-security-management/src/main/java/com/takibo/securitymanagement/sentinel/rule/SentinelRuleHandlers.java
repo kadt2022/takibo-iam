@@ -1,6 +1,7 @@
 package com.takibo.securitymanagement.sentinel.rule;
 
 import com.takibo.identitycore.domain.exception.*;
+import com.takibo.securitymanagement.domain.exception.BoundaryCheckUnavailableException;
 import com.takibo.securitymanagement.domain.exception.InvalidTokenException;
 import com.takibo.securitymanagement.sentinel.advice.SentinelErrorCode;
 import com.takibo.securitymanagement.sentinel.advice.SentinelResponse;
@@ -138,6 +139,12 @@ public final class SentinelRuleHandlers {
 
     static SentinelResponse ruleSpaceNotFound(SpaceNotFoundException ex, String path, String traceId) {
         return response(HttpStatus.NOT_FOUND, SentinelErrorCode.SPACE_NOT_FOUND, ex.getMessage(), path, traceId);
+    }
+
+    /** Contrôle d'appartenance impossible faute de base : 503 générique, cause côté serveur. */
+    static SentinelResponse ruleBoundaryUnavailable(BoundaryCheckUnavailableException ex, String path, String traceId) {
+        return response(HttpStatus.SERVICE_UNAVAILABLE, SentinelErrorCode.SERVICE_UNAVAILABLE,
+                "Service temporairement indisponible.", path, traceId);
     }
 
     static SentinelResponse ruleInvalidToken(InvalidTokenException ex, String path, String traceId) {

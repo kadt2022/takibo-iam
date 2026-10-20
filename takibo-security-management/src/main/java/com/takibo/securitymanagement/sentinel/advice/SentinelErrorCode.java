@@ -55,5 +55,6 @@ public enum SentinelErrorCode {
     OAUTH_CLIENT_PROFILE_INVALID,
 
     // GENERIC
+    SERVICE_UNAVAILABLE,
     INTERNAL_ERROR
 }

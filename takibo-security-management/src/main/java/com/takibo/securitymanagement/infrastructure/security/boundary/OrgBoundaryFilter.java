@@ -1,10 +1,18 @@
 package com.takibo.securitymanagement.infrastructure.security.boundary;
 
+import com.takibo.identitycore.domain.exception.SpaceNotFoundException;
+import com.takibo.securitymanagement.domain.exception.BoundaryCheckFailedException;
+import com.takibo.securitymanagement.domain.exception.BoundaryCheckUnavailableException;
+import com.takibo.securitymanagement.sentinel.http.SentinelHttpErrorWriter;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.http.server.PathContainer;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -17,11 +25,13 @@ import java.io.IOException;
 import java.util.List;
 import java.util.UUID;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class OrgBoundaryFilter extends OncePerRequestFilter {
 
     private final BoundaryMembershipService membershipService;
+    private final SentinelHttpErrorWriter sentinelHttpErrorWriter;
     private final PathPatternParser parser = new PathPatternParser();
 
     // Matche aussi les routes versionnées
@@ -65,10 +75,41 @@ public class OrgBoundaryFilter extends OncePerRequestFilter {
         if (spaceId != null) {
             // IMPORTANT: ce filtre doit s'exécuter APRÈS le JwtAuthenticationFilter
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-            membershipService.assertActorInSpaceOrg(spaceId, auth);
+            try {
+                membershipService.assertActorInSpaceOrg(spaceId, auth);
+            } catch (AccessDeniedException | AuthenticationException
+                     | SpaceNotFoundException | BoundaryCheckUnavailableException e) {
+                // Ce filtre précède ExceptionTranslationFilter et le @ControllerAdvice : sans
+                // traduction ici, l'exception remonterait au conteneur. Réponse publique générique.
+                reject(e, req, res);
+                return;
+            } catch (RuntimeException e) {
+                reject(new BoundaryCheckFailedException("Boundary check failed", e), req, res);
+                return;
+            }
             req.setAttribute("TAKIBO_BOUNDARY_OK", Boolean.TRUE);
         }
         chain.doFilter(req, res);
+    }
+
+    /** Arrête la chaîne : pas de marqueur boundary, cause conservée dans les logs avec le traceId. */
+    private void reject(RuntimeException failure, HttpServletRequest req, HttpServletResponse res)
+            throws IOException {
+        String traceId = MDC.get("traceId");
+        boolean ownTrace = traceId == null || traceId.isBlank();
+        if (ownTrace) {
+            traceId = UUID.randomUUID().toString();
+            MDC.put("traceId", traceId);
+        }
+        try {
+            log.warn("Boundary rejected request: traceId={} path={} outcome={}",
+                    traceId, req.getRequestURI(), failure.getClass().getSimpleName(), failure);
+            sentinelHttpErrorWriter.write(failure, req, res);
+        } finally {
+            if (ownTrace) {
+                MDC.remove("traceId");
+            }
+        }
     }
 
     private UUID resolveSpaceId(HttpServletRequest req) {

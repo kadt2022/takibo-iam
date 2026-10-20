@@ -4,48 +4,74 @@ import com.takibo.identitycore.domain.catalogrbac.TechnicalRole;
 import com.takibo.securitycontext.model.StandardAttributeKeys;
 import com.takibo.securitycontext.model.TakiboSecurityContext;
 import com.takibo.securitycontext.spi.TakiboSecurityContextCarrier;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import com.takibo.identitycore.domain.exception.SpaceNotFoundException;
+import com.takibo.securitymanagement.domain.exception.BoundaryCheckFailedException;
+import com.takibo.securitymanagement.domain.exception.BoundaryCheckUnavailableException;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.EmptyResultDataAccessException;
-import org.springframework.http.HttpStatus;
+import org.springframework.dao.TransientDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Contrôle d'appartenance à l'organisation du Space cible, via un User dans un Space de cette
+ * organisation. Il ne prouve ni l'appartenance au Space ni la permission : réussir ce contrôle
+ * ne vaut jamais autorisation finale ({@code SpaceBoundaryGuard} et les permissions restent
+ * exigés).
+ * <p>
+ * Contrat d'erreur : non-appartenance prouvée -> {@link AccessDeniedException} (403) ; Space
+ * absent -> {@link SpaceNotFoundException} (404) ; base indisponible ->
+ * {@link BoundaryCheckUnavailableException} (503) ; erreur structurelle ->
+ * {@link BoundaryCheckFailedException} (500). Aucune erreur technique n'est convertie en refus,
+ * en absence ni en réussite, et aucun secours (username, autre identifiant) ne la contourne.
+ */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class BoundaryMembershipService {
 
     private static final String ROLE_PREFIX = "ROLE_";
 
     private final JdbcTemplate jdbc;
+    private final Clock clock;
 
     private final ConcurrentHashMap<UUID, CacheEntry> orgBySpaceCache = new ConcurrentHashMap<>();
     private final Duration ttl = Duration.ofSeconds(10);
 
+    @Autowired
+    public BoundaryMembershipService(JdbcTemplate jdbc) {
+        this(jdbc, Clock.systemUTC());
+    }
+
+    BoundaryMembershipService(JdbcTemplate jdbc, Clock clock) {
+        this.jdbc = jdbc;
+        this.clock = clock;
+    }
+
     @Transactional(readOnly = true)
     public void assertActorInSpaceOrg(UUID spaceId, Authentication auth) {
         if (spaceId == null) throw new IllegalArgumentException("SPACE_ID_REQUIRED");
-        if (auth == null || !auth.isAuthenticated()) throw new AccessDeniedException("UNAUTHENTICATED");
+        if (auth == null || !auth.isAuthenticated()) {
+            throw new AuthenticationCredentialsNotFoundException("UNAUTHENTICATED");
+        }
         if (isPlatformAdmin(auth)) return;
 
-        UUID targetOrg = resolveOrgIdBySpace(spaceId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                        "SPACE_NOT_FOUND: spaceId=" + spaceId));
+        UUID targetOrg = resolveOrgIdBySpace(spaceId);
 
         UUID tokenOrg = extractOrgId(auth);
 
@@ -61,14 +87,20 @@ public class BoundaryMembershipService {
         }
 
         ActorIds ids = extractActorIds(auth)
-                .orElseThrow(() -> new IllegalStateException("ACTOR_IDENTITY_MISSING"));
+                .orElseThrow(() -> new AccessDeniedException("ACTOR_IDENTITY_MISSING"));
 
         log.debug("Boundary check: spaceId={}, targetOrg={}, actorIds={}", spaceId, targetOrg, ids);
 
-        boolean ok = false;
-        if (ids.userId != null)           ok = existsByUserIdInOrg(ids.userId, targetOrg);
-        if (!ok && ids.accountId != null) ok = existsByAccountIdInOrg(ids.accountId, targetOrg);
-        if (!ok && ids.username != null)  ok = existsByUsernameInOrg(ids.username, targetOrg);
+        boolean ok;
+        if (ids.userId != null) {
+            // Si le jeton porte aussi l'Account, le User doit lui appartenir : une paire A/U
+            // incohérente ne trouve aucune ligne et est refusée, sans autre essai.
+            ok = existsUserInOrg(ids.userId, ids.accountId, targetOrg);
+        } else if (ids.accountId != null) {
+            ok = existsByAccountIdInOrg(ids.accountId, targetOrg);
+        } else {
+            throw new AccessDeniedException("ACTOR_IDENTITY_MISSING");
+        }
 
         if (!ok) {
             log.warn("Boundary violation: spaceId={}, targetOrg={}, actorIds={}", spaceId, targetOrg, ids);
@@ -78,52 +110,69 @@ public class BoundaryMembershipService {
         log.debug("Boundary check PASSED for spaceId={}, targetOrg={}", spaceId, targetOrg);
     }
 
-    private Optional<UUID> resolveOrgIdBySpace(UUID spaceId) {
+    /**
+     * Seules les résolutions réussies sont mises en cache (TTL court, sans cache négatif). Une
+     * entrée valide peut donc répondre pendant ce TTL même si la base est tombée : la fraîcheur
+     * est bornée par le TTL, sans promesse de révocation immédiate.
+     */
+    private UUID resolveOrgIdBySpace(UUID spaceId) {
         CacheEntry hit = orgBySpaceCache.get(spaceId);
-        if (hit != null && !hit.isExpired(ttl)) {
+        if (hit != null && !hit.isExpired(ttl, clock)) {
             log.debug("Cache HIT for spaceId={} -> orgId={}", spaceId, hit.value);
-            return Optional.of(hit.value);
+            return hit.value;
         }
 
         log.debug("Cache MISS for spaceId={}, querying DB...", spaceId);
 
+        UUID orgId;
         try {
-            UUID orgId = jdbc.queryForObject(
+            orgId = jdbc.queryForObject(
                     "SELECT org_id FROM spaces WHERE id = ?",
                     (rs, rowNum) -> readUuid(rs, 1),
                     spaceId
             );
-            if (orgId == null) {
-                return Optional.empty();
-            }
-            orgBySpaceCache.put(spaceId, new CacheEntry(orgId, Instant.now()));
-            log.debug("Resolved orgId={} for spaceId={}", orgId, spaceId);
-            return Optional.of(orgId);
         } catch (EmptyResultDataAccessException e) {
-            return Optional.empty();
-        } catch (Exception e) {
-            log.warn("Failed to resolve orgId for spaceId={}", spaceId, e);
-            return Optional.empty();
+            throw new SpaceNotFoundException(spaceId);
+        } catch (RuntimeException e) {
+            throw technicalFailure("resolve org of spaceId=" + spaceId, e);
         }
+        if (orgId == null) {
+            // Space présent mais sans organisation : donnée incohérente, pas un Space absent.
+            throw new BoundaryCheckFailedException(
+                    "Space " + spaceId + " has no organization", null);
+        }
+        orgBySpaceCache.put(spaceId, new CacheEntry(orgId, clock.instant()));
+        log.debug("Resolved orgId={} for spaceId={}", orgId, spaceId);
+        return orgId;
     }
 
-    private boolean existsByUserIdInOrg(UUID userId, UUID orgId) {
+    private boolean existsUserInOrg(UUID userId, UUID accountId, UUID orgId) {
         try {
-            Integer c = jdbc.queryForObject(
-                    """
-                    SELECT COUNT(1)
-                    FROM users u
-                    JOIN spaces s ON s.id = u.space_id
-                    WHERE u.id = ? AND s.org_id = ?
-                    """,
-                    Integer.class,
-                    userId,
-                    orgId
-            );
+            Integer c = accountId == null
+                    ? jdbc.queryForObject(
+                            """
+                            SELECT COUNT(1)
+                            FROM users u
+                            JOIN spaces s ON s.id = u.space_id
+                            WHERE u.id = ? AND s.org_id = ?
+                            """,
+                            Integer.class,
+                            userId,
+                            orgId)
+                    : jdbc.queryForObject(
+                            """
+                            SELECT COUNT(1)
+                            FROM users u
+                            JOIN spaces s ON s.id = u.space_id
+                            WHERE u.id = ? AND u.account_id = ? AND s.org_id = ?
+                            """,
+                            Integer.class,
+                            userId,
+                            accountId,
+                            orgId);
             return c != null && c > 0;
-        } catch (Exception e) {
-            log.error("existsByUserIdInOrg failed for userId={}, orgId={}", userId, orgId, e);
-            return false;
+        } catch (RuntimeException e) {
+            throw technicalFailure("check membership of userId=" + userId + " in orgId=" + orgId, e);
         }
     }
 
@@ -141,40 +190,28 @@ public class BoundaryMembershipService {
                     orgId
             );
             return c != null && c > 0;
-        } catch (Exception e) {
-            log.error("existsByAccountIdInOrg failed for accountId={}, orgId={}", accountId, orgId, e);
-            return false;
+        } catch (RuntimeException e) {
+            throw technicalFailure("check membership of accountId=" + accountId + " in orgId=" + orgId, e);
         }
     }
 
-    private boolean existsByUsernameInOrg(String username, UUID orgId) {
-        try {
-            Integer c = jdbc.queryForObject(
-                    """
-                    SELECT COUNT(1)
-                    FROM users u
-                    JOIN spaces s ON s.id = u.space_id
-                    WHERE u.username = ? AND s.org_id = ?
-                    """,
-                    Integer.class,
-                    username,
-                    orgId
-            );
-            boolean exists = c != null && c > 0;
-            log.debug("existsByUsernameInOrg: username={}, orgId={} -> {}", username, orgId, exists);
-            return exists;
-        } catch (Exception e) {
-            log.error("existsByUsernameInOrg failed for username={}, orgId={}", username, orgId, e);
-            return false;
+    /** Classe une erreur technique : indisponibilité temporaire (503) ou erreur structurelle (500). */
+    private RuntimeException technicalFailure(String operation, RuntimeException e) {
+        log.error("Boundary check could not {}", operation, e);
+        if (e instanceof TransientDataAccessException || e instanceof DataAccessResourceFailureException) {
+            return new BoundaryCheckUnavailableException("Boundary store unavailable: " + operation, e);
         }
+        return new BoundaryCheckFailedException("Boundary check failed: " + operation, e);
     }
 
-    private record ActorIds(UUID userId, UUID accountId, String username) {}
+    private record ActorIds(UUID userId, UUID accountId) {}
 
+    /**
+     * Seule forme d'Authentication supportée : le carrier TAKIBO (contrat d'identité IAM-JWT-01).
+     * Les identifiants sont lus depuis leurs attributs explicites ; les autres formes n'ont pas de
+     * producteur dans l'exécution et sont refusées plutôt que devinées.
+     */
     private Optional<ActorIds> extractActorIds(Authentication auth) {
-        if (auth == null || !auth.isAuthenticated()) return Optional.empty();
-
-        // 1) Token custom Takibo (nouveau)
         if (auth instanceof TakiboSecurityContextCarrier carrier) {
             TakiboSecurityContext ctx = carrier.getSecurityContext();
 
@@ -184,43 +221,12 @@ public class BoundaryMembershipService {
             UUID accountId = ctx.attributes().get(StandardAttributeKeys.ACCOUNT_ID, UUID.class).orElse(null);
             UUID userId = ctx.attributes().get(StandardAttributeKeys.USER_ID, UUID.class).orElse(null);
 
-            // IMPORTANT:
-            // Notre contrat core ne met pas "username" en V1.
-            // Donc on prend le principalName (string) si disponible.
-            String username = null;
-            Object p = auth.getPrincipal();
-            if (p instanceof String s && !s.isBlank()) {
-                username = s;
-            }
+            log.debug("Extracted from TakiboSecurityContextCarrier: accountId={}, userId={}", accountId, userId);
 
-            log.debug("Extracted from TakiboSecurityContextCarrier: accountId={}, userId={}, username={}",
-                    accountId, userId, username);
-
-            return Optional.of(new ActorIds(userId, accountId, username));
+            return Optional.of(new ActorIds(userId, accountId));
         }
 
-        // 2) JwtAuthenticationToken Spring resource server
-        if (auth instanceof org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken jat) {
-            Map<String, Object> m = jat.getTokenAttributes();
-            return Optional.of(new ActorIds(
-                    parseUuid(m.get("userId"), m.get("sub")),
-                    parseUuid(m.get("accountId")),
-                    parseString(m.get("preferred_username"), m.get("username"), m.get("upn"), m.get("sub"))
-            ));
-        }
-
-        // 3) Jwt direct
-        Object p = auth.getPrincipal();
-        if (p instanceof org.springframework.security.oauth2.jwt.Jwt jwt) {
-            Map<String, Object> m = jwt.getClaims();
-            return Optional.of(new ActorIds(
-                    parseUuid(m.get("userId"), m.get("sub")),
-                    parseUuid(m.get("accountId")),
-                    parseString(m.get("preferred_username"), m.get("username"), m.get("upn"), m.get("sub"))
-            ));
-        }
-
-        log.warn("Could not extract actor identity from authentication: {}", auth.getClass().getName());
+        log.warn("Unsupported authentication form for boundary check: {}", auth.getClass().getName());
         return Optional.empty();
     }
 
@@ -246,21 +252,6 @@ public class BoundaryMembershipService {
         return false;
     }
 
-    private UUID parseUuid(Object... vals) {
-        for (Object v : vals) {
-            if (v instanceof UUID u) return u;
-            if (v instanceof String s && !s.isBlank()) {
-                try { return UUID.fromString(s); } catch (Exception ignored) {}
-            }
-        }
-        return null;
-    }
-
-    private String parseString(Object... vals) {
-        for (Object v : vals) if (v instanceof String s && !s.isBlank()) return s;
-        return null;
-    }
-
     private UUID tryParseUuid(String s) {
         if (s == null || s.isBlank()) return null;
         try {
@@ -277,7 +268,7 @@ public class BoundaryMembershipService {
     }
 
     private record CacheEntry(UUID value, Instant at) {
-        boolean isExpired(Duration ttl) { return Instant.now().isAfter(at.plus(ttl)); }
+        boolean isExpired(Duration ttl, Clock clock) { return clock.instant().isAfter(at.plus(ttl)); }
     }
 
     private UUID readUuid(ResultSet rs, int index) throws SQLException {
