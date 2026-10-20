@@ -224,6 +224,7 @@ La seule forme produite en exécution est `JwtAuthenticationToken` TAKIBO (carri
 | J8 | Décision §12.3 ; refus explicites dans SEC-TMS-06 |
 | J9 | Gardes inchangées ; `SpaceSurfaceSecurityIntegrationTest` et tests `SpaceBoundaryGuard` existants |
 | `currentUserId` / audit | `CurrentActorProviderImplTest` |
+| Smoke HTTP (application démarrée, PostgreSQL) | Collection Postman, dossier 08, requêtes « Frontiere membership » : jeton ORGANIZATION refusé sur route SPACE, space A refusé sur space B, employé sans pouvoir refusé, membre SPACE franchit la frontière, UUID invalide rejeté. Jouées avec Newman sur `main` et sur cette branche : mêmes résultats (garde-fous de non-régression). |
 
 Limites : les tests PostgreSQL et Docker de `takibo-iam-boot` ne sont pas exécutables dans l’environnement de rédaction (ignorés, donc non probants) ; la CI en fait foi. J6 sur des alias contradictoires dans les branches `JwtAuthenticationToken`/`Jwt` direct reste couvert par SEC-TMS-06.
 
