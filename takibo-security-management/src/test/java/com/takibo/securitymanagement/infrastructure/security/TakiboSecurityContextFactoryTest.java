@@ -45,6 +45,7 @@ class TakiboSecurityContextFactoryTest {
     @Test
     void absentSubjectTypeWithAccountId_fallsBackToHuman() {
         TakiboSecurityContext context = TakiboSecurityContextFactory.from(Map.of(
+                "sub", ACCOUNT_ID.toString(),
                 "accountId", ACCOUNT_ID.toString(),
                 "orgId", ORG_ID.toString()
         ), request());
@@ -113,6 +114,7 @@ class TakiboSecurityContextFactoryTest {
     void accountAndUserClaims_populateAttributes() {
         TakiboSecurityContext context = TakiboSecurityContextFactory.from(Map.of(
                 "subjectType", "HUMAN",
+                "sub", ACCOUNT_ID.toString(),
                 "accountId", ACCOUNT_ID.toString(),
                 "userId", USER_ID.toString(),
                 "orgId", ORG_ID.toString(),
@@ -127,6 +129,7 @@ class TakiboSecurityContextFactoryTest {
     void scopeLevelClaim_populatesAttributes() {
         TakiboSecurityContext context = TakiboSecurityContextFactory.from(Map.of(
                 "subjectType", "HUMAN",
+                "sub", ACCOUNT_ID.toString(),
                 "accountId", ACCOUNT_ID.toString(),
                 "orgId", ORG_ID.toString(),
                 "scopeLevel", "ORGANIZATION"
@@ -230,6 +233,38 @@ class TakiboSecurityContextFactoryTest {
         assertThat(context.subject().nature()).isEqualTo(SubjectNature.SERVICE);
         assertThat(context.attributes().get(StandardAttributeKeys.USER_ID, UUID.class)).isEmpty();
         assertThat(context.attributes().get(StandardAttributeKeys.ACCOUNT_ID, UUID.class)).isEmpty();
+    }
+
+    @Test
+    void humanWithAccountIdButNoSub_isRejected() {
+        for (Map<String, Object> claims : List.of(
+                Map.<String, Object>of("subjectType", "HUMAN", "accountId", ACCOUNT_ID.toString(),
+                        "orgId", ORG_ID.toString()),
+                Map.<String, Object>of("accountId", ACCOUNT_ID.toString(), "orgId", ORG_ID.toString()))) {
+            assertThatThrownBy(() -> TakiboSecurityContextFactory.from(claims, request()))
+                    .isInstanceOf(InvalidTakiboSecurityContextException.class)
+                    .hasMessage("Human token with account_id must carry sub");
+        }
+    }
+
+    @Test
+    void nonHumanTokenCarryingHumanIdentity_isRejected() {
+        for (String subjectType : List.of("CLIENT_APP", "SERVICE", "SERVICE_ACCOUNT")) {
+            for (Map<String, Object> human : List.of(
+                    Map.<String, Object>of("accountId", ACCOUNT_ID.toString()),
+                    Map.<String, Object>of("userId", USER_ID.toString()),
+                    Map.<String, Object>of("accountId", ACCOUNT_ID.toString(), "userId", USER_ID.toString(),
+                            "orgId", ORG_ID.toString(), "spaceId", SPACE_ID.toString()))) {
+                Map<String, Object> claims = new java.util.HashMap<>(human);
+                claims.put("subjectType", subjectType);
+                claims.put("sub", "client-x");
+
+                assertThatThrownBy(() -> TakiboSecurityContextFactory.from(claims, request()))
+                        .as(subjectType + " " + human.keySet())
+                        .isInstanceOf(InvalidTakiboSecurityContextException.class)
+                        .hasMessage("Non-human token must not carry account_id or user_id");
+            }
+        }
     }
 
     @Test

@@ -177,13 +177,13 @@ Ce contrat formalise l’ADR 0001 ; il ne le modifie pas. Il remplace la « cibl
 
 | Profil | Reconnaissance | `subjectId` du contexte | `ACCOUNT_ID` | `USER_ID` | Règles imposées par la factory |
 | --- | --- | --- | --- | --- | --- |
-| Humain ORGANIZATION | `subject_type=HUMAN` + `account_id`, sans `user_id`/`space_id` | Account A | A | absent | `sub` = `account_id` ; `org_id` obligatoire |
+| Humain ORGANIZATION | `subject_type=HUMAN` + `account_id`, sans `user_id`/`space_id` | Account A | A | absent | `sub` **obligatoire** et égal à `account_id` ; `org_id` obligatoire |
 | Humain SPACE | idem, avec `user_id` et `space_id` | Account A | A | U | `sub` = `account_id` ; `org_id` ; `user_id` et `space_id` ensemble |
 | Humain hérité (sans `account_id`, p. ex. plateforme) | `subject_type=HUMAN` sans `account_id` | `sub`, à défaut `user_id` (comportement antérieur conservé) | absent | si présent | Jamais présenté comme Account ; ne bénéficie d’aucune appartenance déduite d’un Account |
 | Hérité sans `subject_type` | `account_id` présent | Account A | A | si présent | Mêmes contrôles que le profil canonique |
-| Machine (`CLIENT_APP`, `SERVICE`…) | `subject_type` non humain | `sub` (identité du client) | absent | absent | Aucun attribut humain inféré, même si `sub` est un UUID |
+| Machine (`CLIENT_APP`, `SERVICE`…) | `subject_type` non humain | `sub` (identité du client) | absent | absent | Aucun attribut humain inféré, même si `sub` est un UUID. Un jeton non humain portant `account_id` ou `user_id` est **rejeté** (les consommateurs lisent ces attributs sans revérifier la nature du sujet) |
 
-Tout jeton humain avec `account_id` dont `sub` diffère, dont `org_id` manque, ou dont `user_id` et `space_id` ne sont pas présents ensemble, est rejeté. Un UUID mal formé dans `account_id`, `user_id`, `org_id` ou `space_id` est rejeté. Le rejet est une `InvalidTakiboSecurityContextException` ; `JwtAuthenticationFilter` la traduit en la réponse publique d’un jeton invalide (`InvalidTokenException`, 401), sans détail. Aucun secours (username, `sub`, `user_id`) n’efface une incohérence.
+Tout jeton humain avec `account_id` dont `sub` est absent ou diffère, dont `org_id` manque, ou dont `user_id` et `space_id` ne sont pas présents ensemble, est rejeté. Un UUID mal formé dans `account_id`, `user_id`, `org_id` ou `space_id` est rejeté. Le rejet est une `InvalidTakiboSecurityContextException` ; `JwtAuthenticationFilter` la traduit en la réponse publique d’un jeton invalide (`InvalidTokenException`, 401), sans détail. Aucun secours (username, `sub`, `user_id`) n’efface une incohérence.
 
 ### 12.2 Responsabilités et points de contrôle
 
@@ -220,7 +220,7 @@ La seule forme produite en exécution est `JwtAuthenticationToken` TAKIBO (carri
 | --- | --- |
 | J1, J2, J3 | `HumanIdentityChainTest` (signeur réel → JWT → décodeur → adaptateur → filtre → Authentication → boundary) ; `TakiboSecurityContextFactoryTest` |
 | J4, J5, J6 | `TakiboSecurityContextFactoryTest` ; `HumanIdentityChainTest` (rejet 401 d’un jeton signé incohérent) |
-| J7 | `TakiboSecurityContextFactoryTest` ; `BoundaryMembershipServiceTest` |
+| J7 | `TakiboSecurityContextFactoryTest` (dont rejet d'un jeton non humain portant une identité humaine) ; `BoundaryMembershipServiceTest` |
 | J8 | Décision §12.3 ; refus explicites dans SEC-TMS-06 |
 | J9 | Gardes inchangées ; `SpaceSurfaceSecurityIntegrationTest` et tests `SpaceBoundaryGuard` existants |
 | `currentUserId` / audit | `CurrentActorProviderImplTest` |
