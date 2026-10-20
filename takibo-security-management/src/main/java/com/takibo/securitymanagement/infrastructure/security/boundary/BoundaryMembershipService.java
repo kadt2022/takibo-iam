@@ -25,6 +25,8 @@ import java.sql.SQLException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -93,9 +95,10 @@ public class BoundaryMembershipService {
 
         boolean ok;
         if (ids.userId != null) {
-            // Si le jeton porte aussi l'Account, le User doit lui appartenir : une paire A/U
-            // incohérente ne trouve aucune ligne et est refusée, sans autre essai.
-            ok = existsUserInOrg(ids.userId, ids.accountId, targetOrg);
+            // Le User doit appartenir à l'Account du jeton (s'il est porté) et au Space porté
+            // par le jeton (pas au Space cible : l'accès à celui-ci relève de SpaceBoundaryGuard).
+            // Une relation incohérente ne trouve aucune ligne et est refusée, sans autre essai.
+            ok = existsUserInOrg(ids.userId, ids.accountId, extractSpaceId(auth), targetOrg);
         } else if (ids.accountId != null) {
             ok = existsByAccountIdInOrg(ids.accountId, targetOrg);
         } else {
@@ -146,30 +149,26 @@ public class BoundaryMembershipService {
         return orgId;
     }
 
-    private boolean existsUserInOrg(UUID userId, UUID accountId, UUID orgId) {
+    private boolean existsUserInOrg(UUID userId, UUID accountId, UUID tokenSpaceId, UUID orgId) {
+        StringBuilder sql = new StringBuilder("""
+                SELECT COUNT(1)
+                FROM users u
+                JOIN spaces s ON s.id = u.space_id
+                WHERE u.id = ?""");
+        List<Object> args = new ArrayList<>();
+        args.add(userId);
+        if (accountId != null) {
+            sql.append(" AND u.account_id = ?");
+            args.add(accountId);
+        }
+        if (tokenSpaceId != null) {
+            sql.append(" AND u.space_id = ?");
+            args.add(tokenSpaceId);
+        }
+        sql.append(" AND s.org_id = ?");
+        args.add(orgId);
         try {
-            Integer c = accountId == null
-                    ? jdbc.queryForObject(
-                            """
-                            SELECT COUNT(1)
-                            FROM users u
-                            JOIN spaces s ON s.id = u.space_id
-                            WHERE u.id = ? AND s.org_id = ?
-                            """,
-                            Integer.class,
-                            userId,
-                            orgId)
-                    : jdbc.queryForObject(
-                            """
-                            SELECT COUNT(1)
-                            FROM users u
-                            JOIN spaces s ON s.id = u.space_id
-                            WHERE u.id = ? AND u.account_id = ? AND s.org_id = ?
-                            """,
-                            Integer.class,
-                            userId,
-                            accountId,
-                            orgId);
+            Integer c = jdbc.queryForObject(sql.toString(), Integer.class, args.toArray());
             return c != null && c > 0;
         } catch (RuntimeException e) {
             throw technicalFailure("check membership of userId=" + userId + " in orgId=" + orgId, e);
@@ -234,6 +233,13 @@ public class BoundaryMembershipService {
         if (auth instanceof TakiboSecurityContextCarrier carrier) {
             TakiboSecurityContext ctx = carrier.getSecurityContext();
             return tryParseUuid(ctx.tenant().organizationId());
+        }
+        return null;
+    }
+
+    private UUID extractSpaceId(Authentication auth) {
+        if (auth instanceof TakiboSecurityContextCarrier carrier) {
+            return tryParseUuid(carrier.getSecurityContext().tenant().spaceId());
         }
         return null;
     }

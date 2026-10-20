@@ -343,6 +343,70 @@ class BoundaryMembershipServiceTest {
         @Override public Instant instant() { return now; }
     }
 
+    private static final UUID TOKEN_SPACE_ID = UUID.fromString("bbbbbbbb-0000-0000-0000-000000000011");
+
+    @Test
+    void spaceToken_userMustBelongToTheTokenSpace_notToTheTargetSpace() {
+        // Cible : SPACE_ID (autre Space de la meme organisation). Jeton situe sur TOKEN_SPACE_ID.
+        resolveSpaceOrg(ORG_ID);
+        when(jdbc.queryForObject(contains("u.space_id = ?"), eq(Integer.class),
+                eq(USER_ID), eq(ACCOUNT_ID), eq(TOKEN_SPACE_ID), eq(ORG_ID))).thenReturn(1);
+        Authentication auth = carrierInSpace(TOKEN_SPACE_ID, Map.of(
+                StandardAttributeKeys.ACCOUNT_ID, ACCOUNT_ID,
+                StandardAttributeKeys.USER_ID, USER_ID));
+
+        // Reconnaitre l'appartenance a l'organisation via le Space du jeton suffit ; l'acces au
+        // Space cible reste interdit par SpaceBoundaryGuard, pas par ce controle.
+        service.assertActorInSpaceOrg(SPACE_ID, auth);
+
+        verify(jdbc, never()).queryForObject(contains("u.space_id = ?"), eq(Integer.class),
+                any(), any(), eq(SPACE_ID), any());
+    }
+
+    @Test
+    void spaceToken_withAUserOfAnotherSpace_isRefusedWithoutFallback() {
+        resolveSpaceOrg(ORG_ID);
+        when(jdbc.queryForObject(contains("u.space_id = ?"), eq(Integer.class),
+                eq(USER_ID), eq(ACCOUNT_ID), eq(TOKEN_SPACE_ID), eq(ORG_ID))).thenReturn(0);
+        when(jdbc.queryForObject(contains("WHERE u.account_id = ?"), eq(Integer.class), eq(ACCOUNT_ID), eq(ORG_ID)))
+                .thenReturn(1);
+        Authentication auth = carrierInSpace(TOKEN_SPACE_ID, Map.of(
+                StandardAttributeKeys.ACCOUNT_ID, ACCOUNT_ID,
+                StandardAttributeKeys.USER_ID, USER_ID));
+
+        assertThatThrownBy(() -> service.assertActorInSpaceOrg(SPACE_ID, auth))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessage("ACTOR_NOT_IN_SPACE_ORG");
+
+        verify(jdbc, never()).queryForObject(contains("WHERE u.account_id = ?"), eq(Integer.class), any(), any());
+    }
+
+    @Test
+    void organizationToken_withoutSpace_isStillRecognizedByItsAccount() {
+        resolveSpaceOrg(ORG_ID);
+        when(jdbc.queryForObject(contains("WHERE u.account_id = ?"), eq(Integer.class), eq(ACCOUNT_ID), eq(ORG_ID)))
+                .thenReturn(1);
+
+        service.assertActorInSpaceOrg(SPACE_ID, organizationHuman());
+    }
+
+    @Test
+    void orgRoleBypass_skipsIdentityChecks_soTheSpaceInvariantIsNotAppliedThere() {
+        // Caracterisation (non modifiee) : ORG_ADMIN/ORG_OWNER dont l'organisation du jeton est
+        // la cible sortent avant toute lecture d'identite ; l'invariant U-Space du jeton ne
+        // s'y applique donc pas. Les claims restent controles par la factory (coherence sub,
+        // org, user/space), et SpaceBoundaryGuard reste exige.
+        resolveSpaceOrg(ORG_ID);
+        Authentication auth = carrierInSpace(TOKEN_SPACE_ID, Map.of(
+                StandardAttributeKeys.ACCOUNT_ID, ACCOUNT_ID,
+                StandardAttributeKeys.USER_ID, USER_ID));
+        when(auth.getAuthorities()).thenAnswer(i -> List.of(new SimpleGrantedAuthority("R_ORG_OWNER")));
+
+        service.assertActorInSpaceOrg(SPACE_ID, auth);
+
+        verify(jdbc, never()).queryForObject(contains("FROM users u"), eq(Integer.class), any());
+    }
+
     private void resolveSpaceOrg(UUID orgId) {
         when(jdbc.queryForObject(anyString(), any(RowMapper.class), eq(SPACE_ID))).thenReturn(orgId);
     }
@@ -365,6 +429,20 @@ class BoundaryMembershipServiceTest {
                 .temporal(new TemporalContext(Instant.now(), null, null, 1))
                 .attributes(new ContextAttributeStore(Map.of(StandardAttributeKeys.USER_ID, USER_ID)))
                 .build();
+    }
+
+    private Authentication carrierInSpace(UUID tokenSpaceId, Map<AttributeKey, Object> attributes) {
+        Authentication auth = mock(Authentication.class, withSettings().extraInterfaces(TakiboSecurityContextCarrier.class));
+        when(auth.isAuthenticated()).thenReturn(true);
+        doReturn(List.of()).when(auth).getAuthorities();
+        TakiboSecurityContext ctx = TakiboSecurityContext.builder()
+                .subject(new SubjectIdentity(ACCOUNT_ID.toString(), SubjectNature.HUMAN, Set.of(), AuthenticationMethod.PASSWORD))
+                .tenant(new TenantScope(ORG_ID.toString(), tokenSpaceId.toString()))
+                .temporal(new TemporalContext(Instant.now(), null, null, 1))
+                .attributes(new ContextAttributeStore(attributes))
+                .build();
+        when(((TakiboSecurityContextCarrier) auth).getSecurityContext()).thenReturn(ctx);
+        return auth;
     }
 
     private Authentication carrier(String subjectId, SubjectNature nature, Map<AttributeKey, Object> attributes) {

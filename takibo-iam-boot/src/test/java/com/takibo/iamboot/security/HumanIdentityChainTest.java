@@ -130,8 +130,9 @@ class HumanIdentityChainTest {
     void spaceAndOrganizationTokens_passTheMembershipCheck_throughTheirExplicitIdentifiers() throws Exception {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
         when(jdbc.queryForObject(anyString(), any(RowMapper.class), eq(SPACE_2))).thenReturn(ORG_ID);
-        when(jdbc.queryForObject(contains("u.account_id = ?"), eq(Integer.class), eq(USER_1), eq(ACCOUNT_A), eq(ORG_ID)))
-                .thenReturn(1);
+        // Le User est cherché dans le Space du jeton (SPACE_1), pas dans le Space cible (SPACE_2).
+        when(jdbc.queryForObject(contains("u.space_id = ?"), eq(Integer.class),
+                eq(USER_1), eq(ACCOUNT_A), eq(SPACE_1), eq(ORG_ID))).thenReturn(1);
         when(jdbc.queryForObject(contains("WHERE u.account_id = ?"), eq(Integer.class), eq(ACCOUNT_A), eq(ORG_ID)))
                 .thenReturn(1);
         BoundaryMembershipService boundary = new BoundaryMembershipService(jdbc);
