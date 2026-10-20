@@ -16,9 +16,17 @@ final class TakiboSecurityContextFactory {
     private TakiboSecurityContextFactory() {
     }
 
+    /**
+     * Construit le contexte à partir de claims déjà vérifiés cryptographiquement. Loi d'identité
+     * (IAM-JWT-01) : pour un humain, {@code subjectId} est l'Account ({@code account_id}, égal à
+     * {@code sub}) ; le User local reste dans l'attribut {@code USER_ID}. Une incohérence est
+     * rejetée sans secours (jamais un identifiant substitué à un autre).
+     */
     static TakiboSecurityContext from(Map<String, Object> claims, HttpServletRequest request) {
-        UUID accountId = ClaimReader.readUuid(claims, "accountId");
-        UUID userId = ClaimReader.readUuid(claims, "userId");
+        UUID accountId = readUuid(claims, "accountId");
+        UUID userId = readUuid(claims, "userId");
+        UUID orgIdClaim = readUuid(claims, "orgId");
+        UUID spaceIdClaim = readUuid(claims, "spaceId");
         String sub = ClaimReader.readString(claims, "sub");
         String subjectType = ClaimReader.readString(claims, "subjectType");
         String scopeLevel = ClaimReader.readString(claims, "scopeLevel");
@@ -42,14 +50,7 @@ final class TakiboSecurityContextFactory {
             subjectNature = SubjectNature.SERVICE;
             authMethod = AuthenticationMethod.OAUTH2;
         } else {
-            actorId = firstNonBlank(
-                    userId != null ? userId.toString() : null,
-                    sub,
-                    accountId != null ? accountId.toString() : null
-            );
-            if (actorId == null) {
-                throw new InvalidTakiboSecurityContextException("Human token must identify its subject");
-            }
+            actorId = humanSubjectId(accountId, userId, sub, orgIdClaim, spaceIdClaim);
             subjectNature = SubjectNature.HUMAN;
             authMethod = "PASSWORD".equals(authMethodClaim)
                     ? AuthenticationMethod.PASSWORD
@@ -65,8 +66,8 @@ final class TakiboSecurityContextFactory {
                 authMethod
         );
 
-        String orgId = uuidToString(ClaimReader.readUuid(claims, "orgId"));
-        String spaceId = uuidToString(ClaimReader.readUuid(claims, "spaceId"));
+        String orgId = uuidToString(orgIdClaim);
+        String spaceId = uuidToString(spaceIdClaim);
 
         TenantScope tenant = new TenantScope(orgId, spaceId);
 
@@ -134,6 +135,42 @@ final class TakiboSecurityContextFactory {
                 .temporal(temporal)
                 .attributes(new ContextAttributeStore(attributes))
                 .build();
+    }
+
+    /**
+     * Sujet humain : l'Account quand le jeton le porte (profil canonique TAS), avec contrôle de
+     * cohérence. Sans {@code account_id} (profil hérité, p. ex. plateforme), le comportement
+     * antérieur est conservé : {@code sub}, à défaut {@code userId} ; cet identifiant n'est alors
+     * jamais présenté comme un Account.
+     */
+    private static String humanSubjectId(UUID accountId, UUID userId, String sub,
+                                         UUID orgId, UUID spaceId) {
+        if (accountId == null) {
+            String legacy = firstNonBlank(sub, userId != null ? userId.toString() : null);
+            if (legacy == null) {
+                throw new InvalidTakiboSecurityContextException("Human token must identify its subject");
+            }
+            return legacy;
+        }
+        if (sub != null && !sub.equalsIgnoreCase(accountId.toString())) {
+            throw new InvalidTakiboSecurityContextException("Human token sub must equal account_id");
+        }
+        if (orgId == null) {
+            throw new InvalidTakiboSecurityContextException("Human token with account_id must carry org_id");
+        }
+        if ((userId == null) != (spaceId == null)) {
+            throw new InvalidTakiboSecurityContextException(
+                    "Human token must carry user_id and space_id together, or neither");
+        }
+        return accountId.toString();
+    }
+
+    private static UUID readUuid(Map<String, Object> claims, String key) {
+        try {
+            return ClaimReader.readUuid(claims, key);
+        } catch (IllegalArgumentException e) {
+            throw new InvalidTakiboSecurityContextException("Malformed identity claim: " + key, e);
+        }
     }
 
     private static String uuidToString(UUID uuid) {

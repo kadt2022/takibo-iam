@@ -1,6 +1,7 @@
 package com.takibo.securitymanagement.infrastructure.security.boundary;
 
 import com.takibo.identitycore.domain.catalogrbac.TechnicalRole;
+import com.takibo.securitycontext.model.StandardAttributeKeys;
 import com.takibo.securitycontext.model.TakiboSecurityContext;
 import com.takibo.securitycontext.spi.TakiboSecurityContextCarrier;
 import lombok.RequiredArgsConstructor;
@@ -177,8 +178,11 @@ public class BoundaryMembershipService {
         if (auth instanceof TakiboSecurityContextCarrier carrier) {
             TakiboSecurityContext ctx = carrier.getSecurityContext();
 
-            UUID accountId = extractAccountIdFromActorIdOrNull(ctx.subject().subjectId()); // fallback si tu encodes accountId en subjectId
-            UUID userId = extractUserIdFromActorIdOrNull(ctx.subject().subjectId());
+            // Loi d'identité (IAM-JWT-01) : subjectId est l'Account pour un humain, jamais un User.
+            // Account et User sont lus depuis leurs attributs explicites ; rien n'est déduit du
+            // subjectId (un UUID ne révèle pas son type, p. ex. le sub d'un client machine).
+            UUID accountId = ctx.attributes().get(StandardAttributeKeys.ACCOUNT_ID, UUID.class).orElse(null);
+            UUID userId = ctx.attributes().get(StandardAttributeKeys.USER_ID, UUID.class).orElse(null);
 
             // IMPORTANT:
             // Notre contrat core ne met pas "username" en V1.
@@ -189,14 +193,8 @@ public class BoundaryMembershipService {
                 username = s;
             }
 
-            // Si subjectId est un UUID d'user (cas courant), userId = subjectId.
-            // accountId n'est pas dans V1 core -> on garde ce fallback minimal.
-            if (userId == null) {
-                userId = tryParseUuid(ctx.subject().subjectId());
-            }
-
-            log.debug("Extracted from TakiboSecurityContextCarrier: subjectId={}, userId={}, username={}",
-                    ctx.subject().subjectId(), userId, username);
+            log.debug("Extracted from TakiboSecurityContextCarrier: accountId={}, userId={}, username={}",
+                    accountId, userId, username);
 
             return Optional.of(new ActorIds(userId, accountId, username));
         }
@@ -270,17 +268,6 @@ public class BoundaryMembershipService {
         } catch (Exception e) {
             return null;
         }
-    }
-
-    private UUID extractUserIdFromActorIdOrNull(String actorId) {
-        // V1: on suppose que subjectId peut être userId (UUID). Si ce n’est pas le cas => null.
-        return tryParseUuid(actorId);
-    }
-
-    private UUID extractAccountIdFromActorIdOrNull(String actorId) {
-        // V1: rien dans le contrat pour accountId.
-        // Si tu veux, on fera V1.2 avec ActorIdentity enrichi (accountId séparé).
-        return null;
     }
 
     private boolean isPlatformAdmin(Authentication auth) {

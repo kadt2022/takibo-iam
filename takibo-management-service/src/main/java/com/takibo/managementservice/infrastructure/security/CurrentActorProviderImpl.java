@@ -35,9 +35,10 @@ public class CurrentActorProviderImpl implements CurrentActorProvider {
         }
 
         if (authentication instanceof TakiboSecurityContextCarrier carrier) {
+            // Le sujet est l'Account (IAM-JWT-01) : jamais un User. Un jeton ORGANIZATION,
+            // sans projection locale, n'a pas de user_id et échoue explicitement.
             return carrier.getSecurityContext().attributes()
                     .get(StandardAttributeKeys.USER_ID, UUID.class)
-                    .or(() -> parseUuid(carrier.getSecurityContext().subject().subjectId()))
                     .orElseThrow(() -> invalidActor(
                             "Authenticated human actor does not expose a valid user_id"));
         }
