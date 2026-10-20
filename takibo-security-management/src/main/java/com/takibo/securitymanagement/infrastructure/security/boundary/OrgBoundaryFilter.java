@@ -11,6 +11,9 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.TransientDataAccessException;
+import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.http.server.PathContainer;
@@ -84,12 +87,23 @@ public class OrgBoundaryFilter extends OncePerRequestFilter {
                 reject(e, req, res);
                 return;
             } catch (RuntimeException e) {
-                reject(new BoundaryCheckFailedException("Boundary check failed", e), req, res);
+                // Une panne peut surgir avant que le service n'entre dans ses blocs JDBC (ouverture
+                // de la transaction @Transactional) : elle arrive alors brute. Indisponibilité
+                // temporaire -> 503 ; tout le reste -> 500 générique.
+                reject(isTemporaryOutage(e)
+                        ? new BoundaryCheckUnavailableException("Boundary store unavailable", e)
+                        : new BoundaryCheckFailedException("Boundary check failed", e), req, res);
                 return;
             }
             req.setAttribute("TAKIBO_BOUNDARY_OK", Boolean.TRUE);
         }
         chain.doFilter(req, res);
+    }
+
+    private static boolean isTemporaryOutage(RuntimeException e) {
+        return e instanceof CannotCreateTransactionException
+                || e instanceof TransientDataAccessException
+                || e instanceof DataAccessResourceFailureException;
     }
 
     /** Arrête la chaîne : pas de marqueur boundary, cause conservée dans les logs avec le traceId. */

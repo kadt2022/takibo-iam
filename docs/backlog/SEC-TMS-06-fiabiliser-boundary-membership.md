@@ -128,6 +128,8 @@ Cette livraison suppose le contrat d’identité d’IAM-JWT-01 : le sujet humai
 
 Le filtre `OrgBoundaryFilter` s’exécute avant `ExceptionTranslationFilter` et le `@ControllerAdvice` : par construction, ses exceptions n’atteignaient pas Sentinel. Il traduit désormais lui-même chaque issue via `SentinelHttpErrorWriter`, arrête la chaîne et ne pose pas `TAKIBO_BOUNDARY_OK`. La cause reste dans les logs avec un `traceId` (celui du MDC, à défaut un identifiant généré et renvoyé dans la réponse). Le comportement antérieur n’a pas été rejoué sur l’ancien code ; D12 est donc établi par la structure de la chaîne, et le contrat est prouvé par les tests ci-dessous.
 
+Panne avant le service : l'intercepteur `@Transactional` peut échouer à ouvrir la transaction (`CannotCreateTransactionException`) avant que le service n'entre dans ses blocs JDBC ; l'exception arrive brute au filtre, qui la classe désormais comme indisponibilité temporaire (503) avec `TransientDataAccessException` et `DataAccessResourceFailureException`. Preuve en conditions réelles (application démarrée, PostgreSQL arrêté, jeton valide, cache du Space expiré) : 500 `INTERNAL_ERROR` sans ce correctif, 503 `SERVICE_UNAVAILABLE` avec.
+
 ### 10.2 Changements du service
 
 - Identité : `USER_ID` si présent, sinon `ACCOUNT_ID`, sinon refus. Avec `USER_ID`, le User doit appartenir à l’Account du jeton (s’il est porté) **et au Space porté par le jeton** ; une relation incohérente est refusée sans autre essai. Le User n’est pas exigé dans le Space **cible** : l’accès à celui-ci relève de `SpaceBoundaryGuard`, ce contrôle ne prouvant que l’appartenance à l’organisation. Aucun identifiant n’est déduit de `subjectId`.

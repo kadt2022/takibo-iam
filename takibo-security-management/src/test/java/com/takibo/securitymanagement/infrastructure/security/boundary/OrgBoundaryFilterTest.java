@@ -10,10 +10,13 @@ import com.takibo.securitymanagement.sentinel.rule.SentinelRuleHandlers;
 import com.takibo.securitymanagement.sentinel.rule.SentinelRuleRegistrar;
 import com.takibo.securitymanagement.sentinel.rule.SentinelRuleRegistry;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.QueryTimeoutException;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.transaction.CannotCreateTransactionException;
 
 import java.util.UUID;
 
@@ -104,6 +107,24 @@ class OrgBoundaryFilterTest {
         assertThat(r.response.getContentAsString()).doesNotContain("secret-host");
         assertThat(r.body().get("traceId").asText()).isNotBlank();
         assertThat(r.chain.getRequest()).isNull();
+    }
+
+    @Test
+    void outageWhileOpeningTheTransaction_isA503_notA500() throws Exception {
+        // L'intercepteur @Transactional echoue avant que le service n'entre dans ses blocs JDBC :
+        // l'exception arrive brute au filtre.
+        for (RuntimeException outage : new RuntimeException[]{
+                new CannotCreateTransactionException("Could not open JDBC Connection", new RuntimeException("down")),
+                new DataAccessResourceFailureException("down"),
+                new QueryTimeoutException("slow")}) {
+            doThrow(outage).when(membership).assertActorInSpaceOrg(eq(SPACE_ID), any());
+
+            Result r = call("/api/spaces/" + SPACE_ID + "/users");
+
+            assertThat(r.response.getStatus()).as(outage.getClass().getSimpleName()).isEqualTo(503);
+            assertThat(r.body().get("code").asText()).isEqualTo("SERVICE_UNAVAILABLE");
+            assertThat(r.chain.getRequest()).isNull();
+        }
     }
 
     @Test
