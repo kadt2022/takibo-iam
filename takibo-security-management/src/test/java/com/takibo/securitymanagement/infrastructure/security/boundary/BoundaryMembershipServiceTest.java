@@ -142,6 +142,26 @@ class BoundaryMembershipServiceTest {
         verify(jdbc, never()).queryForObject(contains("WHERE u.id = ?"), eq(Integer.class), eq(USER_ID), any());
     }
 
+    @Test
+    void spaceToken_whoseUserLookupFails_isNotRescuedByTheAccountOfAnotherUser() {
+        // Le User du jeton n'est plus dans l'organisation (supprime, deplace) mais l'Account en a
+        // un autre : l'appartenance de l'Account ne doit pas se substituer a celle du User.
+        resolveSpaceOrg(ORG_ID);
+        when(jdbc.queryForObject(contains("WHERE u.id = ?"), eq(Integer.class), eq(USER_ID), eq(ORG_ID)))
+                .thenReturn(0);
+        when(jdbc.queryForObject(contains("WHERE u.account_id = ?"), eq(Integer.class), eq(ACCOUNT_ID), eq(ORG_ID)))
+                .thenReturn(1);
+        Authentication auth = carrier(ACCOUNT_ID.toString(), SubjectNature.HUMAN, Map.of(
+                StandardAttributeKeys.ACCOUNT_ID, ACCOUNT_ID,
+                StandardAttributeKeys.USER_ID, USER_ID));
+
+        assertThatThrownBy(() -> service.assertActorInSpaceOrg(SPACE_ID, auth))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessage("ACTOR_NOT_IN_SPACE_ORG");
+
+        verify(jdbc, never()).queryForObject(contains("WHERE u.account_id = ?"), eq(Integer.class), any(), any());
+    }
+
     private void resolveSpaceOrg(UUID orgId) {
         when(jdbc.queryForObject(anyString(), any(RowMapper.class), eq(SPACE_ID))).thenReturn(orgId);
     }

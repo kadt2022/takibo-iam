@@ -65,10 +65,17 @@ public class BoundaryMembershipService {
 
         log.debug("Boundary check: spaceId={}, targetOrg={}, actorIds={}", spaceId, targetOrg, ids);
 
+        // Un identifiant explicite n'est jamais rattrapé par un autre : si le jeton désigne un User,
+        // seule l'appartenance de ce User compte ; l'Account sert aux jetons sans User
+        // (ORGANIZATION). Le repli par username (hérité) n'est tenté que sans identifiant.
         boolean ok = false;
-        if (ids.userId != null)           ok = existsByUserIdInOrg(ids.userId, targetOrg);
-        if (!ok && ids.accountId != null) ok = existsByAccountIdInOrg(ids.accountId, targetOrg);
-        if (!ok && ids.username != null)  ok = existsByUsernameInOrg(ids.username, targetOrg);
+        if (ids.userId != null) {
+            ok = existsByUserIdInOrg(ids.userId, targetOrg);
+        } else if (ids.accountId != null) {
+            ok = existsByAccountIdInOrg(ids.accountId, targetOrg);
+        } else if (ids.username != null) {
+            ok = existsByUsernameInOrg(ids.username, targetOrg);
+        }
 
         if (!ok) {
             log.warn("Boundary violation: spaceId={}, targetOrg={}, actorIds={}", spaceId, targetOrg, ids);

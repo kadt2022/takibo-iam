@@ -200,7 +200,7 @@ La seule forme produite en exécution est `JwtAuthenticationToken` TAKIBO (carri
 
 | Consommateur | Décision |
 | --- | --- |
-| `BoundaryMembershipService` (branche carrier) | Lit `ACCOUNT_ID`/`USER_ID` ; ne déduit plus rien du `subjectId` (J7). Changement minimal et indispensable : sinon tout humain SPACE serait refusé dès que `subjectId` devient A. Le reste du service relève de SEC-TMS-06. |
+| `BoundaryMembershipService` (branche carrier) | Lit `ACCOUNT_ID`/`USER_ID` ; ne déduit plus rien du `subjectId` (J7). Un identifiant explicite n'est jamais rattrapé par un autre : si le jeton désigne un User, seule l'appartenance de ce User compte (l'Account ne sert qu'aux jetons sans User). Changement minimal et indispensable : sinon tout humain SPACE serait refusé dès que `subjectId` devient A. Le reste du service relève de SEC-TMS-06. |
 | `CurrentActorProviderImpl` | `currentUserId` lit uniquement `USER_ID` ; échoue explicitement sur un jeton ORGANIZATION. `currentAccountId` inchangé (déjà `ACCOUNT_ID`). |
 | `SpringAuditActorProvider` | Plus de repli de l’Account sur `subjectId`. |
 | `TakibuAuditUserContextFilter` | Comportement inchangé (déprécié) ; sémantique de `getUserId()` documentée : `subjectId`, soit l’Account pour un humain. |
