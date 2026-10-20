@@ -43,6 +43,12 @@ final class TakiboSecurityContextFactory {
                 : accountId != null;
 
         if (!isHuman) {
+            // Séparation humain/machine : un jeton machine ne porte jamais d'identité humaine.
+            // Les consommateurs lisent ACCOUNT_ID/USER_ID sans revérifier la nature du sujet.
+            if (accountId != null || userId != null) {
+                throw new InvalidTakiboSecurityContextException(
+                        "Non-human token must not carry account_id or user_id");
+            }
             if (sub == null || sub.isBlank()) {
                 throw new InvalidTakiboSecurityContextException("Service token must contain a non-blank subject");
             }
@@ -152,7 +158,10 @@ final class TakiboSecurityContextFactory {
             }
             return legacy;
         }
-        if (sub != null && !sub.equalsIgnoreCase(accountId.toString())) {
+        if (sub == null) {
+            throw new InvalidTakiboSecurityContextException("Human token with account_id must carry sub");
+        }
+        if (!sub.equalsIgnoreCase(accountId.toString())) {
             throw new InvalidTakiboSecurityContextException("Human token sub must equal account_id");
         }
         if (orgId == null) {
