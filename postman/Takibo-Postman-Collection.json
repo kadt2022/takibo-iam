@@ -4081,6 +4081,451 @@
           ]
         },
         {
+          "name": "403 - Frontiere membership - Token de l organisation 2 refuse sur un space de l organisation 1",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder2_org_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/spaces/{{spaceId}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "spaces",
+                "{{spaceId}}",
+                "users"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('403 - Frontiere membership - Token de l organisation 2 refuse sur un space de l organisation 1', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});",
+                  "pm.test('403 - Frontiere membership - Token de l organisation 2 refuse sur un space de l organisation 1 - code public', function () {",
+                  "    pm.expect(pm.response.json().code).to.eql('ACCESS_DENIED');",
+                  "});",
+                  "// SEC-TMS-06 : la non-appartenance a l organisation du space est un refus 403 public generique.",
+                  "// Avant SEC-TMS-06 l exception du filtre boundary n atteignait pas Sentinel et produisait un 500."
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "403 - Frontiere membership - Token SPACE de l organisation 1 refuse sur un space de l organisation 2",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/spaces/{{spaceId2}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "spaces",
+                "{{spaceId2}}",
+                "users"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('403 - Frontiere membership - Token SPACE de l organisation 1 refuse sur un space de l organisation 2', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});",
+                  "pm.test('403 - Frontiere membership - Token SPACE de l organisation 1 refuse sur un space de l organisation 2 - code public', function () {",
+                  "    pm.expect(pm.response.json().code).to.eql('ACCESS_DENIED');",
+                  "});",
+                  "// Meme contrat dans l autre sens : une appartenance a O ne donne rien dans X."
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "404 - Frontiere membership - Space inexistant distingue d un refus",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/spaces/00000000-0000-0000-0000-0000000000ff/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "spaces",
+                "00000000-0000-0000-0000-0000000000ff",
+                "users"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('404 - Frontiere membership - Space inexistant distingue d un refus', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});",
+                  "pm.test('404 - Frontiere membership - Space inexistant distingue d un refus - code public', function () {",
+                  "    pm.expect(pm.response.json().code).to.eql('SPACE_NOT_FOUND');",
+                  "});",
+                  "// Seule l absence reelle du space donne SPACE_NOT_FOUND ; une panne n est jamais presentee comme une absence."
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "401 - Frontiere membership - Sans token refuse",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/spaces/{{spaceId}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "spaces",
+                "{{spaceId}}",
+                "users"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('401 - Frontiere membership - Sans token refuse', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});",
+                  "pm.test('401 - Frontiere membership - Sans token refuse - code public', function () {",
+                  "    pm.expect(pm.response.json().code).to.eql('AUTHENTICATION_FAILED');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "403 - Frontiere membership - Token ORGANIZATION refuse sur la route SPACE legacy",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_org_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/spaces/{{spaceId}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "spaces",
+                "{{spaceId}}",
+                "users"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('403 - Frontiere membership - Token ORGANIZATION refuse sur la route SPACE legacy', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});",
+                  "pm.test('403 - Frontiere membership - Token ORGANIZATION refuse sur la route SPACE legacy - code public', function () {",
+                  "    pm.expect(pm.response.json().code).to.eql('ACCESS_DENIED');",
+                  "});",
+                  "// Garde-fou de non-regression : l appartenance a l organisation ne vaut jamais permission ni contexte SPACE."
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "403 - Frontiere membership - Token du space A refuse sur le space B de la meme organisation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/spaces/{{spaceIdB}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "spaces",
+                "{{spaceIdB}}",
+                "users"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('403 - Frontiere membership - Token du space A refuse sur le space B de la meme organisation', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});",
+                  "pm.test('403 - Frontiere membership - Token du space A refuse sur le space B de la meme organisation - code public', function () {",
+                  "    pm.expect(pm.response.json().code).to.eql('ACCESS_DENIED');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "403 - Frontiere membership - Employe sans pouvoir refuse sur la route SPACE legacy",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employee_org_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/spaces/{{spaceId}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "spaces",
+                "{{spaceId}}",
+                "users"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('403 - Frontiere membership - Employe sans pouvoir refuse sur la route SPACE legacy', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});",
+                  "pm.test('403 - Frontiere membership - Employe sans pouvoir refuse sur la route SPACE legacy - code public', function () {",
+                  "    pm.expect(pm.response.json().code).to.eql('ACCESS_DENIED');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "400 - Frontiere membership - Token SPACE du membre franchit la frontiere",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/spaces/{{spaceId}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "spaces",
+                "{{spaceId}}",
+                "users"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('400 - Frontiere membership - Token SPACE du membre franchit la frontiere', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "pm.test('400 - Frontiere membership - Token SPACE du membre franchit la frontiere - code public', function () {",
+                  "    pm.expect(pm.response.json().code).to.eql('USER_CREATION_ERROR');",
+                  "});",
+                  "// Le corps vide est volontaire : 400 prouve que la frontiere et les gardes ont laisse passer le membre",
+                  "// jusqu au service, sans creer d utilisateur."
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "400 - Frontiere membership - UUID de space invalide rejete par le contrat de route",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/spaces/not-a-uuid/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "spaces",
+                "not-a-uuid",
+                "users"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('400 - Frontiere membership - UUID de space invalide rejete par le contrat de route', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "pm.test('400 - Frontiere membership - UUID de space invalide rejete par le contrat de route - code public', function () {",
+                  "    pm.expect(pm.response.json().code).to.eql('BAD_REQUEST');",
+                  "});",
+                  "// Caracterisation (D13) : le filtre boundary ne s active pas sur un UUID invalide ; la route le rejette."
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "403 - Plateforme - Token PLATFORM refuse sur les utilisateurs tenant",
           "request": {
             "method": "GET",

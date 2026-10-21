@@ -1,5 +1,6 @@
 package com.takibo.securitymanagement.infrastructure.security;
 
+import com.takibo.securitycontext.exception.InvalidTakiboSecurityContextException;
 import com.takibo.securitycontext.model.TakiboSecurityContext;
 import com.takibo.securitymanagement.domain.exception.InvalidTokenException;
 import com.takibo.securitymanagement.infrastructure.token.JwtValidationException;
@@ -72,6 +73,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         } catch (JwtValidationException e) {
             log.warn("Invalid JWT: {}", e.getMessage());
+            SecurityContextHolder.clearContext();
+            sentinelHttpErrorWriter.write(new InvalidTokenException("Token invalide ou expiré", e), request, response);
+        } catch (InvalidTakiboSecurityContextException e) {
+            // Identité signée mais incohérente ou malformée : même réponse publique qu'un jeton
+            // invalide, sans détail (la cause reste dans les logs).
+            log.warn("Rejected JWT with inconsistent identity: {}", e.getMessage());
             SecurityContextHolder.clearContext();
             sentinelHttpErrorWriter.write(new InvalidTokenException("Token invalide ou expiré", e), request, response);
         }

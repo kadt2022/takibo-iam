@@ -241,6 +241,47 @@ class CurrentActorProviderImplTest {
                 .hasMessage("SYSTEM actor is not allowed through an authenticated request");
     }
 
+    @Test
+    void currentUserId_withOrganizationToken_neverReturnsTheAccountAsUser() {
+        authenticateHuman(ACCOUNT_ID, Map.of(StandardAttributeKeys.ACCOUNT_ID, ACCOUNT_ID));
+        CurrentActorProviderImpl provider = provider();
+
+        assertThatThrownBy(provider::currentUserId)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Authenticated human actor does not expose a valid user_id");
+    }
+
+    @Test
+    void currentUserId_withSpaceToken_returnsUserAttributeNotTheAccountSubject() {
+        authenticateHuman(ACCOUNT_ID, Map.of(
+                StandardAttributeKeys.ACCOUNT_ID, ACCOUNT_ID,
+                StandardAttributeKeys.USER_ID, USER_ID));
+
+        assertThat(provider().currentUserId()).isEqualTo(USER_ID);
+    }
+
+    @Test
+    void currentUserId_withHumanSubjectButNoUserAttribute_failsClosed() {
+        authenticateHuman(USER_ID, Map.of());
+        CurrentActorProviderImpl provider = provider();
+
+        assertThatThrownBy(provider::currentUserId)
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    private void authenticateHuman(UUID subjectId, Map<com.takibo.securitycontext.model.AttributeKey, Object> attributes) {
+        TakiboSecurityContext context = TakiboSecurityContext.builder()
+                .subject(new SubjectIdentity(
+                        subjectId.toString(), SubjectNature.HUMAN, Set.of(), AuthenticationMethod.PASSWORD))
+                .tenant(new TenantScope(null, null))
+                .temporal(new TemporalContext(
+                        Instant.parse("2026-07-20T00:00:00Z"), null, "test", 1))
+                .attributes(new ContextAttributeStore(attributes))
+                .build();
+        SecurityContextHolder.getContext().setAuthentication(
+                new ContextCarryingAuthentication(subjectId.toString(), context));
+    }
+
     private void authenticateWithApplicationToken(SubjectNature nature) {
         TakiboSecurityContext context = TakiboSecurityContext.builder()
                 .subject(new SubjectIdentity(
