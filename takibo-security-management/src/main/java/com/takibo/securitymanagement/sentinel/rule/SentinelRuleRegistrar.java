@@ -1,6 +1,7 @@
 package com.takibo.securitymanagement.sentinel.rule;
 
 import com.takibo.identitycore.domain.exception.*;
+import com.takibo.securitymanagement.domain.exception.BoundaryCheckUnavailableException;
 import com.takibo.securitymanagement.domain.exception.InvalidTokenException;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -65,6 +66,7 @@ public final class SentinelRuleRegistrar {
         registry.register(UserNotActiveException.class, SentinelRuleHandlers::ruleUserNotActive);
 
         registry.register(InvalidTokenException.class, SentinelRuleHandlers::ruleInvalidToken);
+        registry.register(BoundaryCheckUnavailableException.class, SentinelRuleHandlers::ruleBoundaryUnavailable);
 
         // OAuth2 / Authorization Server exceptions (soft dependency)
         registry.tryRegister("com.takibo.authorizationserver.domain.exception.TakiboInvalidRequestException",
