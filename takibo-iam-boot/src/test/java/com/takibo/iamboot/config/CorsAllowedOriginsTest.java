@@ -29,13 +29,27 @@ class CorsAllowedOriginsTest {
             "ftp://app.example.test",
             "app.example.test",
             "https://",
-            "https://app example.test"
+            "https://app example.test",
+            "https://app.example.test:0",
+            "https://app.example.test:65536",
+            "https://app.example.test:99999"
     })
     void outsideDev_refusesEveryValueThatIsNotAnExactOrigin(String value) {
         refusal(false, value)
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining(CorsAllowedOrigins.PROPERTY)
                 .hasMessageContaining("« " + value + " »");
+    }
+
+    @Test
+    void acceptsTheExtremesOfTheValidPortRange() {
+        CorsAllowedOrigins origins = CorsAllowedOrigins.validate(List.of(
+                "https://app.example.test:1",
+                "https://admin.example.test:65535"), false);
+
+        assertThat(origins.exactOrigins()).containsExactly(
+                "https://app.example.test:1",
+                "https://admin.example.test:65535");
     }
 
     @Test

@@ -86,6 +86,7 @@ final class CorsAllowedOrigins {
         URI uri = parse(value);
         String scheme = requireHttpScheme(value, uri);
         requireBareAuthority(value, uri);
+        requireBrowserPort(value, uri.getPort());
 
         String host = uri.getHost().toLowerCase(Locale.ROOT);
         if ("http".equals(scheme) && !isLoopbackHost(host)) {
@@ -126,6 +127,17 @@ final class CorsAllowedOrigins {
         }
         if (uri.getRawFragment() != null) {
             throw refused(value, "une origine ne porte pas de fragment");
+        }
+    }
+
+    /**
+     * {@code java.net.URI} accepte tout entier comme port. Un navigateur n'émet aucune origine
+     * hors de 1 à 65535 : une telle valeur ne correspondrait jamais, et désactiverait en silence
+     * le frontend visé. Une faute de frappe doit empêcher le démarrage.
+     */
+    private static void requireBrowserPort(String value, int port) {
+        if (port != -1 && (port < 1 || port > 65535)) {
+            throw refused(value, "le port doit être compris entre 1 et 65535");
         }
     }
 

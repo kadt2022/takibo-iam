@@ -120,6 +120,7 @@ démarrage :
 | Origine opaque | `null` | refus de démarrer |
 | Chemin, requête, fragment, utilisateur | `https://app.example/cb` | refus de démarrer |
 | HTTP hors loopback | `http://app.example` | refus de démarrer |
+| Port hors de 1 à 65535 | `https://app.example:65536`, `https://app.example:0` | refus de démarrer |
 | Origine HTTPS exacte | `https://portail.example` | acceptée |
 
 - Les règles de forme sont celles de `ClientCorsOrigin`. Mettre la validation en commun
@@ -375,7 +376,7 @@ Choix tranchés à l'implémentation, là où le récit les laissait ouverts :
   ajouté : le processeur CORS vérifie aussi la méthode des requêtes réelles.
 - **Profil `ci`** : aucun fichier dédié, donc liste vide. La BVT n'envoie pas d'`Origin`.
 
-Tests : `CorsAllowedOriginsTest` (20), `CorsConfigStartupTest` (5, AC-08 à AC-11),
+Tests : `CorsAllowedOriginsTest` (24), `CorsConfigStartupTest` (5, AC-08 à AC-11),
 `CorsPolicyIntegrationTest` (8, vrai port, filtres servlet compris), plus la déclaration
 CORS vérifiée dans `SecurityConfigTest` et `TakiboAuthorizationServerConfigurationTest`.
 
