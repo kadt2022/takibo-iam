@@ -20,6 +20,11 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 
+/**
+ * Composant historique : {@code getUserId()} porte le {@code subjectId} du contexte, c'est-à-dire
+ * l'Account pour un humain (IAM-JWT-01) et l'identité du client pour une machine, malgré le nom
+ * du champ. L'identifiant du User local n'est pas exposé par ce contrat.
+ */
 @Deprecated
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE + 20)

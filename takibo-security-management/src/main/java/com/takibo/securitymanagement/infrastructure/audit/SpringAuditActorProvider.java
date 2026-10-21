@@ -26,10 +26,8 @@ public class SpringAuditActorProvider implements AuditActorProvider {
             UUID orgId = extractUuid(ctx.tenant() != null ? ctx.tenant().organizationId() : null);
             UUID spaceId = extractUuid(ctx.tenant() != null ? ctx.tenant().spaceId() : null);
 
-            if (accountId == null) {
-                accountId = extractUuid(ctx.subject() != null ? ctx.subject().subjectId() : null);
-            }
-
+            // Pas de repli sur subjectId : un identifiant d'un autre type ne doit jamais
+            // être consigné comme Account (IAM-JWT-01).
             String actorType = ctx.subject() != null ? ctx.subject().nature().name() : null;
             String actorSource = ctx.subject() != null ? ctx.subject().authenticationMethod().name() : null;
 
