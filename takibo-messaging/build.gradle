@@ -4,9 +4,7 @@ plugins {
 }
 
 dependencies {
-    implementation project(':takibo-outbox-spring-starter')
-    implementation project(':takibo-outbox-jpa')
-    implementation project(':takibo-outbox-core')
+    implementation project(':takibo-outbox')
 
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'com.fasterxml.jackson.core:jackson-databind'

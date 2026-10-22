@@ -14,10 +14,11 @@ include(
         "takibo-adp:core",
         "takibo-adp:spring",
         "takibo-adp:sample",
-        "takibo-outbox-core",
-        "takibo-outbox-jpa",
-        "takibo-outbox-spring",
-        "takibo-outbox-spring-starter",
+        "takibo-outbox",
+        "takibo-outbox:core",
+        "takibo-outbox:jpa",
+        "takibo-outbox:spring",
+        "takibo-outbox:starter",
         "takibo-messaging",
         "takibo-install-keys"
 )

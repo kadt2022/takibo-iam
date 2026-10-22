@@ -4,8 +4,8 @@ plugins {
 }
 
 dependencies {
-    implementation project(':takibo-outbox-core')
-    implementation project(':takibo-outbox-jpa')
+    implementation project(':takibo-outbox:core')
+    implementation project(':takibo-outbox:jpa')
 
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.boot:spring-boot-starter'
