@@ -21,3 +21,8 @@ dependencies {
 
     annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
 }
+dependencies {
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'jakarta.servlet:jakarta.servlet-api'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
