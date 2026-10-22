@@ -7,6 +7,7 @@ import com.takibo.outbox.jpa.mapper.OutboxJpaMapperImpl;
 import com.takibo.outbox.jpa.publisher.JpaOutboxPublisher;
 import com.takibo.outbox.jpa.repository.OutboxMessageRepository;
 import org.flywaydb.core.Flyway;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
@@ -41,13 +42,17 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *
  * PostgreSQL vient de Testcontainers quand Docker est disponible (CI). Sans Docker, on peut fournir
  * une base existante via TAKIBO_OUTBOX_IT_JDBC_URL / _USERNAME / _PASSWORD ; sinon le test est ignoré.
+ * Dans les deux cas, le test travaille dans un schéma jetable créé pour l'exécution puis supprimé :
+ * il ne lit ni n'efface jamais les données déjà présentes dans la base.
  */
 @SpringBootTest(classes = OutboxJpaRepositoryIntegrationTest.TestApp.class)
 @EnabledIf("databaseAvailable")
 class OutboxJpaRepositoryIntegrationTest {
 
     private static final String EXTERNAL_URL = System.getenv("TAKIBO_OUTBOX_IT_JDBC_URL");
+    private static final String SCHEMA = "outbox_it_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
     private static PostgreSQLContainer<?> postgres;
+    private static Flyway flyway;
 
     private static final Instant NOW = Instant.now().truncatedTo(ChronoUnit.MILLIS);
     private static final Instant STALE_BEFORE = NOW.minusSeconds(300);
@@ -80,13 +85,26 @@ class OutboxJpaRepositoryIntegrationTest {
             username = postgres.getUsername();
             password = postgres.getPassword();
         }
-        Flyway.configure().dataSource(url, username, password)
-                .locations("classpath:db/migration").cleanDisabled(false).load().migrate();
-        registry.add("spring.datasource.url", () -> url);
+        flyway = Flyway.configure().dataSource(url, username, password)
+                .schemas(SCHEMA).createSchemas(true)
+                .locations("classpath:db/migration").cleanDisabled(false).load();
+        flyway.migrate();
+        String isolatedUrl = url + (url.contains("?") ? "&" : "?") + "currentSchema=" + SCHEMA;
+        registry.add("spring.datasource.url", () -> isolatedUrl);
         registry.add("spring.datasource.username", () -> username);
         registry.add("spring.datasource.password", () -> password);
         registry.add("spring.jpa.hibernate.ddl-auto", () -> "none");
         registry.add("spring.flyway.enabled", () -> "false");
+    }
+
+    @AfterAll
+    static void dropIsolatedSchema() {
+        if (flyway != null) {
+            flyway.clean();
+        }
+        if (postgres != null) {
+            postgres.stop();
+        }
     }
 
     @SpringBootApplication(scanBasePackages = "com.takibo.outbox.jpa.repository")
