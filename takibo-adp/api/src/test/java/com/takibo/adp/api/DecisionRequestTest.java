@@ -44,7 +44,8 @@ class DecisionRequestTest {
         assertThat(request.roles()).isEmpty();
         assertThat(request.permissions()).isEmpty();
         assertThat(request.metadata()).isEmpty();
-        assertThatThrownBy(() -> request.roles().add("ADMIN")).isInstanceOf(UnsupportedOperationException.class);
+        Set<String> roles = request.roles();
+        assertThatThrownBy(() -> roles.add("ADMIN")).isInstanceOf(UnsupportedOperationException.class);
     }
 
     @Test

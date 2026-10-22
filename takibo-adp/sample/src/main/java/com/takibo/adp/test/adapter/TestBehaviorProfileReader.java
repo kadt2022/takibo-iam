@@ -32,54 +32,41 @@ public class TestBehaviorProfileReader implements BehaviorProfileReader {
     }
     
     private BehaviorProfileView createNormalUserProfile(String subjectId) {
-        return profile(subjectId,
-            "7a3f8b9c", 50, DAY * 30, HOUR,
+        Instant now = Instant.now();
+        return profile(subjectId, "7a3f8b9c",
+            new BehaviorProfileView.FingerprintStats(50, now.minusSeconds(DAY * 30), now.minusSeconds(HOUR)),
             new BehaviorProfileView.VelocityStats(5.0, 2.0, 100),
-            "CA", "Montreal", 40, HOUR);
+            new BehaviorProfileView.LocationStats("CA", "Montreal", 40, now.minusSeconds(HOUR)));
     }
     
     private BehaviorProfileView createAdminProfile(String subjectId) {
-        return profile(subjectId,
-            "admin123", 100, DAY * 90, 600,
+        Instant now = Instant.now();
+        return profile(subjectId, "admin123",
+            new BehaviorProfileView.FingerprintStats(100, now.minusSeconds(DAY * 90), now.minusSeconds(600)),
             new BehaviorProfileView.VelocityStats(3.0, 1.5, 200),
-            "CA", "Montreal", 80, 600);
+            new BehaviorProfileView.LocationStats("CA", "Montreal", 80, now.minusSeconds(600)));
     }
     
     private BehaviorProfileView createSuspiciousProfile(String subjectId) {
-        return profile(subjectId,
-            "suspicious1", 2, DAY, DAY,
+        Instant now = Instant.now();
+        return profile(subjectId, "suspicious1",
+            new BehaviorProfileView.FingerprintStats(2, now.minusSeconds(DAY), now.minusSeconds(DAY)),
             new BehaviorProfileView.VelocityStats(2.0, 0.5, 5),
-            "RU", "Moscow", 1, DAY);
+            new BehaviorProfileView.LocationStats("RU", "Moscow", 1, now.minusSeconds(DAY)));
     }
     
     private static BehaviorProfileView profile(
         String subjectId,
         String fingerprint,
-        int fingerprintSeenCount,
-        long fingerprintFirstSeenSecondsAgo,
-        long fingerprintLastSeenSecondsAgo,
+        BehaviorProfileView.FingerprintStats fingerprintStats,
         BehaviorProfileView.VelocityStats velocity,
-        String country,
-        String city,
-        int locationSeenCount,
-        long locationLastSeenSecondsAgo
+        BehaviorProfileView.LocationStats location
     ) {
-        Instant now = Instant.now();
-        
         return new BehaviorProfileView(
             subjectId,
-            Map.of(fingerprint, new BehaviorProfileView.FingerprintStats(
-                fingerprintSeenCount,
-                now.minusSeconds(fingerprintFirstSeenSecondsAgo),
-                now.minusSeconds(fingerprintLastSeenSecondsAgo)
-            )),
+            Map.of(fingerprint, fingerprintStats),
             velocity,
-            Map.of(country + ":" + city, new BehaviorProfileView.LocationStats(
-                country,
-                city,
-                locationSeenCount,
-                now.minusSeconds(locationLastSeenSecondsAgo)
-            ))
+            Map.of(location.country() + ":" + location.city(), location)
         );
     }
 }

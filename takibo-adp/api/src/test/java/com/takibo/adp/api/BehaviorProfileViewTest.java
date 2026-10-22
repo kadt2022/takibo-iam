@@ -27,7 +27,7 @@ class BehaviorProfileViewTest {
         assertThat(profile.velocity().avgPerMinute()).isEqualTo(4.5);
         assertThat(profile.velocity().stdDev()).isEqualTo(1.2);
         assertThat(profile.velocity().sampleCount()).isEqualTo(300L);
-        assertThat(profile.locations().get("FR:Paris"))
-                .isEqualTo(new BehaviorProfileView.LocationStats("FR", "Paris", 8, last));
+        assertThat(profile.locations())
+                .containsEntry("FR:Paris", new BehaviorProfileView.LocationStats("FR", "Paris", 8, last));
     }
 }

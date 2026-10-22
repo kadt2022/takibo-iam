@@ -167,7 +167,9 @@ class AdpContextEnricherTest {
         when(degraded.tenant()).thenReturn(null);
         when(degraded.transport()).thenReturn(null);
 
-        assertThatThrownBy(() -> enricher.buildRequest(degraded, http(), null, null))
+        MockHttpServletRequest http = http();
+
+        assertThatThrownBy(() -> enricher.buildRequest(degraded, http, null, null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("subjectId is required");
     }
