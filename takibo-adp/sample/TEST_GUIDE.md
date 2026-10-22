@@ -3,7 +3,7 @@
 ## Démarrage
 
 ```bash
-cd takibo-adp-test
+cd takibo-adp/sample
 ../gradlew bootRun
 ```
 
@@ -217,10 +217,10 @@ Si plusieurs evaluators timeout (simuler avec timeout très court) :
 
 ```bash
 # Test complet : user normal
-./gradlew :takibo-adp-test:test --tests TestSecurityIntegrationTest.testNormalUserAccess
+./gradlew :takibo-adp:sample:test --tests TestSecurityIntegrationTest.testNormalUserAccess
 
 # Test admin resource
-./gradlew :takibo-adp-test:test --tests TestSecurityIntegrationTest.testAdminResourceAccess
+./gradlew :takibo-adp:sample:test --tests TestSecurityIntegrationTest.testAdminResourceAccess
 ```
 
 ---

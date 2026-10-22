@@ -4,8 +4,8 @@ plugins {
 }
 
 dependencies {
-    api project(':takibo-adp-api')
-    api project(':takibo-adp-core')
+    api project(':takibo-adp:api')
+    api project(':takibo-adp:core')
 
     implementation project(':takibo-security-context')
     implementation project(':takibo-security-context-spring')

@@ -101,21 +101,14 @@ Defines reusable security context concepts shared across modules.
 
 Spring integration for the Takibo security context.
 
-### `takibo-adp-api`
+### `takibo-adp`
 
-Adaptive Decision Pipeline API module.
+Adaptive Decision Pipeline. Single entry point for consumers (`project(':takibo-adp')`), made of sub-modules that keep their boundaries.
 
-Defines the public contracts for adaptive authorization.
-
-### `takibo-adp-core`
-
-Core Adaptive Decision Pipeline implementation.
-
-Contains risk evaluation and decision logic.
-
-### `takibo-adp-spring`
-
-Spring integration for the Adaptive Decision Pipeline.
+- `takibo-adp:api` — public contracts for adaptive authorization.
+- `takibo-adp:core` — risk evaluation and decision logic, independent of Spring.
+- `takibo-adp:spring` — Spring integration for the Adaptive Decision Pipeline.
+- `takibo-adp:sample` — development and validation application, kept while ADP is under development.
 
 ### `takibo-outbox-core`
 
