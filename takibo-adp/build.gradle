@@ -1,0 +1,22 @@
+// Point d'entrée unique d'ADP : les consommateurs dépendent de ':takibo-adp' et reçoivent
+// le contrat (api), le moteur (core) et l'intégration Spring (spring). Les frontières internes
+// restent des sous-modules : core ne dépend pas de Spring, ce que le compilateur garantit.
+plugins {
+    id 'java-library'
+}
+
+dependencies {
+    api project(':takibo-adp:api')
+    api project(':takibo-adp:core')
+    api project(':takibo-adp:spring')
+}
+
+// Les sous-projets s'appelleraient « api », « core », « spring » : des noms de JAR ambigus,
+// que Spring Boot refuse en double dans l'application. On garde les noms d'origine.
+subprojects {
+    pluginManager.withPlugin('base') {
+        base {
+            archivesName = "takibo-adp-${project.name}"
+        }
+    }
+}

@@ -257,7 +257,7 @@ jobs:
       - uses: ./.github/actions/takibo-test-group
         with:
           group: adp
-          tasks: ':takibo-adp-api:test :takibo-adp-core:test :takibo-adp-spring:test :takibo-adp-test:test'
+          tasks: ':takibo-adp:api:test :takibo-adp:core:test :takibo-adp:spring:test :takibo-adp:sample:test'
 
   test-authorization:
     name: Takibo Tests - authorization
