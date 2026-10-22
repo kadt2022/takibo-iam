@@ -4,7 +4,7 @@
 
 ```bash
 cd takibo-adp/sample
-../gradlew bootRun
+../../gradlew bootRun
 ```
 
 L'application démarre sur **http://localhost:8080**
