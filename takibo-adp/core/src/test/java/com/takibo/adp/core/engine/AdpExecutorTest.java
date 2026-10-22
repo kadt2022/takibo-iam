@@ -10,10 +10,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -76,7 +78,9 @@ class AdpExecutorTest {
     }
 
     @Test
-    void evaluatorExceedingTheTimeout_becomesATimeoutResult_andTheOthersArePartialResults() throws Exception {
+    void evaluatorExceedingTheTimeout_becomesATimeoutResult() {
+        // Seul l'évaluateur bloqué est soumis : il reste bloqué bien au-delà du délai,
+        // le résultat ne dépend donc pas de l'ordonnancement des threads.
         CountDownLatch release = new CountDownLatch(1);
         ContextEvaluator slow = evaluator("slow", context -> {
             try {
@@ -88,20 +92,46 @@ class AdpExecutorTest {
         });
 
         try {
-            List<EvaluatorResult> results = new AdpExecutor(executorService).executeWithTimeout(List.of(
-                    StubEvaluator.ok("fast", 0.5, 10.0, 0.9, Recommendation.ALLOW), slow), CONTEXT, 100);
+            List<EvaluatorResult> results = new AdpExecutor(executorService)
+                    .executeWithTimeout(List.of(slow), CONTEXT, 100);
 
-            assertThat(results.get(0).getStatus()).isEqualTo(EvaluatorStatus.OK);
-            EvaluatorResult timeout = results.get(1);
-            assertThat(timeout.getEvaluatorName()).isEqualTo("slow");
-            assertThat(timeout.getStatus()).isEqualTo(EvaluatorStatus.TIMEOUT);
-            assertThat(timeout.getRiskScore()).isEqualTo(50.0);
-            assertThat(timeout.getConfidence()).isZero();
-            assertThat(timeout.getReason()).isEqualTo("Evaluation timeout");
-            assertThat(timeout.getRecommendation()).isEqualTo(Recommendation.CHALLENGE);
+            assertThat(results).singleElement().satisfies(timeout -> {
+                assertThat(timeout.getEvaluatorName()).isEqualTo("slow");
+                assertThat(timeout.getStatus()).isEqualTo(EvaluatorStatus.TIMEOUT);
+                assertThat(timeout.getRiskScore()).isEqualTo(50.0);
+                assertThat(timeout.getConfidence()).isZero();
+                assertThat(timeout.getReason()).isEqualTo("Evaluation timeout");
+                assertThat(timeout.getRecommendation()).isEqualTo(Recommendation.CHALLENGE);
+            });
         } finally {
             release.countDown();
         }
+    }
+
+    @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void partialCompletion_keepsFinishedResultsAndMarksCancelledOnesAsTimeouts() throws Exception {
+        // Exécuteur contrôlé : la première tâche s'exécute, la seconde est annulée comme
+        // invokeAll le fait à l'échéance. Aucune dépendance à l'horloge.
+        ExecutorService controlled = mock(ExecutorService.class);
+        when(controlled.invokeAll(anyList(), anyLong(), eq(TimeUnit.MILLISECONDS))).thenAnswer(invocation -> {
+            List<Callable<EvaluatorResult>> tasks = invocation.getArgument(0);
+            FutureTask<EvaluatorResult> finished = new FutureTask<>(tasks.get(0));
+            finished.run();
+            FutureTask<EvaluatorResult> cancelled = new FutureTask<>(tasks.get(1));
+            cancelled.cancel(true);
+            return (List) List.of(finished, cancelled);
+        });
+
+        List<EvaluatorResult> results = new AdpExecutor(controlled).executeWithTimeout(List.of(
+                StubEvaluator.ok("fast", 0.5, 10.0, 0.9, Recommendation.ALLOW),
+                StubEvaluator.ok("slow", 0.5, 10.0, 0.9, Recommendation.ALLOW)), CONTEXT, 100);
+
+        assertThat(results).extracting(EvaluatorResult::getEvaluatorName).containsExactly("fast", "slow");
+        assertThat(results.get(0).getStatus()).isEqualTo(EvaluatorStatus.OK);
+        assertThat(results.get(0).getRiskScore()).isEqualTo(10.0);
+        assertThat(results.get(1).getStatus()).isEqualTo(EvaluatorStatus.TIMEOUT);
+        assertThat(results.get(1).getReason()).isEqualTo("Evaluation timeout");
     }
 
     @Test
