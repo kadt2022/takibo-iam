@@ -19,3 +19,9 @@ takibo:
       # Poste de developpement : cle jetable, chaque redemarrage deconnecte tout le monde.
       # Acceptable ici, jamais en service.
       ephemeral: true
+  cors:
+    # Seul profil autorise a declarer un motif. Loopback plutot que le joker : un site visite
+    # depuis le poste de developpement ne doit pas pouvoir appeler le Takibo local.
+    allowed-origins:
+      - "http://localhost:[*]"
+      - "http://127.0.0.1:[*]"

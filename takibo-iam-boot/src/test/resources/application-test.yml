@@ -27,3 +27,8 @@ takibo:
       # Cles jetables : les tests qui verifient la persistance des cles la reactivent
       # explicitement et sement leur propre cle.
       ephemeral: true
+  cors:
+    # Liste exacte, comme en production : les tests prouvent le comportement servi, pas celui
+    # du poste de developpement. Aucun domaine reel.
+    allowed-origins:
+      - https://portail.example.test

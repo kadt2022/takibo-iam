@@ -100,6 +100,18 @@ takibo:
       # le chiffrement. Meme regle ephemeral que ci-dessus en developpement/test.
       user-code-hmac:
         key: ${TAKIBO_TAS_USER_CODE_HMAC_KEY:}
+  cors:
+    # SEC-TMS-05. Origines croisees acceptees, fournies par l'installation.
+    #
+    # TAKIBO_CORS_ALLOWED_ORIGINS : origines exactes separees par des virgules, par exemple
+    #   https://portail.example,https://admin.example
+    #
+    # Vide par defaut : aucune origine croisee acceptee. Une installation consommee de serveur
+    # a serveur n'en a besoin d'aucune, et un frontend servi par la meme origine non plus.
+    # Hors du profil dev, TAKIBO refuse de demarrer sur un joker, un motif, `null`, un chemin,
+    # une requete, un fragment, une information d'utilisateur ou du HTTP hors loopback.
+    # Les credentials CORS restent desactives, sans interrupteur.
+    allowed-origins: ${TAKIBO_CORS_ALLOWED_ORIGINS:}
   guard:
     space:
       whitelist:
