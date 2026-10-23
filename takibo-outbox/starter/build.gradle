@@ -9,6 +9,11 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-autoconfigure'
     annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
 
+    testImplementation project(':takibo-outbox:core')
+    testImplementation project(':takibo-outbox:jpa')
+    testImplementation 'io.micrometer:micrometer-core'
+    testImplementation 'org.springframework.data:spring-data-jpa'
+    testImplementation 'org.springframework:spring-tx'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
