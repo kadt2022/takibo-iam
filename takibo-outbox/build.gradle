@@ -1,0 +1,29 @@
+// Point d'entrée unique d'Outbox : les consommateurs dépendent de ':takibo-outbox' et reçoivent
+// le modèle (core), la persistance JPA (jpa), le traitement Spring (spring) et le starter qui porte
+// l'auto-configuration Spring Boot (starter). Les frontières internes restent des sous-modules.
+plugins {
+    id 'java-library'
+}
+
+dependencies {
+    api project(':takibo-outbox:core')
+    api project(':takibo-outbox:jpa')
+    api project(':takibo-outbox:spring')
+    api project(':takibo-outbox:starter')
+}
+
+subprojects {
+    // Gradle identifie un projet par groupe:nom. Sans groupe propre, ':takibo-outbox:core' et
+    // ':takibo-adp:core' (de même pour 'spring') seraient tous deux 'com.takibu:core' : Gradle n'en
+    // garderait qu'un dans l'application. Le groupe dédié lève cette ambiguïté.
+    group = 'com.takibu.outbox'
+
+    // Noms de JAR inchangés par rapport aux anciens modules racine.
+    pluginManager.withPlugin('base') {
+        base {
+            archivesName = project.name == 'starter'
+                    ? 'takibo-outbox-spring-starter'
+                    : "takibo-outbox-${project.name}"
+        }
+    }
+}

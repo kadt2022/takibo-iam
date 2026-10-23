@@ -110,21 +110,14 @@ Adaptive Decision Pipeline. Single entry point for consumers (`project(':takibo-
 - `takibo-adp:spring` — Spring integration for the Adaptive Decision Pipeline.
 - `takibo-adp:sample` — development and validation application, kept while ADP is under development.
 
-### `takibo-outbox-core`
+### `takibo-outbox`
 
-Core outbox contracts and domain concepts.
+Transactional outbox. Single entry point for consumers (`project(':takibo-outbox')`), made of sub-modules that keep their boundaries.
 
-### `takibo-outbox-jpa`
-
-JPA-based outbox persistence implementation.
-
-### `takibo-outbox-spring`
-
-Spring integration for outbox processing.
-
-### `takibo-outbox-spring-starter`
-
-Starter module for easier outbox integration.
+- `takibo-outbox:core` — core outbox contracts and domain concepts.
+- `takibo-outbox:jpa` — JPA-based outbox persistence implementation.
+- `takibo-outbox:spring` — Spring integration for outbox processing.
+- `takibo-outbox:starter` — Spring Boot starter carrying the outbox auto-configuration.
 
 ### `takibo-messaging`
 

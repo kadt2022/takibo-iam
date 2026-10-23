@@ -215,7 +215,7 @@ jobs:
       - uses: ./.github/actions/takibo-test-group
         with:
           group: outbox
-          tasks: ':takibo-outbox-core:test :takibo-outbox-jpa:test :takibo-outbox-spring:test :takibo-outbox-spring-starter:test'
+          tasks: ':takibo-outbox:core:test :takibo-outbox:jpa:test :takibo-outbox:spring:test :takibo-outbox:starter:test'
 
   test-security-context:
     name: Takibo Tests - security-context

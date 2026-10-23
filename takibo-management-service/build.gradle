@@ -24,9 +24,7 @@ dependencies {
     implementation project(':takibo-identity-core')
     implementation project(':takibo-security-context')
     implementation project(':takibo-audit')
-    implementation project(':takibo-outbox-spring-starter')
-    implementation project(':takibo-outbox-jpa')
-    implementation project(':takibo-outbox-core')
+    implementation project(':takibo-outbox')
     implementation project(':takibo-messaging')
 
     runtimeOnly 'org.postgresql:postgresql'
