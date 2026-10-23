@@ -14,6 +14,8 @@ dependencies {
     implementation 'org.springframework:spring-tx'
     implementation 'com.fasterxml.jackson.core:jackson-annotations'
     compileOnly 'org.mapstruct:mapstruct:1.6.3'
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
     annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
 
     testImplementation 'org.springframework.boot:spring-boot-starter-test'

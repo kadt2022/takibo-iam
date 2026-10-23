@@ -7,12 +7,16 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import lombok.Getter;
+import lombok.Setter;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
 import java.util.UUID;
 
+@Getter
+@Setter
 @Entity
 @Table(name = "outbox_messages")
 public class OutboxMessageEntity {
@@ -70,133 +74,5 @@ public class OutboxMessageEntity {
     private Instant updatedAt;
 
     public OutboxMessageEntity() {
-    }
-
-    public UUID getId() {
-        return id;
-    }
-
-    public void setId(UUID id) {
-        this.id = id;
-    }
-
-    public String getEventType() {
-        return eventType;
-    }
-
-    public void setEventType(String eventType) {
-        this.eventType = eventType;
-    }
-
-    public String getAggregateType() {
-        return aggregateType;
-    }
-
-    public void setAggregateType(String aggregateType) {
-        this.aggregateType = aggregateType;
-    }
-
-    public String getAggregateId() {
-        return aggregateId;
-    }
-
-    public void setAggregateId(String aggregateId) {
-        this.aggregateId = aggregateId;
-    }
-
-    public UUID getOrgId() {
-        return orgId;
-    }
-
-    public void setOrgId(UUID orgId) {
-        this.orgId = orgId;
-    }
-
-    public UUID getSpaceId() {
-        return spaceId;
-    }
-
-    public void setSpaceId(UUID spaceId) {
-        this.spaceId = spaceId;
-    }
-
-    public String getPayloadJson() {
-        return payloadJson;
-    }
-
-    public void setPayloadJson(String payloadJson) {
-        this.payloadJson = payloadJson;
-    }
-
-    public OutboxStatus getStatus() {
-        return status;
-    }
-
-    public void setStatus(OutboxStatus status) {
-        this.status = status;
-    }
-
-    public int getAttempts() {
-        return attempts;
-    }
-
-    public void setAttempts(int attempts) {
-        this.attempts = attempts;
-    }
-
-    public Instant getNextRunAt() {
-        return nextRunAt;
-    }
-
-    public void setNextRunAt(Instant nextRunAt) {
-        this.nextRunAt = nextRunAt;
-    }
-
-    public String getLastError() {
-        return lastError;
-    }
-
-    public void setLastError(String lastError) {
-        this.lastError = lastError;
-    }
-
-    public Instant getLockedAt() {
-        return lockedAt;
-    }
-
-    public void setLockedAt(Instant lockedAt) {
-        this.lockedAt = lockedAt;
-    }
-
-    public String getLockedBy() {
-        return lockedBy;
-    }
-
-    public void setLockedBy(String lockedBy) {
-        this.lockedBy = lockedBy;
-    }
-
-    public String getDedupKey() {
-        return dedupKey;
-    }
-
-    public void setDedupKey(String dedupKey) {
-        this.dedupKey = dedupKey;
-    }
-
-    public Instant getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(Instant createdAt) {
-        this.createdAt = createdAt;
-    }
-
-    public Instant getUpdatedAt() {
-        return updatedAt;
-    }
-
-    public void setUpdatedAt(Instant updatedAt) {
-        this.updatedAt = updatedAt;
     }
 }
