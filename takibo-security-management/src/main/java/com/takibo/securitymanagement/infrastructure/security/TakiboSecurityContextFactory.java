@@ -2,6 +2,7 @@ package com.takibo.securitymanagement.infrastructure.security;
 
 import com.takibo.securitycontext.exception.InvalidTakiboSecurityContextException;
 import com.takibo.securitycontext.model.*;
+import com.takibo.securitycontext.validation.TakiboSecurityContextValidators;
 
 import jakarta.servlet.http.HttpServletRequest;
 
@@ -83,7 +84,7 @@ final class TakiboSecurityContextFactory {
         );
 
         String forwardedFor = request.getHeader("X-Forwarded-For");
-        String ip = firstNonBlank(extractClientIp(forwardedFor), request.getRemoteAddr());
+        String ip = clientIp(forwardedFor, request.getRemoteAddr());
         String protocol = request.getScheme();
         String host = request.getServerName();
         int port = request.getServerPort();
@@ -191,6 +192,16 @@ final class TakiboSecurityContextFactory {
             if (v != null && !v.isBlank()) return v;
         }
         return null;
+    }
+
+    /**
+     * IP du client : la première valeur de X-Forwarded-For si c'est une IP littérale, sinon
+     * l'adresse de la connexion. L'en-tête est fourni par le client : un nom d'hôte ou une valeur
+     * quelconque (« unknown »…) est ignoré, sans résolution DNS ni rejet de la requête.
+     */
+    private static String clientIp(String forwardedFor, String remoteAddr) {
+        String forwarded = extractClientIp(forwardedFor);
+        return TakiboSecurityContextValidators.isIpLiteral(forwarded) ? forwarded : remoteAddr;
     }
 
     private static String extractClientIp(String forwardedFor) {
