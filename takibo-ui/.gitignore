@@ -32,3 +32,9 @@ test-results
 *.njsproj
 *.sln
 *.sw?
+
+# Monorepo takibo-iam : le .gitignore racine ignore ces motifs (images, .env.*) ;
+# ils sont réautorisés ici pour les ressources du frontend.
+!*.png
+!*.svg
+!.env.example
