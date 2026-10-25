@@ -1,0 +1,91 @@
+/*
+ * TAKIBO Design Tokens
+ * --------------------
+ * Source unique de verite pour les couleurs, espacements, rayons, ombres,
+ * typographies et transitions de TAKIBO UI. Aucun composant ne doit
+ * introduire de valeur brute : il consomme un token.
+ *
+ * Direction artistique (adoptee juil. 2026, d'apres les maquettes de Pi) :
+ * console d'administration professionnelle, systeme bi-theme. Primaire bleu
+ * confiant, cartes a ombre douce, semantique nette. Le SOMBRE est le defaut ;
+ * le CLAIR est une preference explicite via data-theme="light".
+ *
+ * Valeurs derivees des maquettes ; a remplacer par les hex exacts du designer.
+ */
+
+:root {
+  /* Theme SOMBRE (defaut) */
+  --tk-color-background: #0b0f19;
+  --tk-color-surface: #121a2b;
+  --tk-color-surface-elevated: #172033;
+
+  --tk-color-primary: #3b82f6;
+  --tk-color-primary-hover: #60a5fa;
+  --tk-color-on-primary: #ffffff;
+
+  --tk-color-text: #e9edf6;
+  --tk-color-text-muted: #94a3b8;
+
+  --tk-color-border: #24314b;
+  --tk-color-focus: #60a5fa;
+
+  --tk-color-danger: #f87171;
+  --tk-color-warning: #fbbf24;
+  --tk-color-success: #34d399;
+
+  --tk-shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 10px 28px -10px rgb(0 0 0 / 0.6);
+  --tk-shadow-focus: 0 0 0 3px rgb(96 165 250 / 0.3);
+
+  /* Tokens non chromatiques (communs aux deux themes) */
+  --tk-spacing-1: 0.25rem;
+  --tk-spacing-2: 0.5rem;
+  --tk-spacing-3: 0.75rem;
+  --tk-spacing-4: 1rem;
+  --tk-spacing-6: 1.5rem;
+  --tk-spacing-8: 2rem;
+  --tk-spacing-12: 3rem;
+  --tk-spacing-16: 4rem;
+
+  --tk-radius-sm: 0.5rem;
+  --tk-radius-md: 0.75rem;
+  --tk-radius-lg: 1rem;
+
+  --tk-font-sans:
+    'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial,
+    sans-serif;
+  --tk-font-size-xs: 0.75rem;
+  --tk-font-size-sm: 0.875rem;
+  --tk-font-size-md: 1rem;
+  --tk-font-size-lg: 1.25rem;
+  --tk-font-size-xl: 1.75rem;
+  --tk-font-weight-regular: 400;
+  --tk-font-weight-medium: 500;
+  --tk-font-weight-semibold: 600;
+  --tk-font-weight-bold: 700;
+
+  --tk-transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --tk-transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+:root[data-theme='light'] {
+  --tk-color-background: #f3f5f9;
+  --tk-color-surface: #ffffff;
+  --tk-color-surface-elevated: #ffffff;
+
+  --tk-color-primary: #2e6be6;
+  --tk-color-primary-hover: #2457c4;
+  --tk-color-on-primary: #ffffff;
+
+  --tk-color-text: #1e293b;
+  --tk-color-text-muted: #64748b;
+
+  --tk-color-border: #e4e8f0;
+  --tk-color-focus: #2e6be6;
+
+  --tk-color-danger: #dc2626;
+  --tk-color-warning: #d97706;
+  --tk-color-success: #16a34a;
+
+  --tk-shadow-card: 0 1px 2px rgb(16 24 40 / 0.05), 0 6px 16px -6px rgb(16 24 40 / 0.12);
+  --tk-shadow-focus: 0 0 0 3px rgb(46 107 230 / 0.22);
+}
