@@ -7,7 +7,6 @@ import com.takibo.outbox.jpa.mapper.OutboxJpaMapper;
 import com.takibo.outbox.jpa.repository.OutboxMessageRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -38,32 +37,23 @@ public class JpaOutboxPublisher implements OutboxPublisher {
                 envelope.dedupKey()
         );
 
-        try {
-            repository.save(entity);
-            repository.flush();
+        int inserted = repository.insertIgnoringDedupConflict(entity);
 
+        if (inserted == 1) {
             log.info("Outbox persisted | id={} status={} eventType={}",
                     entity.getId(),
                     entity.getStatus(),
                     entity.getEventType()
             );
-        } catch (DataIntegrityViolationException e) {
-            if (isDedupConflict(e)) {
-                log.warn("Outbox dedup conflict ignored | dedupKey={}", envelope.dedupKey());
-                return;
-            }
-            log.error("Outbox persist failed", e);
-            throw e;
+            return;
         }
-    }
 
-    private boolean isDedupConflict(DataIntegrityViolationException e) {
-        String message = e.getMostSpecificCause().getMessage();
-        if (message == null) {
-            return false;
+        // Le doublon n'est légitime que s'il décrit le même événement : une même clé portée par un
+        // autre événement est une anomalie de l'appelant, qui doit faire échouer sa transaction.
+        boolean sameEvent = repository.existsSameEventForDedupKey(entity);
+        if (!sameEvent) {
+            throw new OutboxDedupKeyCollisionException(entity.getDedupKey(), entity.getEventType());
         }
-        String normalized = message.toLowerCase();
-        return normalized.contains("uq_outbox_dedup_key")
-                || (normalized.contains("outbox_messages") && normalized.contains("dedup_key"));
+        log.warn("Outbox duplicate ignored | dedupKey={} eventType={}", entity.getDedupKey(), entity.getEventType());
     }
 }

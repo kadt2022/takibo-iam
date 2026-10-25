@@ -5,6 +5,7 @@ import com.takibo.outbox.core.model.OutboxStatus;
 import com.takibo.outbox.jpa.entity.OutboxMessageEntity;
 import com.takibo.outbox.jpa.mapper.OutboxJpaMapperImpl;
 import com.takibo.outbox.jpa.publisher.JpaOutboxPublisher;
+import com.takibo.outbox.jpa.publisher.OutboxDedupKeyCollisionException;
 import com.takibo.outbox.jpa.repository.OutboxMessageRepository;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
@@ -16,12 +17,14 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.persistence.autoconfigure.EntityScan;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.UnexpectedRollbackException;
 import org.testcontainers.DockerClientFactory;
 import org.testcontainers.containers.PostgreSQLContainer;
 
@@ -31,6 +34,12 @@ import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -120,9 +129,14 @@ class OutboxJpaRepositoryIntegrationTest {
     @Autowired
     PlatformTransactionManager transactionManager;
 
+    @Autowired
+    JdbcTemplate jdbc;
+
     @BeforeEach
     void clean() {
         repository.deleteAll();
+        jdbc.execute("create table if not exists it_business_writes (id varchar(40) primary key)");
+        jdbc.update("delete from it_business_writes");
     }
 
     private OutboxMessageEntity save(String aggregateId, OutboxStatus status, Instant nextRunAt, Instant lockedAt, String dedupKey) {
@@ -250,29 +264,190 @@ class OutboxJpaRepositoryIntegrationTest {
         assertThat(afterRetryTime).extracting(OutboxMessageEntity::getAggregateId).containsExactly("retry");
     }
 
+    // ── Déduplication dans la transaction de l'appelant ─────────────────────────────────────
+    // Chaque scénario écrit aussi une ligne « métier » dans la même transaction : c'est elle qui
+    // prouve que la transaction de l'appelant est validée (doublon légitime) ou annulée (anomalie).
+
+    private JpaOutboxPublisher publisher() {
+        return new JpaOutboxPublisher(repository, Clock.fixed(NOW, ZoneOffset.UTC), new OutboxJpaMapperImpl());
+    }
+
+    private static OutboxEnvelope event(String aggregateId, String payload, String dedupKey) {
+        return OutboxEnvelope.of("E", "A", aggregateId, null, null, payload, dedupKey);
+    }
+
+    private void businessWrite(String id) {
+        jdbc.update("insert into it_business_writes(id) values (?)", id);
+    }
+
+    private List<String> businessWrites() {
+        return jdbc.queryForList("select id from it_business_writes order by id", String.class);
+    }
+
+    private List<String> messagesWithKey(String dedupKey) {
+        return jdbc.queryForList("select aggregate_id from outbox_messages where dedup_key = ?", String.class, dedupKey);
+    }
+
     @Test
-    void publisher_duplicateDedupKey_neverCreatesASecondMessage() {
-        JpaOutboxPublisher publisher = new JpaOutboxPublisher(repository, Clock.fixed(NOW, ZoneOffset.UTC), new OutboxJpaMapperImpl());
+    void duplicateOfTheSameEvent_isIgnored_andTheCallerTransactionCommits() {
+        JpaOutboxPublisher publisher = publisher();
+        TransactionTemplate tx = new TransactionTemplate(transactionManager);
+        tx.executeWithoutResult(s -> publisher.publish(event("1", "{\"n\":1}", "same-key")));
+
+        // Même événement republié ; le JSON diffère seulement par sa mise en forme (égalité jsonb).
+        tx.executeWithoutResult(s -> {
+            publisher.publish(event("1", "{ \"n\" : 1 }", "same-key"));
+            businessWrite("after-duplicate");
+        });
+
+        assertThat(businessWrites()).containsExactly("after-duplicate");
+        assertThat(messagesWithKey("same-key")).containsExactly("1");
+    }
+
+    @Test
+    void duplicateOutsideACallerTransaction_isIgnored() {
+        JpaOutboxPublisher publisher = publisher();
+        publisher.publish(event("1", "{\"n\":1}", "same-key"));
+
+        assertThatCode(() -> publisher.publish(event("1", "{\"n\":1}", "same-key"))).doesNotThrowAnyException();
+        assertThat(messagesWithKey("same-key")).containsExactly("1");
+    }
+
+    @Test
+    void sameDedupKeyForADifferentEvent_failsAndRollsBackTheCallerTransaction() {
+        JpaOutboxPublisher publisher = publisher();
+        TransactionTemplate tx = new TransactionTemplate(transactionManager);
+        tx.executeWithoutResult(s -> publisher.publish(event("1", "{\"n\":1}", "same-key")));
+
+        assertThatThrownBy(() -> tx.executeWithoutResult(s -> {
+            businessWrite("must-roll-back");
+            publisher.publish(event("1", "{\"n\":2}", "same-key"));
+        })).isInstanceOf(OutboxDedupKeyCollisionException.class);
+
+        assertThatThrownBy(() -> tx.executeWithoutResult(s ->
+                publisher.publish(event("other-aggregate", "{\"n\":1}", "same-key"))))
+                .isInstanceOf(OutboxDedupKeyCollisionException.class);
+
+        assertThat(businessWrites()).isEmpty();
+        assertThat(messagesWithKey("same-key")).containsExactly("1");
+    }
+
+    @Test
+    void primaryKeyCollision_isNeverTreatedAsADuplicate_andRollsBackTheCallerTransaction() {
+        JpaOutboxPublisher publisher = publisher();
+        TransactionTemplate tx = new TransactionTemplate(transactionManager);
+        OutboxEnvelope first = event("1", "{\"n\":1}", "key-1");
+        tx.executeWithoutResult(s -> publisher.publish(first));
+
+        OutboxEnvelope sameId = new OutboxEnvelope(first.id(), "E", "A", "2", null, null, "{\"n\":2}", "key-2", NOW);
+        assertThatThrownBy(() -> tx.executeWithoutResult(s -> {
+            businessWrite("must-roll-back");
+            publisher.publish(sameId);
+        })).isInstanceOf(DataIntegrityViolationException.class);
+
+        assertThat(businessWrites()).isEmpty();
+        assertThat(repository.findAll()).extracting(OutboxMessageEntity::getAggregateId).containsExactly("1");
+    }
+
+    @Test
+    void anyOtherPersistenceFailure_rollsBackTheCallerTransaction() {
+        JpaOutboxPublisher publisher = publisher();
         TransactionTemplate tx = new TransactionTemplate(transactionManager);
 
-        tx.executeWithoutResult(s -> publisher.publish(OutboxEnvelope.of("E", "A", "1", null, null, "{\"n\":1}", "same-key")));
-        tx.executeWithoutResult(s -> publisher.publish(OutboxEnvelope.of("E", "A", "2", null, null, "{\"n\":2}", null)));
-        tx.executeWithoutResult(s -> publisher.publish(OutboxEnvelope.of("E", "A", "3", null, null, "{\"n\":3}", null)));
+        assertThatThrownBy(() -> tx.executeWithoutResult(s -> {
+            businessWrite("must-roll-back");
+            publisher.publish(event("1", "not json", "key-1"));
+        })).isInstanceOf(DataAccessException.class);
 
-        // Comportement actuel (constat signalé, non corrigé) : dans la transaction de l'appelant, le conflit
-        // « ignoré » par le publisher a déjà marqué la transaction rollback-only ; c'est donc toute la
-        // transaction de l'appelant qui est annulée. Le doublon n'est jamais créé.
-        assertThatThrownBy(() -> tx.executeWithoutResult(s ->
-                publisher.publish(OutboxEnvelope.of("E", "A", "dup", null, null, "{\"n\":4}", "same-key"))))
-                .isInstanceOf(UnexpectedRollbackException.class);
+        assertThat(businessWrites()).isEmpty();
+        assertThat(repository.count()).isZero();
+    }
 
-        // Hors transaction de l'appelant, le conflit est bien ignoré sans exception.
-        assertThatCode(() -> publisher.publish(OutboxEnvelope.of("E", "A", "dup", null, null, "{\"n\":5}", "same-key")))
-                .doesNotThrowAnyException();
+    @Test
+    void messagesWithoutDedupKey_areNeverDeduplicated() {
+        JpaOutboxPublisher publisher = publisher();
+        publisher.publish(event("1", "{\"n\":1}", null));
+        publisher.publish(event("1", "{\"n\":1}", null));
 
-        assertThat(repository.findAll()).extracting(OutboxMessageEntity::getAggregateId)
-                .containsExactlyInAnyOrder("1", "2", "3");
-        assertThat(repository.countByStatus(OutboxStatus.PENDING)).isEqualTo(3);
+        assertThat(repository.count()).isEqualTo(2);
+    }
+
+    @Test
+    void concurrentDuplicate_waitsForTheFirstTransaction_thenIsIgnoredOnceItCommits() throws Exception {
+        String winner = raceOnTheSameKey(true);
+
+        assertThat(winner).isEqualTo("first");
+        assertThat(businessWrites()).containsExactly("first", "second");
+    }
+
+    @Test
+    void concurrentDuplicate_isInsertedWhenTheFirstTransactionRollsBack() throws Exception {
+        String winner = raceOnTheSameKey(false);
+
+        assertThat(winner).isEqualTo("second");
+        assertThat(businessWrites()).containsExactly("second");
+    }
+
+    /**
+     * Deux transactions publient la même clé. La première insère puis attend ; la seconde doit rester
+     * bloquée par PostgreSQL sur l'index unique tant que la première n'est pas terminée. Selon que la
+     * première valide ou annule, la seconde ignore le doublon ou insère le message ; dans les deux cas
+     * sa propre écriture métier est validée.
+     *
+     * @return « first » ou « second » : la transaction dont le message est finalement enregistré
+     */
+    private String raceOnTheSameKey(boolean firstCommits) throws Exception {
+        JpaOutboxPublisher publisher = publisher();
+        TransactionTemplate tx = new TransactionTemplate(transactionManager);
+        OutboxEnvelope firstEvent = event("agg", "{\"n\":1}", "race-key");
+        OutboxEnvelope secondEvent = event("agg", "{\"n\":1}", "race-key");
+        CountDownLatch firstInserted = new CountDownLatch(1);
+        CountDownLatch releaseFirst = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            Future<?> first = pool.submit(() -> tx.executeWithoutResult(s -> {
+                publisher.publish(firstEvent);
+                businessWrite("first");
+                firstInserted.countDown();
+                await(releaseFirst);
+                if (!firstCommits) {
+                    s.setRollbackOnly();
+                }
+            }));
+            assertThat(firstInserted.await(10, TimeUnit.SECONDS)).isTrue();
+
+            Future<?> second = pool.submit(() -> tx.executeWithoutResult(s -> {
+                publisher.publish(secondEvent);
+                businessWrite("second");
+            }));
+            assertThatThrownBy(() -> second.get(500, TimeUnit.MILLISECONDS))
+                    .as("second transaction must wait on the unique index")
+                    .isInstanceOf(TimeoutException.class);
+            assertThat(jdbc.queryForObject(
+                    "select count(*) from pg_stat_activity"
+                            + " where wait_event_type = 'Lock' and query like '%insert into outbox_messages%'",
+                    Integer.class)).isEqualTo(1);
+
+            releaseFirst.countDown();
+            first.get(10, TimeUnit.SECONDS);
+            second.get(10, TimeUnit.SECONDS);
+        } finally {
+            releaseFirst.countDown();
+            pool.shutdownNow();
+        }
+        List<UUID> stored = jdbc.queryForList(
+                "select id from outbox_messages where dedup_key = 'race-key'", UUID.class);
+        assertThat(stored).hasSize(1);
+        return stored.get(0).equals(firstEvent.id()) ? "first" : "second";
+    }
+
+    private static void await(CountDownLatch latch) {
+        try {
+            assertThat(latch.await(10, TimeUnit.SECONDS)).isTrue();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(e);
+        }
     }
 
     @Test
