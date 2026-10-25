@@ -279,6 +279,49 @@ class TakiboSecurityContextFactoryTest {
         assertThat(context.attributes().get(StandardAttributeKeys.ACCOUNT_ID, UUID.class)).isEmpty();
     }
 
+    // --- IP du client : X-Forwarded-For est fourni par le client, jamais résolu par DNS ---
+
+    private String clientIpWithForwardedFor(String forwardedFor) {
+        MockHttpServletRequest request = request();
+        request.setRemoteAddr("192.0.2.10");
+        if (forwardedFor != null) {
+            request.addHeader("X-Forwarded-For", forwardedFor);
+        }
+        return TakiboSecurityContextFactory.from(spaceClaims(USER_ID, SPACE_ID), request).transport().ipAddress();
+    }
+
+    @Test
+    void clientIp_isTheFirstForwardedForEntry_whenItIsAnIpLiteral() {
+        assertThat(clientIpWithForwardedFor("203.0.113.7")).isEqualTo("203.0.113.7");
+        assertThat(clientIpWithForwardedFor(" 203.0.113.7 , 10.0.0.1")).isEqualTo("203.0.113.7");
+        assertThat(clientIpWithForwardedFor("2001:db8::1, 10.0.0.1")).isEqualTo("2001:db8::1");
+    }
+
+    @Test
+    void clientIp_fallsBackToTheConnectionAddress_withoutForwardedFor() {
+        assertThat(clientIpWithForwardedFor(null)).isEqualTo("192.0.2.10");
+        assertThat(clientIpWithForwardedFor("  ")).isEqualTo("192.0.2.10");
+    }
+
+    @Test
+    void forwardedForHostNameOrJunk_isIgnored_andTheTokenIsStillAccepted() {
+        // Avant : un nom d'hôte était résolu par DNS (et accepté s'il se résolvait), une valeur
+        // irrésoluble faisait rejeter un jeton valide. Désormais la valeur est ignorée.
+        for (String forwardedFor : new String[] {"evil.example.com", "localhost", "unknown",
+                "attacker-controlled.invalid, 203.0.113.7", "999.1.1.1", "1.2.3"}) {
+            assertThat(clientIpWithForwardedFor(forwardedFor)).as(forwardedFor).isEqualTo("192.0.2.10");
+        }
+    }
+
+    @Test
+    void rawForwardedForHeaderIsStillRecordedAsReceived() {
+        MockHttpServletRequest request = request();
+        request.addHeader("X-Forwarded-For", "evil.example.com, 10.0.0.1");
+
+        assertThat(TakiboSecurityContextFactory.from(spaceClaims(USER_ID, SPACE_ID), request).transport().forwardedFor())
+                .isEqualTo("evil.example.com, 10.0.0.1");
+    }
+
     private Map<String, Object> spaceClaims(UUID userId, UUID spaceId) {
         return Map.of(
                 "subjectType", "HUMAN",
