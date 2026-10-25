@@ -229,7 +229,7 @@ jobs:
       - uses: ./.github/actions/takibo-test-group
         with:
           group: security-context
-          tasks: ':takibo-security-context:test :takibo-security-context-spring:test :takibo-security-management:test'
+          tasks: ':takibo-security-context:core:test :takibo-security-context:spring:test :takibo-security-management:test'
 
   test-iam-boot:
     name: Takibo Tests - iam-boot
