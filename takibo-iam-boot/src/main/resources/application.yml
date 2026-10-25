@@ -133,7 +133,9 @@ takibo:
         params:
           filePath: ./audit-log-tiscore.log
   adp:
-    enabled: true
+    # Désactivé par défaut : l'ADP actuel est un POC (aucun profil comportemental,
+    # CHALLENGE traité comme un refus). Activation explicite : TAKIBO_ADP_ENABLED=true.
+    enabled: false
     debugEnabled: false
     thresholds:
       deny-threshold: 75.0
