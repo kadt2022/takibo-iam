@@ -39,6 +39,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -419,8 +420,13 @@ class OutboxJpaRepositoryIntegrationTest {
                 publisher.publish(secondEvent);
                 businessWrite("second");
             }));
-            Thread.sleep(500);
-            assertThat(second.isDone()).as("second transaction must wait on the unique index").isFalse();
+            assertThatThrownBy(() -> second.get(500, TimeUnit.MILLISECONDS))
+                    .as("second transaction must wait on the unique index")
+                    .isInstanceOf(TimeoutException.class);
+            assertThat(jdbc.queryForObject(
+                    "select count(*) from pg_stat_activity"
+                            + " where wait_event_type = 'Lock' and query like '%insert into outbox_messages%'",
+                    Integer.class)).isEqualTo(1);
 
             releaseFirst.countDown();
             first.get(10, TimeUnit.SECONDS);

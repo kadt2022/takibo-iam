@@ -78,7 +78,9 @@ class JpaOutboxPublisherBehaviorTest {
         insertReturns(0);
         when(repository.existsSameEventForDedupKey(any())).thenReturn(true);
 
-        assertThatCode(() -> publisher.publish(envelope("dedup-1"))).doesNotThrowAnyException();
+        OutboxEnvelope duplicate = envelope("dedup-1");
+
+        assertThatCode(() -> publisher.publish(duplicate)).doesNotThrowAnyException();
     }
 
     @Test
@@ -86,7 +88,9 @@ class JpaOutboxPublisherBehaviorTest {
         insertReturns(0);
         when(repository.existsSameEventForDedupKey(any())).thenReturn(false);
 
-        assertThatThrownBy(() -> publisher.publish(envelope("dedup-1")))
+        OutboxEnvelope reused = envelope("dedup-1");
+
+        assertThatThrownBy(() -> publisher.publish(reused))
                 .isInstanceOf(OutboxDedupKeyCollisionException.class)
                 .hasMessageContaining("dedup-1");
     }
@@ -96,6 +100,8 @@ class JpaOutboxPublisherBehaviorTest {
         DataIntegrityViolationException failure = new DataIntegrityViolationException("duplicate key on outbox_messages_pkey");
         when(repository.insertIgnoringDedupConflict(any())).thenThrow(failure);
 
-        assertThatThrownBy(() -> publisher.publish(envelope(null))).isSameAs(failure);
+        OutboxEnvelope withoutDedupKey = envelope(null);
+
+        assertThatThrownBy(() -> publisher.publish(withoutDedupKey)).isSameAs(failure);
     }
 }
