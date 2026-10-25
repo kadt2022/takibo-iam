@@ -38,6 +38,8 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.security:spring-security-test'
     testImplementation 'org.springframework.security:spring-security-oauth2-jose'
+    // Preuve de l'activation de l'ADP dans l'application assemblée (déjà embarqué au runtime).
+    testImplementation project(':takibo-adp')
     testImplementation 'org.flywaydb:flyway-core'
     testImplementation 'org.flywaydb:flyway-database-postgresql'
     // Filet de securite TAS-GRANTS-00 : PostgreSQL reel + migrations Flyway reelles.
