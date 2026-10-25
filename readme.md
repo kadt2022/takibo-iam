@@ -93,13 +93,10 @@ Responsible for security filters, JWT authentication, boundary checks, and secur
 
 ### `takibo-security-context`
 
-Core security context module.
+Takibo security context. Single entry point for consumers (`project(':takibo-security-context')`), made of sub-modules that keep their boundaries.
 
-Defines reusable security context concepts shared across modules.
-
-### `takibo-security-context-spring`
-
-Spring integration for the Takibo security context.
+- `takibo-security-context:core` — reusable security context concepts shared across modules, independent of Spring.
+- `takibo-security-context:spring` — Spring integration for the Takibo security context.
 
 ### `takibo-adp`
 

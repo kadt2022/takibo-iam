@@ -1,9 +1,33 @@
+// Point d'entrée unique du contexte de sécurité Takibo : les consommateurs dépendent de
+// ':takibo-security-context' et reçoivent le modèle (core) et l'intégration Spring (spring).
+// Les frontières internes restent des sous-modules : core ne dépend pas de Spring.
 plugins {
     id 'java-library'
-    id 'io.spring.dependency-management'
 }
 
 dependencies {
-    testImplementation 'org.junit.jupiter:junit-jupiter'
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    api project(':takibo-security-context:core')
+    api project(':takibo-security-context:spring')
+}
+
+// Le JAR de core garde le nom historique « takibo-security-context » : le JAR (vide) du parapluie
+// prend donc un autre nom, sinon l'application contiendrait deux JAR de même nom.
+base {
+    archivesName = 'takibo-security-context-umbrella'
+}
+
+subprojects {
+    // Gradle identifie un projet par groupe:nom. Sans groupe propre, ':takibo-security-context:core'
+    // et ':takibo-adp:core' (de même pour 'spring') seraient tous deux 'com.takibu:core' : Gradle
+    // n'en garderait qu'un dans l'application. Le groupe dédié lève cette ambiguïté.
+    group = 'com.takibu.securitycontext'
+
+    // Noms de JAR inchangés par rapport aux anciens modules racine.
+    pluginManager.withPlugin('base') {
+        base {
+            archivesName = project.name == 'core'
+                    ? 'takibo-security-context'
+                    : "takibo-security-context-${project.name}"
+        }
+    }
 }
