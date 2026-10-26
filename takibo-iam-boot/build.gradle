@@ -12,6 +12,36 @@ bootRun {
     // Pour MySQL : ./gradlew :takibo-iam-boot:bootRun --args='--spring.profiles.active=mysql'
 }
 
+// TAKIBO UI : le build Vite est embarqué dans le JAR exécutable (BOOT-INF/classes/static), servi
+// par Spring Boot sur le même port que l'API. Node n'est requis qu'à la construction du JAR
+// (bootJar), jamais à son lancement ni pour compiler/tester le backend. Un échec npm fait échouer
+// la construction. `--ignore-scripts` : exigence Sonar sur npm.
+def uiDir = rootProject.layout.projectDirectory.dir('takibo-ui')
+def npm = System.getProperty('os.name').toLowerCase().contains('windows') ? ['cmd', '/c', 'npm'] : ['npm']
+
+def uiInstall = tasks.register('uiInstall', Exec) {
+    workingDir = uiDir
+    commandLine npm + ['ci', '--ignore-scripts']
+    inputs.files(uiDir.file('package.json'), uiDir.file('package-lock.json'))
+    outputs.dir(uiDir.dir('node_modules'))
+}
+
+def uiBuild = tasks.register('uiBuild', Exec) {
+    dependsOn uiInstall
+    workingDir = uiDir
+    commandLine npm + ['run', 'build']
+    inputs.files(uiDir.file('package.json'), uiDir.file('package-lock.json'), uiDir.file('index.html'),
+            uiDir.file('vite.config.ts'), uiDir.file('tsconfig.json'), uiDir.file('tsconfig.app.json'),
+            uiDir.file('tsconfig.node.json'))
+    inputs.dir(uiDir.dir('src'))
+    inputs.dir(uiDir.dir('public'))
+    outputs.dir(uiDir.dir('dist'))
+}
+
+tasks.named('bootJar') {
+    from(uiBuild) { into 'BOOT-INF/classes/static' }
+}
+
 dependencies {
     implementation project(':takibo-identity-core')
     implementation project(':takibo-security-management')
