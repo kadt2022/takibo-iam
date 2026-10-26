@@ -90,8 +90,6 @@ public class PolicyEvaluator {
                 .or(() -> denyOAuthClientSurface(subject, path, action))
                 .or(() -> denyTmsSpaceSurface(subject, path, action))
                 .or(() -> denyUngovernedTmsSurface(path))
-                .or(() -> denyLegacyClientCreation(path, action, tenantAdmin))
-                .or(() -> denyGenericUsersSurface(subject, path, action, tenantAdmin))
                 .orElseGet(() -> PolicyDecision.builder()
                         .effect(Effect.PERMIT)
                         .policyId("POL_RESOURCE_ALLOW")
@@ -504,32 +502,6 @@ public class PolicyEvaluator {
         } catch (IllegalArgumentException e) {
             return false;
         }
-    }
-
-    // /api/spaces/{spaceId}/clients (création de clients OAuth2, route UUID historique)
-    private static Optional<PolicyDecision> denyLegacyClientCreation(String path, Action action, boolean tenantAdmin) {
-        if (path.startsWith("/api/spaces/") && path.contains("/clients")
-                && action == Action.CREATE && !tenantAdmin) {
-            return deny("POL_CLIENT_CREATE_ADMIN_REQUIRED",
-                    "R_ORG_OWNER, R_ORG_ADMIN, R_SPACE_ADMIN or R_TAKIBO_PLATFORM_ADMIN required to create client");
-        }
-        return Optional.empty();
-    }
-
-    // /api/users/** – générique
-    private static Optional<PolicyDecision> denyGenericUsersSurface(Subject subject, String path,
-                                                                    Action action, boolean tenantAdmin) {
-        if (!path.startsWith("/api/users")) {
-            return Optional.empty();
-        }
-        if (action == Action.DELETE && !subject.permissions().contains("USER_DELETE")) {
-            return deny("POL_USER_DELETE_PERMISSION", "USER_DELETE permission required");
-        }
-        if (action == Action.CREATE && !tenantAdmin) {
-            return deny("POL_USER_CREATE_ADMIN_REQUIRED",
-                    "R_ORG_OWNER, R_ORG_ADMIN, R_SPACE_ADMIN or R_TAKIBO_PLATFORM_ADMIN required");
-        }
-        return Optional.empty();
     }
 
     private static Optional<PolicyDecision> deny(String policyId, String reason) {

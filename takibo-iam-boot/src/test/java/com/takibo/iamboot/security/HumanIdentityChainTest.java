@@ -12,6 +12,7 @@ import com.takibo.securitycontext.model.StandardAttributeKeys;
 import com.takibo.securitycontext.spi.TakiboSecurityContextCarrier;
 import com.takibo.securitymanagement.domain.exception.InvalidTokenException;
 import com.takibo.securitymanagement.infrastructure.security.JwtAuthenticationFilter;
+import com.takibo.securitymanagement.infrastructure.security.TrustedProxies;
 import com.takibo.securitymanagement.infrastructure.security.boundary.BoundaryMembershipService;
 import com.takibo.securitymanagement.infrastructure.token.TasJwtTokenValidatorAdapter;
 import com.takibo.securitymanagement.sentinel.http.SentinelHttpErrorWriter;
@@ -85,7 +86,8 @@ class HumanIdentityChainTest {
         errorWriter = mock(SentinelHttpErrorWriter.class);
         filter = new JwtAuthenticationFilter(
                 new TasJwtTokenValidatorAdapter(NimbusJwtDecoder.withPublicKey((RSAPublicKey) pair.getPublic()).build()),
-                errorWriter);
+                errorWriter,
+                new TrustedProxies(List.of()));
     }
 
     @AfterEach
