@@ -230,7 +230,7 @@ jobs:
       # sonar.qualitygate.wait : l'analyse échoue si le Quality Gate échoue (nouveau code
       # compris : couverture, duplication, fiabilité, sécurité, maintenabilité).
       - name: SonarCloud analysis and Quality Gate
-        uses: SonarSource/sonarqube-scan-action@v5
+        uses: SonarSource/sonarqube-scan-action@2f77a1ec69fb1d595b06f35ab27e97605bdef703 # v5.3.2
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL || 'https://sonarcloud.io' }}
