@@ -43,16 +43,32 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          fetch-depth: 2
+          fetch-depth: 0
 
       - name: Detect UI changes
         id: detect
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
         run: |
           set -euo pipefail
 
           # pull_request : HEAD est le commit de fusion de la PR dans sa base, HEAD^1 la base.
-          # push : HEAD est le commit poussé (fusion en squash), HEAD^1 son parent.
-          changed="$(git -c core.quotepath=off diff --no-renames --name-only HEAD^1 HEAD)"
+          # push : toute la plage poussée, de l'état précédent de la branche (before) à HEAD.
+          # Branche nouvelle ou état précédent introuvable (force-push) : aucun fichier
+          # détecté, donc rien n'est présumé et la chaîne s'exécute.
+          # --no-renames : du code déplacé vers docs/ compte comme une suppression de code.
+          changed=""
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            base="HEAD^1"
+          elif git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
+            base="$BEFORE_SHA"
+          else
+            base=""
+          fi
+          if [ -n "$base" ]; then
+            changed="$(git -c core.quotepath=off diff --no-renames --name-only "$base" HEAD)"
+          fi
           printf 'Fichiers modifiés :\n%s\n' "$changed"
 
           # `ui` (chaîne frontend Node) : takibo-ui/** ou ce workflow.
