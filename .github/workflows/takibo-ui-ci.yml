@@ -2,12 +2,21 @@ name: Takibo UI CI
 
 # CI frontend (chaîne Node). La CI backend vit dans takibo-ci.yml.
 #
-# - push : le filtre `paths` ne démarre la CI que pour une modification de takibo-ui/.
+# - push : le filtre `paths` ne démarre la CI que pour une modification de takibo-ui/. La
+#   tâche `changes` applique ensuite la même détection qu'en pull_request sur le commit.
 # - pull_request : `main` exige la vérification « Takibo UI CI Status ». Un filtre au
 #   déclencheur empêcherait le workflow de démarrer, et la PR resterait bloquée en attente
 #   d'un statut qui n'arrive jamais. La tâche `changes` détecte donc le lot sans impact
 #   frontend : la chaîne est écartée, mais « Takibo UI CI Status » s'exécute toujours et
 #   rend son verdict.
+#
+# Portes bloquantes (toutes rattachées à « Takibo UI CI Status ») :
+#   quality    format (Prettier), lint (ESLint, zéro avertissement), types et build (tsc -b, Vite)
+#   unit-tests tests Vitest et seuils de couverture (cliquet, vite.config.ts)
+#   security   npm audit : aucune vulnérabilité de niveau élevé ou critique
+#   sonar      analyse SonarCloud et Quality Gate (nouveau code compris)
+#   e2e        parcours Playwright
+#   packaging  embarquement de l'UI dans le JAR exécutable (PR frontend seule)
 on:
   push:
     branches: [main, develop]
@@ -33,27 +42,33 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
-        if: github.event_name == 'pull_request'
         with:
-          fetch-depth: 2
+          fetch-depth: 0
 
       - name: Detect UI changes
         id: detect
         env:
           EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
         run: |
           set -euo pipefail
 
-          # push : le déclencheur a déjà écarté les lots sans frontend. Le même push lance
-          # la CI backend, dont l'assemblage embarque l'UI : le packaging n'est pas répété.
-          if [ "$EVENT_NAME" != "pull_request" ]; then
-            echo "ui=true" >> "$GITHUB_OUTPUT"
-            echo "backend=true" >> "$GITHUB_OUTPUT"
-            exit 0
+          # pull_request : HEAD est le commit de fusion de la PR dans sa base, HEAD^1 la base.
+          # push : toute la plage poussée, de l'état précédent de la branche (before) à HEAD.
+          # Branche nouvelle ou état précédent introuvable (force-push) : aucun fichier
+          # détecté, donc rien n'est présumé et la chaîne s'exécute.
+          # --no-renames : du code déplacé vers docs/ compte comme une suppression de code.
+          changed=""
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            base="HEAD^1"
+          elif git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
+            base="$BEFORE_SHA"
+          else
+            base=""
           fi
-
-          # HEAD est le commit de fusion de la PR dans sa base : HEAD^1 est la base.
-          changed="$(git -c core.quotepath=off diff --no-renames --name-only HEAD^1 HEAD)"
+          if [ -n "$base" ]; then
+            changed="$(git -c core.quotepath=off diff --no-renames --name-only "$base" HEAD)"
+          fi
           printf 'Fichiers modifiés :\n%s\n' "$changed"
 
           # `ui` (chaîne frontend Node) : takibo-ui/** ou ce workflow.
@@ -96,9 +111,142 @@ jobs:
 
       - run: npm ci --ignore-scripts
       - run: npm run format:check
+      # --max-warnings=0 (script `lint`) : un avertissement fait échouer la tâche.
       - run: npm run lint
-      - run: npm run test
+      # `build` = tsc -b (vérification des types) puis vite build.
       - run: npm run build
+
+  unit-tests:
+    name: Takibo UI - Unit Tests & Coverage
+    needs: changes
+    if: needs.changes.outputs.ui == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: takibo-ui
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.x
+          cache: npm
+          cache-dependency-path: takibo-ui/package-lock.json
+
+      - run: npm ci --ignore-scripts
+
+      # Les seuils de couverture (vite.config.ts) font échouer la commande s'ils ne sont pas tenus.
+      - name: Run tests with coverage thresholds
+        run: >
+          npm run test:coverage --
+          --reporter=default --reporter=junit --outputFile.junit=reports/junit.xml
+
+      - name: Coverage summary
+        if: ${{ !cancelled() }}
+        run: |
+          if [ -f coverage/lcov.info ]; then
+            {
+              echo "### Takibo UI — couverture"
+              echo
+              awk -F: '/^LF:/{lf+=$2} /^LH:/{lh+=$2} /^BRF:/{bf+=$2} /^BRH:/{bh+=$2}
+                END { printf "| Lignes | Branches |\n|---|---|\n| %.1f %% | %.1f %% |\n",
+                      (lf ? 100*lh/lf : 0), (bf ? 100*bh/bf : 0) }' coverage/lcov.info
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload coverage and test reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v5
+        with:
+          name: takibo-ui-coverage
+          path: |
+            takibo-ui/coverage/
+            takibo-ui/reports/
+          if-no-files-found: error
+          retention-days: 14
+
+  security:
+    name: Takibo UI - Dependency Audit
+    needs: changes
+    if: needs.changes.outputs.ui == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: takibo-ui
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.x
+
+      # Toutes les dépendances, outillage de build compris : il exécute du code sur le runner
+      # et produit le bundle livré. Une vulnérabilité élevée ou critique bloque la PR.
+      - name: Audit dependencies (high and critical)
+        run: npm audit --audit-level=high
+
+  sonar:
+    name: Takibo UI - Sonar Quality Gate
+    needs: [changes, unit-tests]
+    if: needs.changes.outputs.ui == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Historique complet : Sonar attribue le « nouveau code » à partir de git.
+          fetch-depth: 0
+
+      - name: Download coverage report
+        uses: actions/download-artifact@v6
+        with:
+          name: takibo-ui-coverage
+          path: takibo-ui
+
+      # Fail-closed : sans projet Sonar configuré, la porte échoue au lieu d'être sautée.
+      - name: Check Sonar configuration
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_UI_PROJECT_KEY: ${{ secrets.SONAR_UI_PROJECT_KEY }}
+        run: |
+          if [ -z "${SONAR_TOKEN:-}" ] || [ -z "${SONAR_UI_PROJECT_KEY:-}" ]; then
+            echo "::error::SONAR_TOKEN ou SONAR_UI_PROJECT_KEY manquant : créer le projet SonarCloud takibo-ui et le secret SONAR_UI_PROJECT_KEY."
+            exit 1
+          fi
+          [ -f takibo-ui/coverage/lcov.info ] || { echo "::error::Rapport lcov absent"; exit 1; }
+
+      # sonar.qualitygate.wait : l'analyse échoue si le Quality Gate échoue (nouveau code
+      # compris : couverture, duplication, fiabilité, sécurité, maintenabilité).
+      - name: SonarCloud analysis and Quality Gate
+        uses: SonarSource/sonarqube-scan-action@2f77a1ec69fb1d595b06f35ab27e97605bdef703 # v5.3.2
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL || 'https://sonarcloud.io' }}
+        with:
+          projectBaseDir: takibo-ui
+          args: >
+            -Dsonar.projectKey=${{ secrets.SONAR_UI_PROJECT_KEY }}
+            ${{ secrets.SONAR_ORGANIZATION && format('-Dsonar.organization={0}', secrets.SONAR_ORGANIZATION) || '' }}
+            -Dsonar.sources=src
+            -Dsonar.tests=src
+            -Dsonar.test.inclusions=src/**/*.test.ts,src/**/*.test.tsx
+            -Dsonar.exclusions=src/**/*.test.ts,src/**/*.test.tsx
+            -Dsonar.coverage.exclusions=src/main.tsx
+            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
+            -Dsonar.qualitygate.wait=true
+            -Dsonar.qualitygate.timeout=300
 
   e2e:
     name: Takibo UI - Playwright E2E
@@ -181,6 +329,9 @@ jobs:
     needs:
       - changes
       - quality
+      - unit-tests
+      - security
+      - sonar
       - e2e
       - packaging
     runs-on: ubuntu-latest
@@ -222,9 +373,24 @@ jobs:
             failed=1
           fi
 
-          check_result quality   "${{ needs.quality.result }}"
-          check_result e2e       "${{ needs.e2e.result }}"
-          check_result packaging "${{ needs.packaging.result }}"
+          # Chaîne frontend active : chaque porte doit avoir réussi, aucune ne peut être sautée.
+          if [ "${{ needs.changes.outputs.ui }}" = "true" ]; then
+            for gate in quality:${{ needs.quality.result }} unit-tests:${{ needs.unit-tests.result }} \
+                        security:${{ needs.security.result }} sonar:${{ needs.sonar.result }} \
+                        e2e:${{ needs.e2e.result }}; do
+              if [ "${gate#*:}" != "success" ]; then
+                echo "${gate%%:*}: ${gate#*:} (porte obligatoire)"
+                failed=1
+              fi
+            done
+          fi
+
+          check_result quality    "${{ needs.quality.result }}"
+          check_result unit-tests "${{ needs.unit-tests.result }}"
+          check_result security   "${{ needs.security.result }}"
+          check_result sonar      "${{ needs.sonar.result }}"
+          check_result e2e        "${{ needs.e2e.result }}"
+          check_result packaging  "${{ needs.packaging.result }}"
 
           if [ "$failed" -eq 1 ]; then
             echo "Takibo UI CI status: FAILED"

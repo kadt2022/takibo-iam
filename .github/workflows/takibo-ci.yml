@@ -4,9 +4,10 @@ name: Takibo CI
 #
 # Une modification purement documentaire ou purement frontend ne passe pas par cette chaîne.
 #
-# - push : le filtre `paths-ignore` ne démarre pas la CI pour un lot documentaire. Un push
-#   purement frontend la démarre : c'est la validation de la construction unifiée (JAR
-#   exécutable avec l'UI embarquée) de la branche protégée.
+# - push : le filtre `paths-ignore` ne démarre pas la CI pour un lot documentaire. La
+#   tâche `changes` applique ensuite la même détection qu'en pull_request sur le commit :
+#   un push purement frontend n'exécute pas la chaîne Gradle, la construction unifiée
+#   (JAR avec l'UI embarquée) est alors vérifiée par le packaging de takibo-ui-ci.yml.
 # - pull_request : `main` exige la vérification « Takibo CI Status ». Un filtre au
 #   déclencheur empêcherait le workflow de démarrer, et la PR resterait bloquée en attente
 #   d'un statut qui n'arrive jamais. La tâche `changes` détecte donc le lot sans impact
@@ -41,26 +42,33 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
-        if: github.event_name == 'pull_request'
         with:
-          fetch-depth: 2
+          fetch-depth: 0
 
       - name: Detect code changes
         id: detect
         env:
           EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
         run: |
           set -euo pipefail
 
-          # push : le déclencheur a déjà écarté les lots purement documentaires.
-          if [ "$EVENT_NAME" != "pull_request" ]; then
-            echo "code=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          # HEAD est le commit de fusion de la PR dans sa base : HEAD^1 est la base.
+          # pull_request : HEAD est le commit de fusion de la PR dans sa base, HEAD^1 la base.
+          # push : toute la plage poussée, de l'état précédent de la branche (before) à HEAD.
+          # Branche nouvelle ou état précédent introuvable (force-push) : aucun fichier
+          # détecté, donc rien n'est présumé et la chaîne s'exécute.
           # --no-renames : du code déplacé vers docs/ compte comme une suppression de code.
-          changed="$(git -c core.quotepath=off diff --no-renames --name-only HEAD^1 HEAD)"
+          changed=""
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            base="HEAD^1"
+          elif git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
+            base="$BEFORE_SHA"
+          else
+            base=""
+          fi
+          if [ -n "$base" ]; then
+            changed="$(git -c core.quotepath=off diff --no-renames --name-only "$base" HEAD)"
+          fi
           printf 'Fichiers modifiés :\n%s\n' "$changed"
 
           # `code` (chaîne backend Gradle) : tout fichier hors docs/, *.md, takibo-ui/ et du
