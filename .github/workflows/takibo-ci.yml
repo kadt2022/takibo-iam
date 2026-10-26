@@ -118,6 +118,13 @@ jobs:
           java-version: '21'
           cache: gradle
 
+      # bootJar embarque le build de takibo-ui (tâches Gradle uiInstall/uiBuild).
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.x
+          cache: npm
+          cache-dependency-path: takibo-ui/package-lock.json
+
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
@@ -397,6 +404,25 @@ jobs:
           echo "Takibo did not start in time"
           cat app.log
           exit 1
+
+      - name: Smoke - Takibo UI servie par le JAR
+        run: |
+          base="http://127.0.0.1:${TAKIBO_APP_PORT}"
+          check() { # chemin, statut attendu, motif attendu dans le corps ("" = aucun contrôle)
+            code="$(curl -s -o body.tmp -w '%{http_code}' "$base$1")"
+            [ "$code" = "$2" ] || { echo "$1 : statut $code (attendu $2)"; exit 1; }
+            [ -z "$3" ] || grep -q "$3" body.tmp || { echo "$1 : corps sans '$3'"; exit 1; }
+          }
+          check / 200 '<div id="root">'
+          check /login 200 '<div id="root">'
+          check /app/dashboard 200 '<div id="root">'
+          asset="$(curl -s "$base/" | grep -o '/assets/[^"]*\.js' | head -n 1)"
+          check "$asset" 200 ''
+          check /assets/absent.js 404 ''
+          # Jamais de repli HTML sur le backend : refus d'authentification, corps JSON.
+          check /api/v1/me/spaces 401 '"status":401'
+          check /api/v1/inexistant 401 '"status":401'
+          rm -f body.tmp
 
       - name: Install Newman
         run: npm install -g newman@6.2.1 newman-reporter-htmlextra@1.23.1 --ignore-scripts
