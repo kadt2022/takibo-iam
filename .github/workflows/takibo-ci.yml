@@ -136,7 +136,7 @@ jobs:
         run: ./gradlew assemble --parallel --no-daemon --build-cache
 
       - name: Upload JARs
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: takibo-jars
           path: |
@@ -145,7 +145,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Upload build outputs for Sonar
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: takibo-build-outputs
           path: |
@@ -450,7 +450,7 @@ jobs:
 
       - name: Upload Newman BVT report
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: takibo-bvt-newman-report
           path: |
@@ -796,7 +796,7 @@ jobs:
 
       - name: Upload Takibo Quality Gate report
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: takibo-quality-gate-report
           path: takibo-quality-gate-report.json
