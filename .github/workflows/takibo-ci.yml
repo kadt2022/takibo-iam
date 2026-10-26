@@ -123,7 +123,7 @@ jobs:
           cache: gradle
 
       # bootJar embarque le build de takibo-ui (tâches Gradle uiInstall/uiBuild).
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 22.x
           cache: npm
@@ -359,7 +359,7 @@ jobs:
           java-version: '21'
           cache: gradle
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: '20'
 
