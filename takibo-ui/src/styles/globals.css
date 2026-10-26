@@ -1,0 +1,55 @@
+@import 'tailwindcss';
+@import './tokens.css';
+
+/*
+ * Pont entre les tokens TAKIBO et Tailwind CSS v4 :
+ * chaque utilitaire (bg-background, text-danger, rounded-md…) est résolu
+ * vers un token de src/styles/tokens.css.
+ */
+@theme inline {
+  --color-*: initial;
+  --color-background: var(--tk-color-background);
+  --color-surface: var(--tk-color-surface);
+  --color-surface-elevated: var(--tk-color-surface-elevated);
+  --color-primary: var(--tk-color-primary);
+  --color-primary-hover: var(--tk-color-primary-hover);
+  --color-on-primary: var(--tk-color-on-primary);
+  --color-text: var(--tk-color-text);
+  --color-text-muted: var(--tk-color-text-muted);
+  --color-border: var(--tk-color-border);
+  --color-focus: var(--tk-color-focus);
+  --color-danger: var(--tk-color-danger);
+  --color-warning: var(--tk-color-warning);
+  --color-success: var(--tk-color-success);
+  --color-white: #ffffff;
+  --color-transparent: transparent;
+
+  --radius-sm: var(--tk-radius-sm);
+  --radius-md: var(--tk-radius-md);
+  --radius-lg: var(--tk-radius-lg);
+
+  --shadow-card: var(--tk-shadow-card);
+  --shadow-focus: var(--tk-shadow-focus);
+
+  --font-sans: var(--tk-font-sans);
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+
+  html[data-theme='light'] {
+    color-scheme: light;
+  }
+
+  body {
+    @apply bg-background font-sans text-text antialiased;
+  }
+
+  /* Focus visible uniforme : la maîtrise se voit aussi au clavier. */
+  :focus-visible {
+    outline: 2px solid var(--tk-color-focus);
+    outline-offset: 2px;
+  }
+}

@@ -34,6 +34,7 @@ jobs:
       contents: read
     outputs:
       code: ${{ steps.detect.outputs.code }}
+      ui: ${{ steps.detect.outputs.ui }}
 
     steps:
       - uses: actions/checkout@v6
@@ -48,9 +49,11 @@ jobs:
         run: |
           set -euo pipefail
 
-          # push : le déclencheur a déjà écarté les lots purement documentaires.
+          # push : le déclencheur a déjà écarté les lots purement documentaires ; les
+          # deux chaînes (backend et takibo-ui) sont exécutées par prudence.
           if [ "$EVENT_NAME" != "pull_request" ]; then
             echo "code=true" >> "$GITHUB_OUTPUT"
+            echo "ui=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -59,12 +62,21 @@ jobs:
           changed="$(git -c core.quotepath=off diff --no-renames --name-only HEAD^1 HEAD)"
           printf 'Fichiers modifiés :\n%s\n' "$changed"
 
-          # Aucun fichier détecté : rien n'est présumé, la chaîne complète s'exécute.
-          if [ -z "$changed" ] || grep -qvE '^docs/|\.md$' <<< "$changed"; then
+          # `code` (chaîne backend Gradle) : tout fichier hors docs/, *.md et takibo-ui/.
+          # `ui` (chaîne frontend Node) : takibo-ui/** ou ce workflow.
+          # Aucun fichier détecté : rien n'est présumé, les deux chaînes s'exécutent.
+          if [ -z "$changed" ] || grep -qvE '^docs/|\.md$|^takibo-ui/' <<< "$changed"; then
             echo "code=true" >> "$GITHUB_OUTPUT"
           else
-            echo "Lot purement documentaire : chaîne de build écartée."
+            echo "Aucun changement backend : chaîne Gradle écartée."
             echo "code=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [ -z "$changed" ] || grep -qE '^takibo-ui/|^\.github/workflows/takibo-ci\.yml$' <<< "$changed"; then
+            echo "ui=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Aucun changement frontend : chaîne Node écartée."
+            echo "ui=false" >> "$GITHUB_OUTPUT"
           fi
 
   preflight:
@@ -759,6 +771,69 @@ jobs:
           name: takibo-quality-gate-report
           path: takibo-quality-gate-report.json
 
+  ui-quality:
+    name: Takibo UI - Quality
+    needs: changes
+    if: needs.changes.outputs.ui == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: takibo-ui
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.x
+          cache: npm
+          cache-dependency-path: takibo-ui/package-lock.json
+
+      - run: npm ci --ignore-scripts
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run test
+      - run: npm run build
+
+  ui-e2e:
+    name: Takibo UI - Playwright E2E
+    needs: changes
+    if: needs.changes.outputs.ui == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: takibo-ui
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.x
+          cache: npm
+          cache-dependency-path: takibo-ui/package-lock.json
+
+      - run: npm ci --ignore-scripts
+      - run: ./node_modules/.bin/playwright install --with-deps chromium
+      - run: npm run test:e2e
+
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v5
+        with:
+          name: playwright-report
+          path: |
+            takibo-ui/playwright-report/
+            takibo-ui/test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
   status-check:
     name: Takibo CI Status
     needs:
@@ -777,6 +852,8 @@ jobs:
       - iam-boot-bvt
       - sonar
       - quality-gate
+      - ui-quality
+      - ui-e2e
     runs-on: ubuntu-latest
     if: always()
     permissions: {}
@@ -813,7 +890,7 @@ jobs:
           # `changes` décide seule d'écarter la chaîne : un résultat autre que success
           # ne peut pas être toléré, sinon toutes les tâches sautées passeraient pour vertes.
           if [ "${{ needs.changes.result }}" = "success" ]; then
-            echo "changes: success (code=${{ needs.changes.outputs.code }})"
+            echo "changes: success (code=${{ needs.changes.outputs.code }}, ui=${{ needs.changes.outputs.ui }})"
           else
             echo "changes: ${{ needs.changes.result }}"
             failed=1
@@ -833,6 +910,8 @@ jobs:
           check_result iam-boot-bvt          "${{ needs.iam-boot-bvt.result }}"
           check_result sonar                 "${{ needs.sonar.result }}"
           check_result quality-gate          "${{ needs.quality-gate.result }}"
+          check_result ui-quality            "${{ needs.ui-quality.result }}"
+          check_result ui-e2e                "${{ needs.ui-e2e.result }}"
 
           if [ "$failed" -eq 1 ]; then
             echo "Takibo CI status: FAILED"

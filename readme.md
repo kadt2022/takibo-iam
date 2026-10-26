@@ -164,6 +164,17 @@ Takibo is built with:
 - JavaMail
 - Modular Spring architecture
 
+## Repository Layout
+
+This repository hosts two logically independent applications, built, tested and deployed separately:
+
+- **Takibo IAM** (Gradle modules at the repository root): the identity, authorization and security backend, served by `takibo-iam-boot` on port 8081.
+- **Takibo UI** ([`takibo-ui/`](./takibo-ui)): the administration console (React, TypeScript, Vite), with its own `package.json` and lock file. Its history was imported from `kadt2022/takibo-ui`; see [docs/migration/rapatriement-takibo-ui.md](./docs/migration/rapatriement-takibo-ui.md).
+
+`settings.gradle` does not include `takibo-ui/`, and the frontend does not depend on the Gradle build. In development, the UI proxies `/api` to the backend (`TAKIBO_API_TARGET`, default `http://localhost:8081`); a UI served from another origin in production requires `TAKIBO_CORS_ALLOWED_ORIGINS` on the backend. The CI runs the Gradle chain or the Node chain depending on the files changed.
+
+To run the UI: `cd takibo-ui && npm ci && npm run dev` (http://localhost:5173). See [takibo-ui/README.md](./takibo-ui/README.md).
+
 ## Local Development
 
 ### Prerequisites
