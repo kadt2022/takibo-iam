@@ -3,13 +3,15 @@ version: 2
 # Mises à jour proposées en PR, soumises aux mêmes portes CI que tout le reste. Les correctifs
 # de sécurité arrivent sans attendre ; les montées mineures et correctives sont regroupées
 # chaque semaine pour limiter le bruit. Les versions majeures restent des PR séparées.
+# Au plus 2 PR de mise à jour de versions ouvertes à la fois par écosystème (plafond, pas un
+# quota hebdomadaire). Les correctifs de sécurité n'entrent pas dans ce plafond.
 updates:
   - package-ecosystem: npm
     directory: /takibo-ui
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 2
     groups:
       takibo-ui-minor-patch:
         update-types: [minor, patch]
@@ -19,7 +21,7 @@ updates:
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 2
     groups:
       github-actions:
         update-types: [minor, patch]
