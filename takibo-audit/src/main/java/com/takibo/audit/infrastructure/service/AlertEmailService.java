@@ -32,7 +32,7 @@ public class AlertEmailService {
         MessageAction action = MessageAction.builder("AUDIT_SECURITY_ALERT")
                 .orgId(parseUuid(event.getOrgId()))
                 .spaceId(parseUuid(event.getSpaceId()))
-                .dedupKey("MSG:AUDIT_SECURITY_ALERT:" + event.getId())
+                .dedupKey(dedupKey(event))
                 .attribute("auditType", event.getAuditType())
                 .attribute("entityType", event.getEntityType())
                 .attribute("entityId", event.getEntityId())
@@ -42,6 +42,17 @@ public class AlertEmailService {
                 .build();
 
         dispatcher.dispatch(action, MessagingContext.none().withTraceId(event.getTraceId()));
+    }
+
+    /**
+     * Clé d'idempotence de l'alerte : une par événement. Un événement d'audit enregistré porte son
+     * identifiant ; une alerte de {@code AlertTriggerAspect} n'est jamais enregistrée et n'en a pas.
+     * Sans identité propre, toutes ces alertes partageaient la clé « …:null » et seule la première
+     * était envoyée à chaque destinataire, les suivantes étant écartées comme doublons.
+     */
+    private static String dedupKey(AuditEvent event) {
+        String identity = event.getId() != null ? event.getId().toString() : "unsaved:" + UUID.randomUUID();
+        return "MSG:AUDIT_SECURITY_ALERT:" + identity;
     }
 
     private UUID parseUuid(String value) {
