@@ -2,7 +2,8 @@ name: Takibo UI CI
 
 # CI frontend (chaîne Node). La CI backend vit dans takibo-ci.yml.
 #
-# - push : le filtre `paths` ne démarre la CI que pour une modification de takibo-ui/.
+# - push : le filtre `paths` ne démarre la CI que pour une modification de takibo-ui/. La
+#   tâche `changes` applique ensuite la même détection qu'en pull_request sur le commit.
 # - pull_request : `main` exige la vérification « Takibo UI CI Status ». Un filtre au
 #   déclencheur empêcherait le workflow de démarrer, et la PR resterait bloquée en attente
 #   d'un statut qui n'arrive jamais. La tâche `changes` détecte donc le lot sans impact
@@ -41,26 +42,16 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
-        if: github.event_name == 'pull_request'
         with:
           fetch-depth: 2
 
       - name: Detect UI changes
         id: detect
-        env:
-          EVENT_NAME: ${{ github.event_name }}
         run: |
           set -euo pipefail
 
-          # push : le déclencheur a déjà écarté les lots sans frontend. Le même push lance
-          # la CI backend, dont l'assemblage embarque l'UI : le packaging n'est pas répété.
-          if [ "$EVENT_NAME" != "pull_request" ]; then
-            echo "ui=true" >> "$GITHUB_OUTPUT"
-            echo "backend=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          # HEAD est le commit de fusion de la PR dans sa base : HEAD^1 est la base.
+          # pull_request : HEAD est le commit de fusion de la PR dans sa base, HEAD^1 la base.
+          # push : HEAD est le commit poussé (fusion en squash), HEAD^1 son parent.
           changed="$(git -c core.quotepath=off diff --no-renames --name-only HEAD^1 HEAD)"
           printf 'Fichiers modifiés :\n%s\n' "$changed"
 
