@@ -36,9 +36,10 @@ L'application démarre sur `http://localhost:5173` et redirige vers `/login`.
 
 ```bash
 npm run dev          # serveur de développement
-npm run lint         # ESLint
+npm run lint         # ESLint (zéro avertissement toléré)
 npm run format       # Prettier (écriture)
 npm run test         # tests unitaires Vitest
+npm run test:coverage # tests + couverture, avec les seuils bloquants de la CI
 npm run test:e2e     # tests fonctionnels Playwright (npx playwright install chromium au premier lancement)
 npm run build        # vérification TypeScript stricte + build de production
 npm run preview      # prévisualisation du build
