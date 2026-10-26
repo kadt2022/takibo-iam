@@ -6,6 +6,12 @@ spring:
       mail.smtp.auth: false
       mail.smtp.starttls.enable: false
 
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+
 takibo:
   messaging:
     catalog:

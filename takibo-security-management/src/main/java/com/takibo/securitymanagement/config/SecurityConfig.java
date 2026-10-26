@@ -7,9 +7,11 @@ import com.takibo.securitymanagement.infrastructure.security.boundary.OrgBoundar
 import com.takibo.securitymanagement.sentinel.http.SentinelAccessDeniedHandler;
 import com.takibo.securitymanagement.sentinel.http.SentinelAuthenticationEntryPoint;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -33,6 +35,11 @@ public class SecurityConfig {
     private final SentinelAccessDeniedHandler sentinelAccessDeniedHandler;
     private final CorsConfigurationSource corsConfigurationSource;
 
+    // Documentation OpenAPI : publique seulement là où Springdoc la sert (profil dev). Ailleurs,
+    // ses chemins retombent sur le refus par défaut au lieu d'être ouverts sur du vide.
+    @Value("${springdoc.api-docs.enabled:false}")
+    private boolean openApiEnabled;
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
 
@@ -50,14 +57,9 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-                        .requestMatchers(
-                                "/error",
-                                "/favicon.ico",
-                                "/swagger-ui/**",
-                                "/v3/api-docs/**",
-                                "/api/public/**",
-                                "/api/auth/**"
-                        ).permitAll()
+                        .requestMatchers("/error", "/favicon.ico").permitAll()
+                        .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**")
+                        .access((authentication, request) -> new AuthorizationDecision(openApiEnabled))
 
                         // Public probes expose only the aggregate status. Every other
                         // Actuator endpoint is reserved for platform administration.
@@ -73,19 +75,13 @@ public class SecurityConfig {
                         // Volontairement limité à cette route exacte — pas tout /api/v1/auth/**.
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
 
-                        .requestMatchers("/api/platform/**").hasAuthority(PLATFORM_ADMIN_AUTHORITY)
-
-                        .requestMatchers("/api/organizations/**").access(policyBasedAuthorizationManager)
-                        .requestMatchers("/api/orgs/**").access(policyBasedAuthorizationManager)
                         .requestMatchers("/api/spaces/**").access(policyBasedAuthorizationManager)
-                        .requestMatchers("/api/users/**").access(policyBasedAuthorizationManager)
-                        .requestMatchers("/api/roles/**").access(policyBasedAuthorizationManager)
-                        .requestMatchers("/api/secrets/**").access(policyBasedAuthorizationManager)
-                        .requestMatchers("/api/permissions/**").access(policyBasedAuthorizationManager)
                         .requestMatchers("/api/v1/**").access(policyBasedAuthorizationManager)
                         .requestMatchers("/debug/secure/**").access(policyBasedAuthorizationManager)
 
-                        .anyRequest().authenticated()
+                        // Fail-closed : une route absente de cette liste est refusée, même
+                        // authentifiée. Un nouveau contrôleur doit être déclaré ici pour être servi.
+                        .anyRequest().denyAll()
                 );
 
         http
