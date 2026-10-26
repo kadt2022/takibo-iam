@@ -279,38 +279,118 @@ class TakiboSecurityContextFactoryTest {
         assertThat(context.attributes().get(StandardAttributeKeys.ACCOUNT_ID, UUID.class)).isEmpty();
     }
 
-    // --- IP du client : X-Forwarded-For est fourni par le client, jamais résolu par DNS ---
+    // --- IP du client : X-Forwarded-For n'est cru que derrière un proxy de confiance ---
 
-    private String clientIpWithForwardedFor(String forwardedFor) {
+    private static final String PROXY = "192.0.2.10";
+
+    private String clientIp(String forwardedFor, String... trustedProxies) {
         MockHttpServletRequest request = request();
-        request.setRemoteAddr("192.0.2.10");
+        request.setRemoteAddr(PROXY);
         if (forwardedFor != null) {
             request.addHeader("X-Forwarded-For", forwardedFor);
         }
-        return TakiboSecurityContextFactory.from(spaceClaims(USER_ID, SPACE_ID), request).transport().ipAddress();
+        return TakiboSecurityContextFactory.from(spaceClaims(USER_ID, SPACE_ID), request,
+                new TrustedProxies(List.of(trustedProxies))).transport().ipAddress();
     }
 
     @Test
-    void clientIp_isTheFirstForwardedForEntry_whenItIsAnIpLiteral() {
-        assertThat(clientIpWithForwardedFor("203.0.113.7")).isEqualTo("203.0.113.7");
-        assertThat(clientIpWithForwardedFor(" 203.0.113.7 , 10.0.0.1")).isEqualTo("203.0.113.7");
-        assertThat(clientIpWithForwardedFor("2001:db8::1, 10.0.0.1")).isEqualTo("2001:db8::1");
+    void forwardedFor_isIgnored_whenNoProxyIsTrusted() {
+        // Par défaut, un client qui envoie son propre X-Forwarded-For ne choisit pas son IP.
+        assertThat(clientIp("203.0.113.7")).isEqualTo(PROXY);
+        assertThat(TakiboSecurityContextFactory.from(spaceClaims(USER_ID, SPACE_ID), requestFrom(PROXY, "203.0.113.7"))
+                .transport().ipAddress()).isEqualTo(PROXY);
     }
 
     @Test
-    void clientIp_fallsBackToTheConnectionAddress_withoutForwardedFor() {
-        assertThat(clientIpWithForwardedFor(null)).isEqualTo("192.0.2.10");
-        assertThat(clientIpWithForwardedFor("  ")).isEqualTo("192.0.2.10");
+    void forwardedFor_isIgnored_whenTheConnectionDoesNotComeFromATrustedProxy() {
+        assertThat(clientIp("203.0.113.7", "198.51.100.1")).isEqualTo(PROXY);
     }
 
     @Test
-    void forwardedForHostNameOrJunk_isIgnored_andTheTokenIsStillAccepted() {
-        // Avant : un nom d'hôte était résolu par DNS (et accepté s'il se résolvait), une valeur
-        // irrésoluble faisait rejeter un jeton valide. Désormais la valeur est ignorée.
-        for (String forwardedFor : new String[] {"evil.example.com", "localhost", "unknown",
-                "attacker-controlled.invalid, 203.0.113.7", "999.1.1.1", "1.2.3"}) {
-            assertThat(clientIpWithForwardedFor(forwardedFor)).as(forwardedFor).isEqualTo("192.0.2.10");
+    void behindATrustedProxy_theClientIsTheAddressTheProxyAppended() {
+        assertThat(clientIp("203.0.113.7", PROXY)).isEqualTo("203.0.113.7");
+        assertThat(clientIp(" 203.0.113.7 ", PROXY)).isEqualTo("203.0.113.7");
+        assertThat(clientIp("2001:db8::1", PROXY)).isEqualTo("2001:db8::1");
+    }
+
+    @Test
+    void behindATrustedProxy_entriesWrittenByTheClientOnTheLeftAreNeverBelieved() {
+        assertThat(clientIp("1.1.1.1, 203.0.113.7", PROXY)).isEqualTo("203.0.113.7");
+        assertThat(clientIp("evil.example.com, 203.0.113.7", PROXY)).isEqualTo("203.0.113.7");
+    }
+
+    @Test
+    void behindSeveralTrustedProxies_theFirstUntrustedHopFromTheRightIsTheClient() {
+        assertThat(clientIp("203.0.113.7, 192.0.2.11", PROXY, "192.0.2.11")).isEqualTo("203.0.113.7");
+        // Chaîne entièrement composée de proxys de confiance : on s'arrête à la plus à gauche.
+        assertThat(clientIp("192.0.2.11", PROXY, "192.0.2.11")).isEqualTo("192.0.2.11");
+    }
+
+    @Test
+    void behindATrustedProxy_aNonIpEntryStopsTheWalk_withoutDnsNorRejection() {
+        for (String forwardedFor : new String[] {"evil.example.com", "localhost", "unknown", "999.1.1.1", "1.2.3"}) {
+            assertThat(clientIp(forwardedFor, PROXY)).as(forwardedFor).isEqualTo(PROXY);
         }
+        assertThat(clientIp("203.0.113.7, unknown", PROXY)).isEqualTo(PROXY);
+    }
+
+    @Test
+    void clientIp_isTheConnectionAddress_withoutForwardedFor() {
+        assertThat(clientIp(null, PROXY)).isEqualTo(PROXY);
+        assertThat(clientIp("  ", PROXY)).isEqualTo(PROXY);
+    }
+
+    @Test
+    void trustedProxies_matchIpv6WhateverItsWrittenForm() {
+        TrustedProxies trusted = new TrustedProxies(List.of("::1", " [2001:db8::10] "));
+
+        assertThat(trusted.contains("0:0:0:0:0:0:0:1")).isTrue();
+        assertThat(trusted.contains("2001:db8:0:0:0:0:0:10")).isTrue();
+        assertThat(trusted.contains("2001:db8::11")).isFalse();
+        assertThat(trusted.contains("not-an-ip")).isFalse();
+        assertThat(trusted.contains(null)).isFalse();
+    }
+
+    @Test
+    void trustedProxies_rejectAnythingButAnIpAddress_atStartup() {
+        assertThatThrownBy(() -> new TrustedProxies(List.of("proxy.internal")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("proxy.internal");
+        assertThat(new TrustedProxies(List.of("", "  ")).contains(PROXY)).isFalse();
+    }
+
+    private MockHttpServletRequest requestFrom(String remoteAddr, String forwardedFor) {
+        MockHttpServletRequest request = request();
+        request.setRemoteAddr(remoteAddr);
+        request.addHeader("X-Forwarded-For", forwardedFor);
+        return request;
+    }
+
+    // --- Identifiant de requête : en-têtes du client, recopiés dans les journaux et l'audit ---
+
+    private String requestId(String requestId, String correlationId) {
+        MockHttpServletRequest request = request();
+        if (requestId != null) {
+            request.addHeader("X-Request-Id", requestId);
+        }
+        if (correlationId != null) {
+            request.addHeader("X-Correlation-Id", correlationId);
+        }
+        return TakiboSecurityContextFactory.from(spaceClaims(USER_ID, SPACE_ID), request).transport().requestId();
+    }
+
+    @Test
+    void requestId_keepsAWellFormedIdentifier() {
+        assertThat(requestId("3f2a9c1e-7b4d-4e8a-9f00-1a2b3c4d5e6f", null)).isEqualTo("3f2a9c1e-7b4d-4e8a-9f00-1a2b3c4d5e6f");
+        assertThat(requestId(null, "trace:abc_123.4=")).isEqualTo("trace:abc_123.4=");
+    }
+
+    @Test
+    void requestId_ignoresValuesThatCouldForgeLogLines_andFallsBackToTheCorrelationId() {
+        assertThat(requestId("abc\nINFO forged entry", "corr-1")).isEqualTo("corr-1");
+        assertThat(requestId("has space", null)).isNull();
+        assertThat(requestId("x".repeat(129), null)).isNull();
+        assertThat(requestId("é", "<script>")).isNull();
     }
 
     @Test

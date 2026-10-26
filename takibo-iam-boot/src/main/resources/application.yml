@@ -73,6 +73,11 @@ security:
     history-size: 5
 
 takibo:
+  security:
+    # Proxys de confiance (adresses IP, séparées par des virgules) : seules les connexions venant
+    # d'eux peuvent faire valoir X-Forwarded-For. Vide par défaut : l'en-tête, fourni par le
+    # client, est ignoré. Ex. : TAKIBO_SECURITY_TRUSTED_PROXIES=10.0.0.5,10.0.0.6
+    trusted-proxies: ""
   tas:
     issuer: http://localhost:8081
     keys:
