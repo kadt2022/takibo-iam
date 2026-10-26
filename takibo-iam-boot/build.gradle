@@ -13,9 +13,8 @@ bootRun {
 }
 
 // TAKIBO UI : le build Vite est embarqué dans le JAR exécutable (BOOT-INF/classes/static), servi
-// par Spring Boot sur le même port que l'API. Node n'est requis qu'à la construction du JAR
-// (bootJar), jamais à son lancement ni pour compiler/tester le backend. Un échec npm fait échouer
-// la construction. `--ignore-scripts` : exigence Sonar sur npm.
+// par Spring Boot sur le même port que l'API. Node n'est jamais requis au lancement du JAR. Un
+// échec npm fait échouer la construction. `--ignore-scripts` : exigence Sonar sur npm.
 def uiDir = rootProject.layout.projectDirectory.dir('takibo-ui')
 def npm = System.getProperty('os.name').toLowerCase().contains('windows') ? ['cmd', '/c', 'npm'] : ['npm']
 
@@ -38,8 +37,21 @@ def uiBuild = tasks.register('uiBuild', Exec) {
     outputs.dir(uiDir.dir('dist'))
 }
 
-tasks.named('bootJar') {
-    from(uiBuild) { into 'BOOT-INF/classes/static' }
+// Où placer le build Vite, une seule fois dans le JAR dans les deux cas :
+// - poste de développement : dans les ressources du module (static/), pour que l'application
+//   lancée depuis l'IDE (Run d'IntelliJ délégué à Gradle) ou par bootRun serve aussi l'UI ;
+// - CI (CI=true, posé par GitHub Actions) ou -PtakiboUiSkip : seul bootJar l'embarque, pour que
+//   compiler et tester le backend n'exigent pas Node.
+def uiInResources = System.getenv('CI') != 'true' && !project.hasProperty('takiboUiSkip')
+
+if (uiInResources) {
+    tasks.named('processResources') {
+        from(uiBuild) { into 'static' }
+    }
+} else {
+    tasks.named('bootJar') {
+        from(uiBuild) { into 'BOOT-INF/classes/static' }
+    }
 }
 
 dependencies {
