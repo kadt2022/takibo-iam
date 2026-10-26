@@ -136,17 +136,6 @@ takibo:
     # Désactivé par défaut : l'ADP actuel est un POC (aucun profil comportemental,
     # CHALLENGE traité comme un refus). Activation explicite : TAKIBO_ADP_ENABLED=true.
     enabled: false
-    debugEnabled: false
-    thresholds:
-      deny-threshold: 75.0
-      challenge-threshold: 40.0
-      low-confidence-threshold: 0.5
-    weights:
-      location: 0.25
-      time: 0.15
-      device: 0.20
-      behavior: 0.25
-      network: 0.15
   outbox:
     enabled: true
     dead-letter-log-payload: false

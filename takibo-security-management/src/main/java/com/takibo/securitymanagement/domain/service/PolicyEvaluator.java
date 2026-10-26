@@ -68,7 +68,7 @@ public class PolicyEvaluator {
     // ─────────────────────────────────────────────────────────────
     // 2. Règles spécifiques aux resources (RBAC + ABAC simple)
     // Chaque surface a sa règle dédiée ; la première qui DENY gagne.
-    // NB : /api/spaces/signup est public (permitAll dans SecurityConfig).
+    // NB : l'inscription POST /api/v1/orgs/signup est gouvernée plus haut (authentification requise).
     // ─────────────────────────────────────────────────────────────
     private PolicyDecision evaluateResourcePolicies(Subject subject,
                                                    Resource resource,
