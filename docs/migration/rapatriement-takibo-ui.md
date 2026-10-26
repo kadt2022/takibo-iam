@@ -79,3 +79,25 @@ La PR n'est pas fusionnée sans accord de Pi. Avant fusion : fermer la PR et sup
 1. Conserver l'historique (recommandé) avec fusion de la PR en merge commit ?
 2. Laisser les identifiants de démonstration du README UI tels quels ?
 3. Où est configuré le déploiement OpenShift du frontend, et quels checks sont requis sur `main` ?
+
+## 3. Réalisation et validation (Étapes 3 et 4)
+
+Décisions appliquées en l'absence de réponse détaillée de Pi (« vas-y ») : historique conservé (`git subtree add`, source `e53d5dd`), README du frontend inchangé. La PR n'est **pas** fusionnée.
+
+| Contrôle | Résultat |
+|---|---|
+| 95 fichiers du frontend présents sous `takibo-ui/` | OK (`git ls-files takibo-ui`), logo, favicon et `.env.example` inclus |
+| Artefacts générés (`node_modules`, `dist`, `coverage`, `.env.local`, rapports Playwright) | restent ignorés |
+| `npm ci`, `format:check`, `lint` | OK |
+| `npm run test` (Vitest) | 69 tests OK |
+| `npm run build` | OK |
+| `npm run test:e2e` (Playwright) | 9/9 OK avec le Chromium préinstallé de l'environnement. Avec la version demandée par Playwright (1228, absente ici) les 9 échouent, **à l'identique sur le dépôt source** : limite de l'environnement, pas de la migration |
+| `./gradlew assemble` | OK (un premier essai a échoué sur un HTTP 429 de Maven Central, relancé avec succès) |
+| Démarrage de `takibo-iam-boot` (profil `dev`, PostgreSQL 16 local) | démarre ; `/actuator/health` est DOWN uniquement faute de serveur SMTP local (port 1025), sans lien avec la migration |
+| Frontend → backend via le relais Vite `/api` | `POST /api/v1/orgs/signup` 201, `POST /api/v1/auth/login` 200 avec jeton |
+| CORS | origine `http://localhost:5173` autorisée en `dev`, origine étrangère refusée (403) |
+| Appel authentifié `GET /api/v1/me/spaces` en direct | **non vérifié** : un second login n'a pas rendu de jeton et je n'ai pas pu relancer l'instance (processus restés en conflit). Les scénarios correspondants sont couverts par les tests E2E, qui simulent l'API |
+| Tests Java, BVT, Sonar | **non exécutés localement** : aucun fichier Java ni Gradle n'a changé ; la CI de la PR en est juge |
+| Workflows CI modifiés | YAML valide ; **jamais exécutés** tant que la PR n'a pas tourné sur GitHub |
+
+Limites : le paramétrage OpenShift reste à définir (aucune trace dans les dépôts) ; les checks requis sur `main` doivent être confirmés (`Takibo CI Status` agrège désormais aussi `Takibo UI - Quality` et `Takibo UI - Playwright E2E`).
