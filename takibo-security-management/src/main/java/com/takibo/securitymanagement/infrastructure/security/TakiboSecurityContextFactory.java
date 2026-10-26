@@ -10,9 +10,12 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.UUID;
 
 final class TakiboSecurityContextFactory {
+
+    private static final Pattern REQUEST_ID = Pattern.compile("[A-Za-z0-9._:=+/-]{1,128}");
 
     private TakiboSecurityContextFactory() {
     }
@@ -24,6 +27,15 @@ final class TakiboSecurityContextFactory {
      * rejetée sans secours (jamais un identifiant substitué à un autre).
      */
     static TakiboSecurityContext from(Map<String, Object> claims, HttpServletRequest request) {
+        return from(claims, request, TrustedProxies.none());
+    }
+
+    /**
+     * Comme {@link #from(Map, HttpServletRequest)}, l'adresse du client n'étant lue dans
+     * X-Forwarded-For que si la connexion vient d'un proxy de confiance.
+     */
+    static TakiboSecurityContext from(Map<String, Object> claims, HttpServletRequest request,
+                                      TrustedProxies trustedProxies) {
         UUID accountId = readUuid(claims, "accountId");
         UUID userId = readUuid(claims, "userId");
         UUID orgIdClaim = readUuid(claims, "orgId");
@@ -78,13 +90,13 @@ final class TakiboSecurityContextFactory {
 
         TenantScope tenant = new TenantScope(orgId, spaceId);
 
-        String requestId = firstNonBlank(
+        String requestId = firstValidRequestId(
                 request.getHeader("X-Request-Id"),
                 request.getHeader("X-Correlation-Id")
         );
 
         String forwardedFor = request.getHeader("X-Forwarded-For");
-        String ip = clientIp(forwardedFor, request.getRemoteAddr());
+        String ip = clientIp(forwardedFor, request.getRemoteAddr(), trustedProxies);
         String protocol = request.getScheme();
         String host = request.getServerName();
         int port = request.getServerPort();
@@ -195,20 +207,41 @@ final class TakiboSecurityContextFactory {
     }
 
     /**
-     * IP du client : la première valeur de X-Forwarded-For si c'est une IP littérale, sinon
-     * l'adresse de la connexion. L'en-tête est fourni par le client : un nom d'hôte ou une valeur
-     * quelconque (« unknown »…) est ignoré, sans résolution DNS ni rejet de la requête.
+     * Premier identifiant de requête acceptable. Ces en-têtes viennent du client et finissent
+     * dans les journaux et l'audit : une valeur trop longue ou portant d'autres caractères
+     * (espaces, retours à la ligne, caractères de contrôle) est ignorée plutôt que recopiée.
      */
-    private static String clientIp(String forwardedFor, String remoteAddr) {
-        String forwarded = extractClientIp(forwardedFor);
-        return TakiboSecurityContextValidators.isIpLiteral(forwarded) ? forwarded : remoteAddr;
+    private static String firstValidRequestId(String... values) {
+        for (String v : values) {
+            if (v != null && REQUEST_ID.matcher(v).matches()) return v;
+        }
+        return null;
     }
 
-    private static String extractClientIp(String forwardedFor) {
-        if (forwardedFor == null || forwardedFor.isBlank()) return null;
-        String[] parts = forwardedFor.split(",");
-        if (parts.length == 0) return null;
-        String ip = parts[0].trim();
-        return ip.isEmpty() ? null : ip;
+    /**
+     * IP du client. X-Forwarded-For est fourni par le client : il n'est lu que si la connexion
+     * vient d'un proxy de confiance. On remonte alors la chaîne de droite à gauche, chaque proxy
+     * de confiance ajoutant l'adresse de son interlocuteur en fin d'en-tête : la première adresse
+     * qui n'est pas un proxy de confiance est le client. Les entrées de gauche, que le client peut
+     * écrire lui-même, ne sont jamais crues. Une entrée qui n'est pas une IP littérale arrête la
+     * remontée, sans résolution DNS ni rejet de la requête.
+     */
+    static String clientIp(String forwardedFor, String remoteAddr, TrustedProxies trustedProxies) {
+        if (forwardedFor == null || forwardedFor.isBlank() || !trustedProxies.contains(remoteAddr)) {
+            return remoteAddr;
+        }
+        String client = remoteAddr;
+        String[] hops = forwardedFor.split(",");
+        for (int i = hops.length - 1; i >= 0; i--) {
+            String hop = hops[i].trim();
+            if (!TakiboSecurityContextValidators.isIpLiteral(hop)) {
+                return client;
+            }
+            client = hop;
+            if (!trustedProxies.contains(hop)) {
+                return hop;
+            }
+        }
+        return client;
     }
 }

@@ -28,6 +28,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final TokenValidatorAdapter tokenValidatorAdapter;
     private final SentinelHttpErrorWriter sentinelHttpErrorWriter;
+    private final TrustedProxies trustedProxies;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -45,7 +46,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         try {
             Map<String, Object> claims = tokenValidatorAdapter.validate(rawToken);
 
-            TakiboSecurityContext takiboSecurityContext = TakiboSecurityContextFactory.from(claims, request);
+            TakiboSecurityContext takiboSecurityContext = TakiboSecurityContextFactory.from(claims, request, trustedProxies);
 
             // FIX 403: authorities doivent être dérivées des CLAIMS (permissions/authorities/scope)
             Collection<GrantedAuthority> authorities = AuthorityFactory.from(claims, takiboSecurityContext);

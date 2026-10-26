@@ -40,8 +40,12 @@ server:
   port: 8081
 
 springdoc:
+  # Fermé par défaut : la documentation décrit toute la surface d'attaque de l'API.
+  # Ouvert uniquement par le profil dev (application-dev.yml).
   api-docs:
-    enabled: true
+    enabled: false
+  swagger-ui:
+    enabled: false
   show-actuator: false
 
 management:
@@ -69,6 +73,11 @@ security:
     history-size: 5
 
 takibo:
+  security:
+    # Proxys de confiance (adresses IP, séparées par des virgules) : seules les connexions venant
+    # d'eux peuvent faire valoir X-Forwarded-For. Vide par défaut : l'en-tête, fourni par le
+    # client, est ignoré. Ex. : TAKIBO_SECURITY_TRUSTED_PROXIES=10.0.0.5,10.0.0.6
+    trusted-proxies: ""
   tas:
     issuer: http://localhost:8081
     keys:
@@ -136,17 +145,6 @@ takibo:
     # Désactivé par défaut : l'ADP actuel est un POC (aucun profil comportemental,
     # CHALLENGE traité comme un refus). Activation explicite : TAKIBO_ADP_ENABLED=true.
     enabled: false
-    debugEnabled: false
-    thresholds:
-      deny-threshold: 75.0
-      challenge-threshold: 40.0
-      low-confidence-threshold: 0.5
-    weights:
-      location: 0.25
-      time: 0.15
-      device: 0.20
-      behavior: 0.25
-      network: 0.15
   outbox:
     enabled: true
     dead-letter-log-payload: false
