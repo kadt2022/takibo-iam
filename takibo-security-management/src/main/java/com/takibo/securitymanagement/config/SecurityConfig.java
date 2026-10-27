@@ -75,7 +75,6 @@ public class SecurityConfig {
                         // Volontairement limité à cette route exacte — pas tout /api/v1/auth/**.
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
 
-                        .requestMatchers("/api/spaces/**").access(policyBasedAuthorizationManager)
                         .requestMatchers("/api/v1/**").access(policyBasedAuthorizationManager)
                         .requestMatchers("/debug/secure/**").access(policyBasedAuthorizationManager)
 

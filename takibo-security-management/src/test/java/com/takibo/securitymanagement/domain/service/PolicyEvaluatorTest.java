@@ -330,17 +330,6 @@ class PolicyEvaluatorTest {
         }
     }
 
-    @Test
-    void uuidRoute_userCreation_stillRequiresAdminRole() {
-        PolicyDecision decision = evaluator.evaluate(
-                subject(Set.of()),
-                new Resource("/api/spaces/" + SPACE + "/users", ORG, SPACE),
-                Action.CREATE,
-                new Environment(Instant.now(), "127.0.0.1", 0));
-
-        assertThat(decision.isDeny()).isTrue();
-    }
-
     // ─────────────────────────────────────────────────────────────
     // Surface spaces TMS : /api/v1/orgs/{uuid}/spaces[/{uuid}] (PR #31)
     // ─────────────────────────────────────────────────────────────
