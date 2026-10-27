@@ -349,9 +349,8 @@ class PolicyEvaluatorTest {
     private static final String OTHER_SPACE = "cccccccc-0000-0000-0000-000000000003";
 
     private PolicyDecision evaluateTmsRoute(Subject subject, String path, Action action) {
-        // Câblage prod : Resource porte le path seul (orgId/spaceId null) —
-        // la frontière org se lit dans le chemin.
-        return evaluator.evaluate(subject, new Resource(path, null, null), action,
+        // Câblage prod : la ressource est lue dans le chemin (Resource.fromPath).
+        return evaluator.evaluate(subject, Resource.fromPath(path), action,
                 new Environment(Instant.now(), "127.0.0.1", 0));
     }
 
@@ -691,5 +690,60 @@ class PolicyEvaluatorTest {
                 new Environment(Instant.now(), "127.0.0.1", 0));
 
         assertDeniedBy(decision, "POL_ORG_MISMATCH");
+    }
+
+    // ── Contrat d'API RBAC-06 : l'organisation cible se lit dans /api/v1/orgs/{orgId}/... ──
+
+    @Test
+    void orgInPath_crossOrgToken_deniedByTenantIsolation_beforeSurfaceRules() {
+        Subject otherOrgAdmin = new Subject("actor", Set.of("R_ORG_ADMIN"), Set.of(),
+                OTHER_ORG, null, "HUMAN", "ORGANIZATION", ACCOUNT);
+
+        for (String path : new String[]{DASHBOARD_PATH, TMS_SPACES_PATH,
+                "/api/v1/orgs/" + ORG + "/future-resource"}) {
+            assertDeniedBy(evaluateTmsRoute(otherOrgAdmin, path, Action.READ), "POL_ORG_MISMATCH", path);
+        }
+    }
+
+    @Test
+    void orgInPath_tokenWithoutOrganization_denied() {
+        // Pas d'intervention plateforme implicite : elle devra être située (RBAC-08).
+        Subject platformAdmin = new Subject("actor", Set.of("R_TAKIBO_PLATFORM_ADMIN"), Set.of(),
+                null, null, "HUMAN", "PLATFORM", ACCOUNT);
+
+        // Route sans règle de surface : seul le contrôle central peut nommer la frontière.
+        for (String path : new String[]{TMS_SPACES_PATH, "/api/v1/orgs/" + ORG + "/future-resource"}) {
+            assertDeniedBy(evaluateTmsRoute(platformAdmin, path, Action.READ), "POL_ORG_MISMATCH", path);
+        }
+    }
+
+    @Test
+    void orgInPath_tokenOrganizationInUppercase_isTheSameOrganization() {
+        Subject upperCaseOrgAdmin = new Subject("actor", Set.of("R_ORG_ADMIN"), Set.of(),
+                ORG.toUpperCase(), null, "HUMAN", "ORGANIZATION", ACCOUNT);
+
+        PolicyDecision decision = evaluateTmsRoute(upperCaseOrgAdmin, DASHBOARD_PATH, Action.READ);
+
+        assertThat(decision.isPermit()).isTrue();
+    }
+
+    @Test
+    void orgInPath_sameOrganization_comparedAsUuid_reachesSurfaceRules() {
+        // Même organisation écrite en majuscules dans le chemin : l'isolation passe et la
+        // règle de surface décide, comme avant.
+        PolicyDecision decision = evaluateTmsRoute(orgHuman(Set.of("R_ORG_ADMIN")),
+                "/api/v1/orgs/" + ORG.toUpperCase() + "/dashboard/summary", Action.READ);
+
+        assertThat(decision.isPermit()).isTrue();
+        assertThat(decision.getPolicyId()).isEqualTo("POL_ORG_DASHBOARD_ADMIN_REQUIRED");
+    }
+
+    @Test
+    void readableRoutes_designateNoOrganization_andKeepTheirOwnRules() {
+        // Les routes lisibles portent un code, pas un UUID : leur frontière reste aux gardes.
+        PolicyDecision decision = evaluateTmsRoute(subject(Set.of("R_SPACE_ADMIN")),
+                READABLE_USERS_PATH, Action.CREATE);
+
+        assertThat(decision.isDeny()).isFalse();
     }
 }
