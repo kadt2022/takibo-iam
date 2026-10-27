@@ -6,8 +6,10 @@ import com.takibo.securitymanagement.infrastructure.security.JwtAuthenticationFi
 import com.takibo.securitymanagement.infrastructure.security.boundary.OrgBoundaryFilter;
 import com.takibo.securitymanagement.sentinel.http.SentinelAccessDeniedHandler;
 import com.takibo.securitymanagement.sentinel.http.SentinelAuthenticationEntryPoint;
+import jakarta.servlet.Filter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -88,5 +90,24 @@ public class SecurityConfig {
                 .addFilterAfter(orgBoundaryFilter, JwtAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    // Les deux filtres sont des @Component : sans ces enregistrements désactivés, Spring Boot les
+    // monterait aussi comme filtres servlet sur /*, hors de la chaîne API, donc sur les routes de
+    // l'interface et du serveur d'autorisation. Ils ne s'exécutent que dans la chaîne ci-dessus.
+    @Bean
+    public FilterRegistrationBean<JwtAuthenticationFilter> jwtAuthenticationFilterServletRegistration() {
+        return disabledServletRegistration(jwtAuthenticationFilter);
+    }
+
+    @Bean
+    public FilterRegistrationBean<OrgBoundaryFilter> orgBoundaryFilterServletRegistration() {
+        return disabledServletRegistration(orgBoundaryFilter);
+    }
+
+    private static <F extends Filter> FilterRegistrationBean<F> disabledServletRegistration(F filter) {
+        FilterRegistrationBean<F> registration = new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
     }
 }
