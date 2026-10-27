@@ -80,8 +80,7 @@ public class PolicyEvaluator {
         // ORDONNANCEMENT : la règle clients OAuth2 DOIT précéder denyTmsSpaceSurface —
         // TmsSpaceRoute.parse classe .../spaces/{uuid}/clients comme sous-route et la
         // refuserait pour tous (POL_SPACE_ROUTE_NOT_GOVERNED), admins légitimes compris.
-        return denyLegacyUserCreation(path, action, tenantAdmin)
-                .or(() -> organizationSignupPolicy(path, action))
+        return organizationSignupPolicy(path, action)
                 .or(() -> currentUserSpacesPolicy(subject, path, action))
                 .or(() -> denyOrgDashboardSurface(subject, path, action))
                 .or(() -> denyUserRbacGovernanceSurface(path, tenantAdmin))
@@ -224,16 +223,6 @@ public class PolicyEvaluator {
         boolean isSummary() {
             return summary;
         }
-    }
-
-    // /api/spaces/{spaceId}/users (création d'utilisateur, route UUID historique)
-    private static Optional<PolicyDecision> denyLegacyUserCreation(String path, Action action, boolean tenantAdmin) {
-        if (path.startsWith("/api/spaces/") && path.contains("/users")
-                && action == Action.CREATE && !tenantAdmin) {
-            return deny("POL_USER_CREATE_ADMIN_REQUIRED",
-                    "R_ORG_OWNER, R_ORG_ADMIN, R_SPACE_ADMIN or R_TAKIBO_PLATFORM_ADMIN required to create user");
-        }
-        return Optional.empty();
     }
 
     // /api/v1/orgs/{orgCode}/spaces/{spaceCode}/users/{userId}/{roles|groups}[...] (route lisible)

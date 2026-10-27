@@ -121,17 +121,6 @@ takibo:
     # une requete, un fragment, une information d'utilisateur ou du HTTP hors loopback.
     # Les credentials CORS restent desactives, sans interrupteur.
     allowed-origins: ${TAKIBO_CORS_ALLOWED_ORIGINS:}
-  guard:
-    space:
-      whitelist:
-        - /actuator/health
-        - /actuator/info
-        - /api/spaces/*/status
-        - /api/spaces/signup
-        - /api/spaces/signup/**
-      fail-closed: true
-      cache-ttl: 5s
-      enabled: false
   audit:
     mode: COMPOSITE
     stores:
