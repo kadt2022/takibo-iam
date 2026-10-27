@@ -130,8 +130,9 @@ public class OrgBoundaryFilter extends OncePerRequestFilter {
                 try { return UUID.fromString(raw); } catch (Exception ignored) { return null; }
             }
         }
-        String q = req.getParameter("spaceId");
-        if (q != null) { try { return UUID.fromString(q); } catch (Exception ignored) {} }
+        // Seul le chemin désigne le space. Un paramètre spaceId (query ou formulaire) n'est lu par
+        // aucun point d'entrée : l'accepter faisait vérifier l'appartenance sur un space choisi par
+        // l'appelant et révélait son existence (403 s'il existe, 404 sinon).
         return null;
     }
 
