@@ -216,7 +216,9 @@ public class PolicyEvaluator {
     // /api/v1/orgs/{orgCode}/spaces/{spaceCode}/{users|roles|groups|permissions}[...]
     // (routes lisibles, plan SPACE). Chaque paire route/action exige sa permission P_SPACE_*
     // et un token situé dans un Space : la correspondance du Space désigné par les codes reste
-    // vérifiée par SpaceBoundaryGuard, qui seul résout ces codes. Paire non gouvernée : refus.
+    // vérifiée par SpaceBoundaryGuard, qui seul résout ces codes. Paire non gouvernée, y compris
+    // une méthode sans endpoint : 403 (POL_SPACE_ROUTE_NOT_GOVERNED), jamais 405, comme sur les
+    // surfaces UUID — la réponse ne révèle pas quelles méthodes existent.
     private static Optional<PolicyDecision> readableSpaceSurface(Subject subject, String path, Action action) {
         ReadableSpaceRoute route = ReadableSpaceRoute.parse(path);
         if (route == null) {

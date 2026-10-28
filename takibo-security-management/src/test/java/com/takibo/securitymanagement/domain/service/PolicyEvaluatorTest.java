@@ -874,5 +874,11 @@ class PolicyEvaluatorTest {
         // Le catalogue RBAC est en lecture seule, même pour un admin.
         assertDeniedBy(evaluateUsersRoute(Set.of("R_SPACE_ADMIN"), catalog, Action.CREATE),
                 "POL_SPACE_ROUTE_NOT_GOVERNED");
+
+        // Méthode sans endpoint : refus de politique (403), pas de passage vers un 405.
+        assertDeniedBy(evaluateUsersRoute(Set.of("R_SPACE_ADMIN"), user, Action.DELETE),
+                "POL_SPACE_ROUTE_NOT_GOVERNED");
+        assertDeniedBy(evaluateUsersRoute(Set.of("R_SPACE_ADMIN"), READABLE_USERS_PATH, Action.UPDATE),
+                "POL_SPACE_ROUTE_NOT_GOVERNED");
     }
 }
