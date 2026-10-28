@@ -1,5 +1,6 @@
 package com.takibo.iamboot.security;
 
+import com.takibo.iamboot.support.TokenPermissions;
 import com.takibo.identitycore.application.identity.service.UserRegistrationOrchestrator;
 import com.takibo.identitycore.domain.exception.SpaceNotFoundException;
 import com.takibo.identitycore.domain.exception.UserCreationException;
@@ -149,6 +150,8 @@ class ReadableUserCreationBoundaryHttpIntegrationTest {
         }
         claims.put("scopeLevel", scopeLevel);
         claims.put("roles", List.of(roles));
+        claims.put("permissions", TokenPermissions.of(List.of(roles), orgId.toString(),
+                spaceId == null ? null : spaceId.toString(), scopeLevel));
         return claims;
     }
 

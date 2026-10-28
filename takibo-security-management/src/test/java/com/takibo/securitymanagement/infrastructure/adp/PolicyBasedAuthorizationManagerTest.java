@@ -13,6 +13,7 @@ import com.takibo.securitycontext.model.TenantScope;
 import com.takibo.securitycontext.spi.CurrentTakiboSecurityContextProvider;
 import com.takibo.securitymanagement.domain.model.Resource;
 import com.takibo.securitymanagement.domain.service.PolicyEvaluator;
+import com.takibo.securitymanagement.support.TokenPermissions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -21,6 +22,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
 
 import java.time.Instant;
@@ -66,9 +68,11 @@ class PolicyBasedAuthorizationManagerTest {
         return new RequestAuthorizationContext(request);
     }
 
+    // Autorités telles que le token SPACE les porte : permissions situées de ses rôles.
     private void givenAuthenticatedHuman(Set<String> roles) {
         when(authentication.isAuthenticated()).thenReturn(true);
-        doReturn(List.of()).when(authentication).getAuthorities();
+        doReturn(TokenPermissions.of(roles, ORG, SPACE, "SPACE").stream()
+                .map(SimpleGrantedAuthority::new).toList()).when(authentication).getAuthorities();
         when(contextProvider.current()).thenReturn(humanContext(roles));
     }
 
