@@ -1,0 +1,66 @@
+name: Vérification ponctuelle PR 103
+
+# Workflow temporaire, propre à la branche ci/verif-103 : lit et vérifie les rapports JUnit
+# PostgreSQL du run 40603193328 (PR #103, commit 8151209). Ne relance aucun test et ne
+# modifie rien. Échoue si une preuve manque ou est incohérente.
+on:
+  push:
+    branches: [ci/verif-103]
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: verif-103
+  cancel-in-progress: false
+
+env:
+  RUN_ID: '40603193328'
+  SOURCE_REPOSITORY: kadt2022/takibo-iam
+
+jobs:
+  verify:
+    name: Preuve JUnit PostgreSQL PR 103
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Métadonnées du run, des artefacts et des jobs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/meta"
+          cd "$RUNNER_TEMP/meta"
+          gh api "repos/$SOURCE_REPOSITORY/actions/runs/$RUN_ID" > run.json
+          gh api "repos/$SOURCE_REPOSITORY/actions/runs/$RUN_ID/artifacts?per_page=100" > artifacts.json
+          for job in 122536848562 122536848533; do
+            gh api "repos/$SOURCE_REPOSITORY/actions/jobs/$job" > "job-$job.json"
+            gh api "repos/$SOURCE_REPOSITORY/actions/jobs/$job/logs" > "log-$job.txt"
+          done
+          ls -l
+
+      - name: Télécharger l'artefact iam-boot
+        uses: actions/download-artifact@v5
+        with:
+          artifact-ids: '12779392444'
+          run-id: ${{ env.RUN_ID }}
+          repository: ${{ env.SOURCE_REPOSITORY }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/artifacts/iam-boot
+
+      - name: Télécharger l'artefact outbox
+        uses: actions/download-artifact@v5
+        with:
+          artifact-ids: '12780555273'
+          run-id: ${{ env.RUN_ID }}
+          repository: ${{ env.SOURCE_REPOSITORY }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/artifacts/outbox
+
+      - name: Vérifier les preuves
+        run: python3 -I .github/scripts/verif_103.py "$RUNNER_TEMP/meta" "$RUNNER_TEMP/artifacts"
