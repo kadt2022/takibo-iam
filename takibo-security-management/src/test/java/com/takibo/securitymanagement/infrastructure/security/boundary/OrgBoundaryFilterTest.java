@@ -27,6 +27,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 /**
  * SEC-TMS-06 (D12/D13) : le filtre précède ExceptionTranslationFilter et le @ControllerAdvice ;
@@ -48,7 +49,7 @@ class OrgBoundaryFilterTest {
     }
 
     @Test
-    void allFourSpacePathForms_andTheQueryParameter_areChecked() throws Exception {
+    void allFourSpacePathForms_areChecked() throws Exception {
         for (String uri : new String[]{
                 "/api/spaces/" + SPACE_ID + "/users",
                 "/api/v1/spaces/" + SPACE_ID + "/users",
@@ -63,11 +64,19 @@ class OrgBoundaryFilterTest {
             assertThat(chain.getRequest()).as(uri).isNotNull();
         }
 
-        MockHttpServletRequest byParam = new MockHttpServletRequest("GET", "/api/v1/users");
+    }
+
+    @Test
+    void spaceIdParameter_isIgnored_noMembershipCheckAndNoMarker() throws Exception {
+        MockHttpServletRequest byParam = new MockHttpServletRequest("GET", "/api/v1/me/spaces");
         byParam.setParameter("spaceId", SPACE_ID.toString());
         MockFilterChain chain = new MockFilterChain();
+
         filter.doFilter(byParam, new MockHttpServletResponse(), chain);
-        assertThat(byParam.getAttribute("TAKIBO_BOUNDARY_OK")).isEqualTo(Boolean.TRUE);
+
+        verifyNoInteractions(membership);
+        assertThat(byParam.getAttribute("TAKIBO_BOUNDARY_OK")).isNull();
+        assertThat(chain.getRequest()).isNotNull();
     }
 
     @Test

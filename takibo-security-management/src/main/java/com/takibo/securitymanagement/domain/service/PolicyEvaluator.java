@@ -40,12 +40,13 @@ public class PolicyEvaluator {
 
     // ─────────────────────────────────────────────────────────────
     // 1. Isolation tenant (simple org-level pour v1)
+    // Contrat RBAC-06 : une ressource qui désigne une organisation exige
+    // token.org_id == orgId. Un token sans organisation (PLATFORM) est refusé tant que
+    // l'intervention plateforme n'est pas explicitement située (RBAC-08).
     // ─────────────────────────────────────────────────────────────
     private PolicyDecision evaluateTenantIsolation(Subject subject, Resource resource) {
 
-        // Isolation par organisation (si on a l'info)
-        if (resource.orgId() != null && subject.orgId() != null &&
-                !resource.orgId().equals(subject.orgId())) {
+        if (resource.orgId() != null && !sameUuid(resource.orgId(), subject.orgId())) {
 
             log.warn("Tenant isolation violation: subject.orgId={}, resource.orgId={}",
                     subject.orgId(), resource.orgId());
@@ -488,6 +489,17 @@ public class PolicyEvaluator {
         try {
             java.util.UUID.fromString(value);
             return true;
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
+
+    private static boolean sameUuid(String expected, String actual) {
+        if (actual == null) {
+            return false;
+        }
+        try {
+            return java.util.UUID.fromString(expected).equals(java.util.UUID.fromString(actual));
         } catch (IllegalArgumentException e) {
             return false;
         }

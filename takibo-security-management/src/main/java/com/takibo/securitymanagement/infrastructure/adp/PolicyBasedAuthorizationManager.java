@@ -11,7 +11,6 @@ import com.takibo.securitycontext.spi.CurrentTakiboSecurityContextProvider;
 import com.takibo.securitymanagement.domain.model.Action;
 import com.takibo.securitymanagement.domain.model.Environment;
 import com.takibo.securitymanagement.domain.model.PolicyDecision;
-import com.takibo.securitymanagement.domain.model.Resource;
 import com.takibo.securitymanagement.domain.model.Subject;
 import com.takibo.securitymanagement.domain.service.PolicyEvaluator;
 import jakarta.servlet.http.HttpServletRequest;
@@ -100,7 +99,7 @@ public class PolicyBasedAuthorizationManager implements AuthorizationManager<Req
         String ipAddress = ctx.transport() != null ? ctx.transport().ipAddress() : request.getRemoteAddr();
         PolicyDecision policyDecision = policyEvaluator.evaluate(
                 new Subject(subjectId, roles, permissions, organizationId, spaceId, subjectType, scopeLevel, accountId),
-                new Resource(policyPath, null, null),
+                PolicyResourceResolver.resolve(policyPath),
                 Action.fromHttpMethod(request.getMethod()),
                 new Environment(Instant.now(), ipAddress, 0));
 

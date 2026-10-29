@@ -1,6 +1,7 @@
 package com.takibo.managementservice.interfaces.rest.api;
 
 
+import com.takibo.identitycore.integration.security.port.CurrentOrganizationContextCase;
 import com.takibo.managementservice.application.command.CreateSpaceCommand;
 import com.takibo.managementservice.application.result.CreateSpaceResult;
 import com.takibo.managementservice.application.port.CurrentActorProvider;
@@ -17,6 +18,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.*;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
@@ -41,10 +43,12 @@ public class SpaceController {
     private final SpaceQueryCase spaceQueryCase;
     private final SpaceRestMapper restMapper;
     private final CurrentActorProvider actorProvider;
+    private final CurrentOrganizationContextCase currentOrganizationContext;
 
     @PostMapping
     public ResponseEntity<SpaceResponse> createSpace(@PathVariable("orgId") UUID orgId,
                                                      @Valid @RequestBody CreateSpaceRequest req) {
+        assertCallerOrganization(orgId);
 
         // IAM 31 : le propriétaire d'un space est un ACCOUNT (le user local est une
         // réalité de space) — l'ancien passage du userId violait fk_spaces_owner_account_scope.
@@ -85,6 +89,7 @@ public class SpaceController {
             @RequestParam(value = "page", defaultValue = "0") int page,
             @RequestParam(value = "size", defaultValue = "20") int size,
             @RequestParam(value = "sort", required = false) String sort) {
+        assertCallerOrganization(orgId);
 
         return ResponseEntity.ok(restMapper.toPageResponse(
                 spaceQueryCase.listSpaces(orgId, status, search, page, size, sort)));
@@ -93,7 +98,18 @@ public class SpaceController {
     @GetMapping("/{spaceId}")
     public ResponseEntity<SpaceResponse> getSpace(@PathVariable("orgId") UUID orgId,
                                                   @PathVariable("spaceId") UUID spaceId) {
+        assertCallerOrganization(orgId);
 
         return ResponseEntity.ok(restMapper.toSpaceResponse(spaceQueryCase.getSpace(orgId, spaceId)));
+    }
+
+    /**
+     * Défense en profondeur : la politique refuse déjà un token d'une autre organisation sur
+     * cette surface ; le contrôleur ne dépend plus d'elle seule (même garde que le dashboard).
+     */
+    private void assertCallerOrganization(UUID orgId) {
+        if (!orgId.equals(currentOrganizationContext.requireCurrentOrganizationId())) {
+            throw new AccessDeniedException("ORG_MISMATCH");
+        }
     }
 }

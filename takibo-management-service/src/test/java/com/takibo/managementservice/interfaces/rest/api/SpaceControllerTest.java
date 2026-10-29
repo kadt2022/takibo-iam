@@ -1,5 +1,6 @@
 package com.takibo.managementservice.interfaces.rest.api;
 
+import com.takibo.identitycore.integration.security.port.CurrentOrganizationContextCase;
 import com.takibo.managementservice.application.command.CreateSpaceCommand;
 import com.takibo.managementservice.application.result.CreateSpaceResult;
 import com.takibo.managementservice.application.port.CurrentActorProvider;
@@ -18,6 +19,7 @@ import org.mapstruct.factory.Mappers;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -25,8 +27,11 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -57,13 +62,19 @@ class SpaceControllerTest {
     @Mock
     private CurrentActorProvider actorProvider;
 
+    @Mock
+    private CurrentOrganizationContextCase currentOrganizationContext;
+
+    private SpaceController controller;
+
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        SpaceController controller = new SpaceController(
-                service, spaceQueryCase, Mappers.getMapper(SpaceRestMapper.class), actorProvider);
+        controller = new SpaceController(service, spaceQueryCase, Mappers.getMapper(SpaceRestMapper.class),
+                actorProvider, currentOrganizationContext);
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
+        lenient().when(currentOrganizationContext.requireCurrentOrganizationId()).thenReturn(ORG_ID);
     }
 
     @Test
@@ -134,5 +145,39 @@ class SpaceControllerTest {
                 .andExpect(jsonPath("$.orgId").value(ORG_ID.toString()))
                 .andExpect(jsonPath("$.statusReason").value("Investigation de sécurité en cours"))
                 .andExpect(jsonPath("$.version").value(3));
+    }
+
+    // ── Défense en profondeur : organisation du token != organisation du chemin ──
+
+    private static final UUID OTHER_ORG_ID = UUID.fromString("99999999-9999-9999-9999-999999999999");
+
+    @Test
+    void createSpace_deniedWhenTokenOrganizationDiffersFromPath() {
+        when(currentOrganizationContext.requireCurrentOrganizationId()).thenReturn(OTHER_ORG_ID);
+
+        assertThatThrownBy(() -> controller.createSpace(ORG_ID, null))
+                .isInstanceOf(AccessDeniedException.class);
+
+        verifyNoInteractions(service, actorProvider);
+    }
+
+    @Test
+    void listSpaces_deniedWhenTokenOrganizationDiffersFromPath() {
+        when(currentOrganizationContext.requireCurrentOrganizationId()).thenReturn(OTHER_ORG_ID);
+
+        assertThatThrownBy(() -> controller.listSpaces(ORG_ID, null, null, 0, 20, null))
+                .isInstanceOf(AccessDeniedException.class);
+
+        verifyNoInteractions(spaceQueryCase);
+    }
+
+    @Test
+    void getSpace_deniedWhenTokenOrganizationDiffersFromPath() {
+        when(currentOrganizationContext.requireCurrentOrganizationId()).thenReturn(OTHER_ORG_ID);
+
+        assertThatThrownBy(() -> controller.getSpace(ORG_ID, SPACE_ID))
+                .isInstanceOf(AccessDeniedException.class);
+
+        verifyNoInteractions(spaceQueryCase);
     }
 }

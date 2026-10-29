@@ -11,9 +11,11 @@ import com.takibo.securitycontext.model.TakiboSecurityContext;
 import com.takibo.securitycontext.model.TemporalContext;
 import com.takibo.securitycontext.model.TenantScope;
 import com.takibo.securitycontext.spi.CurrentTakiboSecurityContextProvider;
+import com.takibo.securitymanagement.domain.model.Resource;
 import com.takibo.securitymanagement.domain.service.PolicyEvaluator;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -156,5 +158,25 @@ class PolicyBasedAuthorizationManagerTest {
         AuthorizationDecision decision = manager().authorize(() -> authentication, createUserRequest());
 
         assertThat(decision.isGranted()).isFalse();
+    }
+
+    @Test
+    void targetOrganization_isReadFromThePath_andAnotherOrganizationIsDenied_beforeAdp() {
+        givenAuthenticatedHuman(Set.of("R_ORG_OWNER"));
+        String otherOrg = "99999999-0000-0000-0000-000000000009";
+        String path = "/api/v1/orgs/" + otherOrg + "/spaces";
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", path);
+        request.setRequestURI(path);
+        PolicyEvaluator evaluator = spy(new PolicyEvaluator());
+        ArgumentCaptor<Resource> resource = ArgumentCaptor.forClass(Resource.class);
+
+        AuthorizationDecision decision = new PolicyBasedAuthorizationManager(
+                adaptiveDecisionPort, velocityTracker, contextProvider, evaluator)
+                .authorize(() -> authentication, new RequestAuthorizationContext(request));
+
+        verify(evaluator).evaluate(any(), resource.capture(), any(), any());
+        assertThat(resource.getValue().orgId()).isEqualTo(otherOrg);
+        assertThat(decision.isGranted()).isFalse();
+        verify(adaptiveDecisionPort, never()).evaluate(any());
     }
 }

@@ -338,8 +338,7 @@ class PolicyEvaluatorTest {
     private static final String OTHER_SPACE = "cccccccc-0000-0000-0000-000000000003";
 
     private PolicyDecision evaluateTmsRoute(Subject subject, String path, Action action) {
-        // Câblage prod : Resource porte le path seul (orgId/spaceId null) —
-        // la frontière org se lit dans le chemin.
+        // Règles de surface seules : aucune organisation résolue, chaque règle relit le chemin.
         return evaluator.evaluate(subject, new Resource(path, null, null), action,
                 new Environment(Instant.now(), "127.0.0.1", 0));
     }
@@ -680,5 +679,46 @@ class PolicyEvaluatorTest {
                 new Environment(Instant.now(), "127.0.0.1", 0));
 
         assertDeniedBy(decision, "POL_ORG_MISMATCH");
+    }
+
+    // ── Contrat d'API RBAC-06 : ressource dont l'organisation cible est résolue ──
+
+    private PolicyDecision evaluateWithTargetOrg(Subject subject, String path, Action action) {
+        return evaluator.evaluate(subject, new Resource(path, ORG, null), action,
+                new Environment(Instant.now(), "127.0.0.1", 0));
+    }
+
+    @Test
+    void targetOrganization_crossOrgToken_deniedByTenantIsolation_beforeSurfaceRules() {
+        Subject otherOrgAdmin = new Subject("actor", Set.of("R_ORG_ADMIN"), Set.of(),
+                OTHER_ORG, null, "HUMAN", "ORGANIZATION", ACCOUNT);
+
+        for (String path : new String[]{DASHBOARD_PATH, TMS_SPACES_PATH,
+                "/api/v1/orgs/" + ORG + "/future-resource"}) {
+            assertDeniedBy(evaluateWithTargetOrg(otherOrgAdmin, path, Action.READ), "POL_ORG_MISMATCH", path);
+        }
+    }
+
+    @Test
+    void targetOrganization_tokenWithoutOrganization_denied() {
+        // Pas d'intervention plateforme implicite : elle devra être située (RBAC-08).
+        Subject platformAdmin = new Subject("actor", Set.of("R_TAKIBO_PLATFORM_ADMIN"), Set.of(),
+                null, null, "HUMAN", "PLATFORM", ACCOUNT);
+
+        // Route sans règle de surface : seul le contrôle central peut nommer la frontière.
+        for (String path : new String[]{TMS_SPACES_PATH, "/api/v1/orgs/" + ORG + "/future-resource"}) {
+            assertDeniedBy(evaluateWithTargetOrg(platformAdmin, path, Action.READ), "POL_ORG_MISMATCH", path);
+        }
+    }
+
+    @Test
+    void targetOrganization_tokenOrganizationInUppercase_isTheSameOrganization() {
+        Subject upperCaseOrgAdmin = new Subject("actor", Set.of("R_ORG_ADMIN"), Set.of(),
+                ORG.toUpperCase(), null, "HUMAN", "ORGANIZATION", ACCOUNT);
+
+        PolicyDecision decision = evaluateWithTargetOrg(upperCaseOrgAdmin, DASHBOARD_PATH, Action.READ);
+
+        assertThat(decision.isPermit()).isTrue();
+        assertThat(decision.getPolicyId()).isEqualTo("POL_ORG_DASHBOARD_ADMIN_REQUIRED");
     }
 }
