@@ -32,6 +32,12 @@ import static com.takibo.securitymanagement.domain.service.policy.Subjects.isSpa
  */
 public final class ReadableSpacePolicy implements ResourcePolicy {
 
+    private static final String USER_ADMIN_REQUIRED = "POL_USER_ADMIN_REQUIRED";
+    private static final String USER_RBAC_ADMIN_REQUIRED = "POL_USER_RBAC_ADMIN_REQUIRED";
+    private static final String USERS_SEGMENT = "users";
+    private static final String ROLES_SEGMENT = "roles";
+    private static final String GROUPS_SEGMENT = "groups";
+
     @Override
     public Optional<PolicyDecision> evaluate(Subject subject, Resource resource, Action action) {
         return Surface.of(resource.path())
@@ -51,21 +57,21 @@ public final class ReadableSpacePolicy implements ResourcePolicy {
      */
     enum Surface {
         RBAC_CATALOG("POL_RBAC_READ_ADMIN_REQUIRED", Map.of(Action.READ, SPACE_RBAC_READ)),
-        USERS("POL_USER_ADMIN_REQUIRED", Map.of(Action.READ, SPACE_USERS_READ, Action.CREATE, SPACE_USERS_MANAGE)),
-        USER("POL_USER_ADMIN_REQUIRED", Map.of(Action.READ, SPACE_USERS_READ, Action.UPDATE, SPACE_USERS_MANAGE)),
-        USER_LIFECYCLE("POL_USER_ADMIN_REQUIRED", Map.of(Action.CREATE, SPACE_USERS_LIFECYCLE)),
-        USER_ASSIGNMENTS("POL_USER_RBAC_ADMIN_REQUIRED",
+        USERS(USER_ADMIN_REQUIRED, Map.of(Action.READ, SPACE_USERS_READ, Action.CREATE, SPACE_USERS_MANAGE)),
+        USER(USER_ADMIN_REQUIRED, Map.of(Action.READ, SPACE_USERS_READ, Action.UPDATE, SPACE_USERS_MANAGE)),
+        USER_LIFECYCLE(USER_ADMIN_REQUIRED, Map.of(Action.CREATE, SPACE_USERS_LIFECYCLE)),
+        USER_ASSIGNMENTS(USER_RBAC_ADMIN_REQUIRED,
                 Map.of(Action.READ, SPACE_RBAC_READ, Action.CREATE, SPACE_RBAC_ASSIGN)),
-        USER_ASSIGNMENT("POL_USER_RBAC_ADMIN_REQUIRED", Map.of(Action.DELETE, SPACE_RBAC_ASSIGN)),
+        USER_ASSIGNMENT(USER_RBAC_ADMIN_REQUIRED, Map.of(Action.DELETE, SPACE_RBAC_ASSIGN)),
         UNGOVERNED("POL_SPACE_ROUTE_NOT_GOVERNED", Map.of());
 
-        private static final Set<String> SURFACES = Set.of("users", "roles", "groups", "permissions");
-        private static final Set<String> ASSIGNMENTS = Set.of("roles", "groups");
+        private static final Set<String> SURFACES = Set.of(USERS_SEGMENT, ROLES_SEGMENT, GROUPS_SEGMENT, "permissions");
+        private static final Set<String> ASSIGNMENTS = Set.of(ROLES_SEGMENT, GROUPS_SEGMENT);
         private static final Map<String, Surface> USER_SUB_RESOURCES = Map.of(
                 "suspend", USER_LIFECYCLE, "activate", USER_LIFECYCLE,
                 "lock", USER_LIFECYCLE, "deactivate", USER_LIFECYCLE,
-                "roles", USER_ASSIGNMENTS, "groups", USER_ASSIGNMENTS);
-        private static final int SURFACE = 7;
+                ROLES_SEGMENT, USER_ASSIGNMENTS, GROUPS_SEGMENT, USER_ASSIGNMENTS);
+        private static final int SURFACE_INDEX = 7;
 
         private final String policyId;
         private final Map<Action, TechnicalPermission> permissions;
@@ -78,15 +84,15 @@ public final class ReadableSpacePolicy implements ResourcePolicy {
         static Optional<Surface> of(String path) {
             // ["", "api", "v1", "orgs", {orgCode}, "spaces", {spaceCode}, {surface}, ...]
             return Optional.of(RequestPath.of(path))
-                    .filter(request -> request.isOrganizationRoute(SURFACE + 1)
+                    .filter(request -> request.isOrganizationRoute(SURFACE_INDEX + 1)
                             && request.segmentIs(5, "spaces")
                             && !request.hasUuidOrganization()
-                            && SURFACES.contains(request.segment(SURFACE)))
-                    .map(request -> classify(request.from(SURFACE)));
+                            && SURFACES.contains(request.segment(SURFACE_INDEX)))
+                    .map(request -> classify(request.from(SURFACE_INDEX)));
         }
 
         private static Surface classify(List<String> rest) {
-            if (!"users".equals(rest.getFirst())) {
+            if (!USERS_SEGMENT.equals(rest.getFirst())) {
                 // Catalogue RBAC du Space (roles, groups, permissions) : lecture seule.
                 return rest.size() <= 2 ? RBAC_CATALOG : UNGOVERNED;
             }

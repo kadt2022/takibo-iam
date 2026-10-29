@@ -13,6 +13,11 @@ record RequestPath(List<String> segments) {
     private static final List<String> ORGANIZATIONS_PREFIX = List.of("", "api", "v1", "orgs");
     private static final int ORGANIZATION = 4;
 
+    /** Chemin d'une route d'API, déclaré par ses segments : {@code route("api", "v1")} rend "/api/v1". */
+    static String route(String... segments) {
+        return "/" + String.join("/", segments);
+    }
+
     static RequestPath of(String path) {
         return new RequestPath(List.of(path.split("/")));
     }

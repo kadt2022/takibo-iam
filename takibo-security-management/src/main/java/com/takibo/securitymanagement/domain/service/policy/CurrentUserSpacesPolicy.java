@@ -19,7 +19,7 @@ import static com.takibo.securitymanagement.domain.service.policy.Subjects.isPre
  */
 public final class CurrentUserSpacesPolicy implements ResourcePolicy {
 
-    private static final String MY_SPACES_PATH = "/api/v1/me/spaces";
+    private static final String MY_SPACES_PATH = RequestPath.route("api", "v1", "me", "spaces");
     private static final String POLICY_ID = "POL_MY_SPACES_ORG_HUMAN_REQUIRED";
 
     @Override

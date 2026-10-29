@@ -17,7 +17,7 @@ import static com.takibo.securitymanagement.domain.service.policy.Decisions.perm
  */
 public final class OrganizationSignupPolicy implements ResourcePolicy {
 
-    private static final String SIGNUP_PATH = "/api/v1/orgs/signup";
+    private static final String SIGNUP_PATH = RequestPath.route("api", "v1", "orgs", "signup");
 
     @Override
     public Optional<PolicyDecision> evaluate(Subject subject, Resource resource, Action action) {
