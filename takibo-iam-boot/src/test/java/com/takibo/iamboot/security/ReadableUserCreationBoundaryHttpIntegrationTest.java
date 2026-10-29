@@ -1,5 +1,6 @@
 package com.takibo.iamboot.security;
 
+import com.takibo.iamboot.support.TokenPermissions;
 import com.takibo.identitycore.application.identity.service.UserRegistrationOrchestrator;
 import com.takibo.identitycore.domain.exception.SpaceNotFoundException;
 import com.takibo.identitycore.domain.exception.UserCreationException;
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -39,6 +41,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -149,6 +152,8 @@ class ReadableUserCreationBoundaryHttpIntegrationTest {
         }
         claims.put("scopeLevel", scopeLevel);
         claims.put("roles", List.of(roles));
+        claims.put("permissions", TokenPermissions.of(List.of(roles), orgId.toString(),
+                spaceId == null ? null : spaceId.toString(), scopeLevel));
         return claims;
     }
 
@@ -231,6 +236,35 @@ class ReadableUserCreationBoundaryHttpIntegrationTest {
         create(USERS, "founder").andExpect(status().isForbidden());
 
         verify(registrationOrchestrator, times(1)).registerUser(any());
+    }
+
+    // ── Méthode sans endpoint : 403, jamais 405 (RBAC-05/06) ──────────
+    // Avant RBAC-05/06, ces paires retombaient sur POL_DEFAULT_ALLOW et Spring MVC répondait
+    // 405. Elles sont désormais refusées par la politique, comme sur les surfaces UUID
+    // (dashboard, clients OAuth2, spaces) : un appelant n'apprend pas quelles méthodes existent.
+
+    @Test
+    void methodWithoutEndpoint_isForbidden_evenForTheSpaceOwner() throws Exception {
+        String user = USERS + "/" + USER_ID;
+        String catalog = "/api/v1/orgs/acme/spaces/finance";
+        Object[][] pairs = {
+                {HttpMethod.DELETE, user},
+                {HttpMethod.PUT, USERS},
+                {HttpMethod.POST, user + "/roles/R_SPACE_ADMIN"},
+                {HttpMethod.PATCH, user + "/groups"},
+                {HttpMethod.POST, catalog + "/roles"},
+                {HttpMethod.DELETE, catalog + "/permissions/P_SPACE_READ"},
+        };
+        for (Object[] pair : pairs) {
+            mockMvc.perform(request((HttpMethod) pair[0], (String) pair[1])
+                            .header("Authorization", "Bearer founder")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{}"))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+        }
+
+        verify(registrationOrchestrator, never()).registerUser(any());
     }
 
     // ── Route historique supprimée ────────────────────────────────────

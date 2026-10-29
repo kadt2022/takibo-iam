@@ -5,6 +5,7 @@ import com.takibo.securitymanagement.domain.model.Environment;
 import com.takibo.securitymanagement.domain.model.PolicyDecision;
 import com.takibo.securitymanagement.domain.model.Resource;
 import com.takibo.securitymanagement.domain.model.Subject;
+import com.takibo.securitymanagement.support.TokenPermissions;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -21,17 +22,29 @@ class PolicyEvaluatorTest {
 
     private final PolicyEvaluator evaluator = new PolicyEvaluator();
 
+    /**
+     * Sujet tel qu'un vrai token le porterait : un humain reçoit les permissions situées que
+     * ses rôles lui donnent dans la frontière du token (résolveur et catalogue réels).
+     */
+    private static Subject token(String id, Set<String> roles, Set<String> permissions, String orgId,
+                                 String spaceId, String subjectType, String scopeLevel, String accountId) {
+        Set<String> carried = permissions.isEmpty() && "HUMAN".equals(subjectType)
+                ? Set.copyOf(TokenPermissions.of(roles, orgId, spaceId, scopeLevel))
+                : permissions;
+        return new Subject(id, roles, carried, orgId, spaceId, subjectType, scopeLevel, accountId);
+    }
+
     private Subject subject(Set<String> roles) {
-        return new Subject("actor", roles, Set.of(), ORG, SPACE, "HUMAN", "SPACE", ACCOUNT);
+        return token("actor", roles, Set.of(), ORG, SPACE, "HUMAN", "SPACE", ACCOUNT);
     }
 
     private static Subject human(Set<String> roles, String orgId, String spaceId) {
-        return new Subject("actor", roles, Set.of(), orgId, spaceId, "HUMAN",
+        return token("actor", roles, Set.of(), orgId, spaceId, "HUMAN",
                 spaceId == null ? "ORGANIZATION" : "SPACE", ACCOUNT);
     }
 
     private Subject orgHuman(Set<String> roles) {
-        return new Subject("actor", roles, Set.of(), ORG, null, "HUMAN", "ORGANIZATION", ACCOUNT);
+        return token("actor", roles, Set.of(), ORG, null, "HUMAN", "ORGANIZATION", ACCOUNT);
     }
 
     private PolicyDecision evaluateMySpaces(Subject subject) {
@@ -99,7 +112,7 @@ class PolicyEvaluatorTest {
 
     @Test
     void dashboard_crossOrgToken_denied() {
-        Subject otherOrgAdmin = new Subject("actor", Set.of("R_ORG_ADMIN"), Set.of(),
+        Subject otherOrgAdmin = token("actor", Set.of("R_ORG_ADMIN"), Set.of(),
                 OTHER_ORG, null, "HUMAN", "ORGANIZATION", ACCOUNT);
         PolicyDecision decision = evaluateDashboard(otherOrgAdmin);
         assertThat(decision.isDeny()).isTrue();
@@ -108,7 +121,7 @@ class PolicyEvaluatorTest {
 
     @Test
     void dashboard_machineSubject_denied() {
-        Subject machine = new Subject("machine", Set.of("R_ORG_ADMIN"), Set.of(),
+        Subject machine = token("machine", Set.of("R_ORG_ADMIN"), Set.of(),
                 ORG, null, "SERVICE", "ORGANIZATION", ACCOUNT);
         PolicyDecision decision = evaluateDashboard(machine);
         assertThat(decision.isDeny()).isTrue();
@@ -151,7 +164,8 @@ class PolicyEvaluatorTest {
         assertThat(evaluateCreateUser(Set.of("R_SPACE_ADMIN")).isDeny()).isFalse();
         assertThat(evaluateCreateUser(Set.of("R_ORG_OWNER")).isDeny()).isFalse();
         assertThat(evaluateCreateUser(Set.of("R_ORG_ADMIN")).isDeny()).isFalse();
-        assertThat(evaluateCreateUser(Set.of("R_TAKIBO_PLATFORM_ADMIN")).isDeny()).isFalse();
+        // RBAC-05/06 : le rôle plateforme ne porte aucune permission de Space.
+        assertThat(evaluateCreateUser(Set.of("R_TAKIBO_PLATFORM_ADMIN")).isDeny()).isTrue();
         assertThat(evaluateCreateUser(Set.of("R_ORG_OWNER", "R_SPACE_ADMIN")).isDeny()).isFalse();
     }
 
@@ -210,15 +224,22 @@ class PolicyEvaluatorTest {
         // plus spécifique que la règle générale users.
         String base = READABLE_USERS_PATH + "/dddddddd-0000-0000-0000-000000000004";
 
-        for (String path : new String[]{
-                base + "/roles",
-                base + "/roles/R_SPACE_ADMIN",
-                base + "/groups",
-                base + "/groups/G_SPACE_ADMINS"}) {
-            PolicyDecision decision = evaluateUsersRoute(Set.of(), path, Action.CREATE);
-            assertThat(decision.isDeny()).as(path).isTrue();
-            assertThat(decision.getPolicyId()).as(path).isEqualTo("POL_USER_RBAC_ADMIN_REQUIRED");
+        record Case(String path, Action action) {}
+        for (Case testCase : java.util.List.of(
+                new Case(base + "/roles", Action.CREATE),
+                new Case(base + "/roles/R_SPACE_ADMIN", Action.DELETE),
+                new Case(base + "/groups", Action.CREATE),
+                new Case(base + "/groups/G_SPACE_ADMINS", Action.DELETE))) {
+            PolicyDecision decision = evaluateUsersRoute(Set.of(), testCase.path(), testCase.action());
+            assertThat(decision.isDeny()).as(testCase.path()).isTrue();
+            assertThat(decision.getPolicyId()).as(testCase.path()).isEqualTo("POL_USER_RBAC_ADMIN_REQUIRED");
         }
+
+        // Paire route/action sans endpoint : refusée pour tous, admins compris.
+        PolicyDecision ungoverned = evaluateUsersRoute(Set.of("R_SPACE_ADMIN"),
+                base + "/roles/R_SPACE_ADMIN", Action.CREATE);
+        assertThat(ungoverned.isDeny()).isTrue();
+        assertThat(ungoverned.getPolicyId()).isEqualTo("POL_SPACE_ROUTE_NOT_GOVERNED");
     }
 
     @Test
@@ -294,9 +315,9 @@ class PolicyEvaluatorTest {
     @Test
     void currentUserSpaces_deniesPlatformOrServiceTokens() {
         for (Subject subject : java.util.List.of(
-                new Subject("platform", Set.of("R_TAKIBO_PLATFORM_ADMIN"), Set.of(), ORG, null,
+                token("platform", Set.of("R_TAKIBO_PLATFORM_ADMIN"), Set.of(), ORG, null,
                         "PLATFORM", "ORGANIZATION", null),
-                new Subject("client", Set.of(), Set.of(), ORG, null,
+                token("client", Set.of(), Set.of(), ORG, null,
                         "SERVICE", "ORGANIZATION", null))) {
             PolicyDecision decision = evaluateMySpaces(subject);
 
@@ -307,7 +328,7 @@ class PolicyEvaluatorTest {
 
     @Test
     void currentUserSpaces_deniesSpaceToken() {
-        Subject spaceToken = new Subject("actor", Set.of(), Set.of(), ORG, SPACE,
+        Subject spaceToken = token("actor", Set.of(), Set.of(), ORG, SPACE,
                 "HUMAN", "SPACE", ACCOUNT);
 
         PolicyDecision decision = evaluateMySpaces(spaceToken);
@@ -319,9 +340,9 @@ class PolicyEvaluatorTest {
     @Test
     void currentUserSpaces_deniesTokenWithoutOrgOrAccount() {
         for (Subject subject : java.util.List.of(
-                new Subject("actor", Set.of(), Set.of(), null, null,
+                token("actor", Set.of(), Set.of(), null, null,
                         "HUMAN", "ORGANIZATION", ACCOUNT),
-                new Subject("actor", Set.of(), Set.of(), ORG, null,
+                token("actor", Set.of(), Set.of(), ORG, null,
                         "HUMAN", "ORGANIZATION", null))) {
             PolicyDecision decision = evaluateMySpaces(subject);
 
@@ -359,10 +380,15 @@ class PolicyEvaluatorTest {
     @Test
     void tmsSpaceList_requiresOrgAuthority() {
         for (String role : new String[]{"R_ORG_OWNER", "R_ORG_ADMIN"}) {
-            PolicyDecision decision = evaluateTmsRoute(subject(Set.of(role)), TMS_SPACES_PATH, Action.READ);
+            PolicyDecision decision = evaluateTmsRoute(orgHuman(Set.of(role)), TMS_SPACES_PATH, Action.READ);
             assertThat(decision.isPermit()).as(role).isTrue();
             assertThat(decision.getPolicyId()).as(role)
                     .isEqualTo("POL_SPACE_LIST_ORG_AUTHORITY_REQUIRED");
+
+            // E3 : la même autorité portée par un token SPACE est refusée.
+            PolicyDecision spaceToken = evaluateTmsRoute(subject(Set.of(role)), TMS_SPACES_PATH, Action.READ);
+            assertThat(spaceToken.isDeny()).as(role).isTrue();
+            assertThat(spaceToken.getPolicyId()).isEqualTo("POL_SPACE_LIST_ORG_AUTHORITY_REQUIRED");
         }
 
         for (Set<String> roles : java.util.List.of(Set.of("R_SPACE_ADMIN"), Set.<String>of())) {
@@ -375,10 +401,15 @@ class PolicyEvaluatorTest {
     @Test
     void tmsSpaceCreate_requiresOrgAuthority() {
         for (String role : new String[]{"R_ORG_OWNER", "R_ORG_ADMIN"}) {
-            PolicyDecision decision = evaluateTmsRoute(subject(Set.of(role)), TMS_SPACES_PATH, Action.CREATE);
+            PolicyDecision decision = evaluateTmsRoute(orgHuman(Set.of(role)), TMS_SPACES_PATH, Action.CREATE);
             assertThat(decision.isPermit()).as(role).isTrue();
             assertThat(decision.getPolicyId()).as(role)
                     .isEqualTo("POL_SPACE_CREATE_ORG_AUTHORITY_REQUIRED");
+
+            // E3 : la même autorité portée par un token SPACE est refusée.
+            PolicyDecision spaceToken = evaluateTmsRoute(subject(Set.of(role)), TMS_SPACES_PATH, Action.CREATE);
+            assertThat(spaceToken.isDeny()).as(role).isTrue();
+            assertThat(spaceToken.getPolicyId()).isEqualTo("POL_SPACE_CREATE_ORG_AUTHORITY_REQUIRED");
         }
 
         // R_SPACE_ADMIN ne crée pas de nouvelle frontière dans l'org.
@@ -391,10 +422,16 @@ class PolicyEvaluatorTest {
 
     @Test
     void tmsSpaceDetail_allowedForOrgAuthorityOrLocalSpaceAdmin() {
-        PolicyDecision orgAdmin = evaluateTmsRoute(subject(Set.of("R_ORG_ADMIN")),
+        PolicyDecision orgAdmin = evaluateTmsRoute(orgHuman(Set.of("R_ORG_ADMIN")),
                 TMS_SPACES_PATH + "/" + OTHER_SPACE, Action.READ);
         assertThat(orgAdmin.isPermit()).isTrue();
         assertThat(orgAdmin.getPolicyId()).isEqualTo("POL_SPACE_READ_ORG_OR_LOCAL_ADMIN_REQUIRED");
+
+        // E3 : un token SPACE ne lit pas un autre space au nom de l'autorité ORG.
+        PolicyDecision spaceToken = evaluateTmsRoute(subject(Set.of("R_ORG_ADMIN")),
+                TMS_SPACES_PATH + "/" + OTHER_SPACE, Action.READ);
+        assertThat(spaceToken.isDeny()).isTrue();
+        assertThat(spaceToken.getPolicyId()).isEqualTo("POL_SPACE_READ_ORG_OR_LOCAL_ADMIN_REQUIRED");
 
         // Un space admin lit le space que son token désigne déjà (pas de 403 absurde).
         PolicyDecision localAdmin = evaluateTmsRoute(subject(Set.of("R_SPACE_ADMIN")),
@@ -476,7 +513,7 @@ class PolicyEvaluatorTest {
 
     @Test
     void tmsSpaceSurface_platformTokenWithoutOrg_denied() {
-        Subject platform = new Subject("actor", Set.of("R_TAKIBO_PLATFORM_ADMIN"), Set.of(), null, null,
+        Subject platform = token("actor", Set.of("R_TAKIBO_PLATFORM_ADMIN"), Set.of(), null, null,
                 "HUMAN", "PLATFORM", ACCOUNT);
         PolicyDecision decision = evaluateTmsRoute(platform, TMS_SPACES_PATH, Action.READ);
 
@@ -515,8 +552,8 @@ class PolicyEvaluatorTest {
 
         for (Case testCase : java.util.List.of(
                 new Case(orgHuman(Set.of("R_ORG_OWNER")), DASHBOARD_PATH, Action.READ),
-                new Case(subject(Set.of("R_ORG_OWNER")), TMS_SPACES_PATH, Action.READ),
-                new Case(subject(Set.of("R_ORG_ADMIN")), TMS_SPACES_PATH, Action.CREATE),
+                new Case(orgHuman(Set.of("R_ORG_OWNER")), TMS_SPACES_PATH, Action.READ),
+                new Case(orgHuman(Set.of("R_ORG_ADMIN")), TMS_SPACES_PATH, Action.CREATE),
                 new Case(subject(Set.of("R_SPACE_ADMIN")), TMS_SPACES_PATH + "/" + SPACE, Action.READ),
                 new Case(subject(Set.of("R_SPACE_ADMIN")), CLIENTS_PATH, Action.CREATE),
                 new Case(subject(Set.of("R_SPACE_ADMIN")), ROTATE_PATH, Action.CREATE))) {
@@ -571,7 +608,7 @@ class PolicyEvaluatorTest {
 
     @Test
     void oauthClients_organizationScopedTokenWithSpaceId_denied_evenForOrgOwner() {
-        Subject incoherentToken = new Subject("actor", Set.of("R_ORG_OWNER"), Set.of(), ORG, SPACE,
+        Subject incoherentToken = token("actor", Set.of("R_ORG_OWNER"), Set.of(), ORG, SPACE,
                 "HUMAN", "ORGANIZATION", ACCOUNT);
 
         PolicyDecision decision = evaluateTmsRoute(incoherentToken, CLIENTS_PATH, Action.CREATE);
@@ -616,7 +653,7 @@ class PolicyEvaluatorTest {
         // Un CLIENT_APP / machine n'administre jamais les clients d'un tenant,
         // quels que soient les rôles portés par son token.
         for (String type : new String[]{"SERVICE", "SYSTEM", null}) {
-            Subject machine = new Subject("client-app",
+            Subject machine = token("client-app",
                     Set.of("R_ORG_OWNER", "R_SPACE_ADMIN"), Set.of(), ORG, SPACE, type, "SPACE", ACCOUNT);
             PolicyDecision decision = evaluateTmsRoute(machine, CLIENTS_PATH, Action.CREATE);
             assertDeniedBy(decision, "POL_OAUTH_CLIENT_ADMIN_REQUIRED", String.valueOf(type));
@@ -673,7 +710,7 @@ class PolicyEvaluatorTest {
     @Test
     void orgMismatch_alwaysDenied_evenForOrgOwner() {
         PolicyDecision decision = evaluator.evaluate(
-                new Subject("actor", Set.of("R_ORG_OWNER"), Set.of(), ORG, SPACE, "HUMAN", "SPACE", ACCOUNT),
+                token("actor", Set.of("R_ORG_OWNER"), Set.of(), ORG, SPACE, "HUMAN", "SPACE", ACCOUNT),
                 new Resource(READABLE_USERS_PATH, "99999999-0000-0000-0000-000000000009", SPACE),
                 Action.CREATE,
                 new Environment(Instant.now(), "127.0.0.1", 0));
@@ -690,7 +727,7 @@ class PolicyEvaluatorTest {
 
     @Test
     void targetOrganization_crossOrgToken_deniedByTenantIsolation_beforeSurfaceRules() {
-        Subject otherOrgAdmin = new Subject("actor", Set.of("R_ORG_ADMIN"), Set.of(),
+        Subject otherOrgAdmin = token("actor", Set.of("R_ORG_ADMIN"), Set.of(),
                 OTHER_ORG, null, "HUMAN", "ORGANIZATION", ACCOUNT);
 
         for (String path : new String[]{DASHBOARD_PATH, TMS_SPACES_PATH,
@@ -702,7 +739,7 @@ class PolicyEvaluatorTest {
     @Test
     void targetOrganization_tokenWithoutOrganization_denied() {
         // Pas d'intervention plateforme implicite : elle devra être située (RBAC-08).
-        Subject platformAdmin = new Subject("actor", Set.of("R_TAKIBO_PLATFORM_ADMIN"), Set.of(),
+        Subject platformAdmin = token("actor", Set.of("R_TAKIBO_PLATFORM_ADMIN"), Set.of(),
                 null, null, "HUMAN", "PLATFORM", ACCOUNT);
 
         // Route sans règle de surface : seul le contrôle central peut nommer la frontière.
@@ -713,12 +750,135 @@ class PolicyEvaluatorTest {
 
     @Test
     void targetOrganization_tokenOrganizationInUppercase_isTheSameOrganization() {
-        Subject upperCaseOrgAdmin = new Subject("actor", Set.of("R_ORG_ADMIN"), Set.of(),
+        Subject upperCaseOrgAdmin = token("actor", Set.of("R_ORG_ADMIN"), Set.of(),
                 ORG.toUpperCase(), null, "HUMAN", "ORGANIZATION", ACCOUNT);
 
         PolicyDecision decision = evaluateWithTargetOrg(upperCaseOrgAdmin, DASHBOARD_PATH, Action.READ);
 
         assertThat(decision.isPermit()).isTrue();
         assertThat(decision.getPolicyId()).isEqualTo("POL_ORG_DASHBOARD_ADMIN_REQUIRED");
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // RBAC-05/06 : rôles spécialisés et non-escalade. Une décision suit les permissions
+    // que le token porte réellement, jamais un nom de rôle.
+    // ─────────────────────────────────────────────────────────────
+
+    @Test
+    void specializedSpaceRoles_getExactlyTheirSurface() {
+        String userPath = READABLE_USERS_PATH + "/dddddddd-0000-0000-0000-000000000004";
+
+        // R_SPACE_USER_ADMIN : annuaire et cycle de vie, sans gouvernance RBAC ni clients.
+        Set<String> userAdmin = Set.of("R_SPACE_USER_ADMIN");
+        assertThat(evaluateCreateUser(userAdmin).isPermit()).isTrue();
+        assertThat(evaluateUsersRoute(userAdmin, userPath + "/suspend", Action.CREATE).isPermit()).isTrue();
+        assertDeniedBy(evaluateUsersRoute(userAdmin, userPath + "/roles", Action.CREATE),
+                "POL_USER_RBAC_ADMIN_REQUIRED");
+        assertDeniedBy(evaluateUsersRoute(userAdmin, userPath + "/roles/R_SPACE_ADMIN", Action.DELETE),
+                "POL_USER_RBAC_ADMIN_REQUIRED");
+        assertDeniedBy(evaluateTmsRoute(subject(userAdmin), CLIENTS_PATH, Action.CREATE),
+                "POL_OAUTH_CLIENT_ADMIN_REQUIRED");
+
+        // R_SPACE_CLIENT_ADMIN : clients OAuth2 du space, sans annuaire.
+        Set<String> clientAdmin = Set.of("R_SPACE_CLIENT_ADMIN");
+        assertThat(evaluateTmsRoute(subject(clientAdmin), CLIENTS_PATH, Action.CREATE).isPermit()).isTrue();
+        assertThat(evaluateTmsRoute(subject(clientAdmin), ROTATE_PATH, Action.CREATE).isPermit()).isTrue();
+        assertDeniedBy(evaluateCreateUser(clientAdmin), "POL_USER_ADMIN_REQUIRED");
+
+        // R_SPACE_AUDITOR : lit le détail de son space, rien d'autre.
+        Set<String> auditor = Set.of("R_SPACE_AUDITOR");
+        assertThat(evaluateTmsRoute(subject(auditor), TMS_SPACES_PATH + "/" + SPACE, Action.READ).isPermit())
+                .isTrue();
+        assertDeniedBy(evaluateUsersRoute(auditor, READABLE_USERS_PATH, Action.READ), "POL_USER_ADMIN_REQUIRED");
+        assertDeniedBy(evaluateTmsRoute(subject(auditor), CLIENTS_PATH, Action.CREATE),
+                "POL_OAUTH_CLIENT_ADMIN_REQUIRED");
+    }
+
+    @Test
+    void specializedOrganizationRoles_getExactlyTheirSurface() {
+        // R_ORG_AUDITOR lit le dashboard (P_ORG_READ) sans lister ni créer de spaces.
+        Set<String> auditor = Set.of("R_ORG_AUDITOR");
+        assertThat(evaluateDashboard(orgHuman(auditor)).isPermit()).isTrue();
+        assertDeniedBy(evaluateTmsRoute(orgHuman(auditor), TMS_SPACES_PATH, Action.READ),
+                "POL_SPACE_LIST_ORG_AUTHORITY_REQUIRED");
+        assertDeniedBy(evaluateTmsRoute(orgHuman(auditor), TMS_SPACES_PATH, Action.CREATE),
+                "POL_SPACE_CREATE_ORG_AUTHORITY_REQUIRED");
+
+        // R_ORG_USER_ADMIN projeté dans un space : annuaire oui, gouvernance RBAC non.
+        Set<String> userAdmin = Set.of("R_ORG_USER_ADMIN");
+        String rolesPath = READABLE_USERS_PATH + "/dddddddd-0000-0000-0000-000000000004/roles";
+        assertThat(evaluateCreateUser(userAdmin).isPermit()).isTrue();
+        assertDeniedBy(evaluateUsersRoute(userAdmin, rolesPath, Action.CREATE), "POL_USER_RBAC_ADMIN_REQUIRED");
+        assertDeniedBy(evaluateTmsRoute(orgHuman(userAdmin), TMS_SPACES_PATH, Action.CREATE),
+                "POL_SPACE_CREATE_ORG_AUTHORITY_REQUIRED");
+    }
+
+    @Test
+    void permissionsAreReadInTheTokenBoundary_neverFromRoleNames() {
+        // Rôles d'admin sans permission portée : refusé (le nom du rôle ne confère rien).
+        Subject rolesOnly = new Subject("actor", Set.of("R_SPACE_ADMIN", "R_ORG_OWNER"), Set.of(),
+                ORG, SPACE, "HUMAN", "SPACE", ACCOUNT);
+        assertDeniedBy(evaluator.evaluate(rolesOnly, new Resource(READABLE_USERS_PATH, ORG, SPACE),
+                Action.CREATE, new Environment(Instant.now(), "127.0.0.1", 0)), "POL_USER_ADMIN_REQUIRED");
+
+        // Permission de Space portée par un token ORGANIZATION : la surface Space reste fermée.
+        Subject orgTokenWithSpacePermission = new Subject("actor", Set.of(),
+                Set.of("P_SPACE_USERS_MANAGE"), ORG, null, "HUMAN", "ORGANIZATION", ACCOUNT);
+        assertDeniedBy(evaluator.evaluate(orgTokenWithSpacePermission,
+                new Resource(READABLE_USERS_PATH, ORG, null),
+                Action.CREATE, new Environment(Instant.now(), "127.0.0.1", 0)), "POL_USER_ADMIN_REQUIRED");
+
+        // P_ORG_* forgée dans un token SPACE : ni liste ni création de spaces (E3).
+        Subject spaceTokenWithOrgPermission = new Subject("actor", Set.of(),
+                Set.of("P_ORG_SPACES_READ", "P_ORG_SPACES_CREATE", "P_ORG_READ"),
+                ORG, SPACE, "HUMAN", "SPACE", ACCOUNT);
+        assertDeniedBy(evaluateTmsRoute(spaceTokenWithOrgPermission, TMS_SPACES_PATH, Action.READ),
+                "POL_SPACE_LIST_ORG_AUTHORITY_REQUIRED");
+        assertDeniedBy(evaluateTmsRoute(spaceTokenWithOrgPermission, TMS_SPACES_PATH, Action.CREATE),
+                "POL_SPACE_CREATE_ORG_AUTHORITY_REQUIRED");
+        assertDeniedBy(evaluateDashboard(spaceTokenWithOrgPermission), "POL_ORG_DASHBOARD_ORG_HUMAN_REQUIRED");
+        assertDeniedBy(evaluateTmsRoute(spaceTokenWithOrgPermission, TMS_SPACES_PATH + "/" + OTHER_SPACE, Action.READ),
+                "POL_SPACE_READ_ORG_OR_LOCAL_ADMIN_REQUIRED");
+    }
+
+    @Test
+    void eachGovernedPair_requiresExactlyItsPermission() {
+        String user = READABLE_USERS_PATH + "/dddddddd-0000-0000-0000-000000000004";
+        String catalog = "/api/v1/orgs/takibo-iam/spaces/finance/roles";
+        record Case(String path, Action action, String permission, String policyId, boolean tms) {}
+
+        for (Case c : java.util.List.of(
+                new Case(READABLE_USERS_PATH, Action.READ, "P_SPACE_USERS_READ", "POL_USER_ADMIN_REQUIRED", false),
+                new Case(READABLE_USERS_PATH, Action.CREATE, "P_SPACE_USERS_MANAGE", "POL_USER_ADMIN_REQUIRED", false),
+                new Case(user, Action.UPDATE, "P_SPACE_USERS_MANAGE", "POL_USER_ADMIN_REQUIRED", false),
+                new Case(user + "/suspend", Action.CREATE, "P_SPACE_USERS_LIFECYCLE", "POL_USER_ADMIN_REQUIRED", false),
+                new Case(user + "/roles", Action.READ, "P_SPACE_RBAC_READ", "POL_USER_RBAC_ADMIN_REQUIRED", false),
+                new Case(user + "/groups", Action.CREATE, "P_SPACE_RBAC_ASSIGN", "POL_USER_RBAC_ADMIN_REQUIRED", false),
+                new Case(catalog, Action.READ, "P_SPACE_RBAC_READ", "POL_RBAC_READ_ADMIN_REQUIRED", false),
+                new Case(CLIENTS_PATH, Action.CREATE, "P_SPACE_CLIENTS_MANAGE", "POL_OAUTH_CLIENT_ADMIN_REQUIRED", true),
+                new Case(ROTATE_PATH, Action.CREATE, "P_SPACE_CLIENTS_ROTATE_SECRET",
+                        "POL_OAUTH_CLIENT_ADMIN_REQUIRED", true))) {
+            // Le token porte toutes les permissions de Space du SPACE_ADMIN, sauf celle exigée.
+            Set<String> others = new java.util.HashSet<>(
+                    TokenPermissions.of(Set.of("R_SPACE_ADMIN"), ORG, SPACE, "SPACE"));
+            assertThat(others.remove(c.permission())).as(c.permission()).isTrue();
+            Subject withIt = new Subject("actor", Set.of(), Set.of(c.permission()), ORG, SPACE, "HUMAN", "SPACE", ACCOUNT);
+            Subject withoutIt = new Subject("actor", Set.of(), others, ORG, SPACE, "HUMAN", "SPACE", ACCOUNT);
+            Resource resource = c.tms() ? new Resource(c.path(), null, null) : new Resource(c.path(), ORG, SPACE);
+            Environment env = new Environment(Instant.now(), "127.0.0.1", 0);
+
+            assertThat(evaluator.evaluate(withIt, resource, c.action(), env).isPermit()).as(c.path()).isTrue();
+            assertDeniedBy(evaluator.evaluate(withoutIt, resource, c.action(), env), c.policyId(), c.path());
+        }
+
+        // Le catalogue RBAC est en lecture seule, même pour un admin.
+        assertDeniedBy(evaluateUsersRoute(Set.of("R_SPACE_ADMIN"), catalog, Action.CREATE),
+                "POL_SPACE_ROUTE_NOT_GOVERNED");
+
+        // Méthode sans endpoint : refus de politique (403), pas de passage vers un 405.
+        assertDeniedBy(evaluateUsersRoute(Set.of("R_SPACE_ADMIN"), user, Action.DELETE),
+                "POL_SPACE_ROUTE_NOT_GOVERNED");
+        assertDeniedBy(evaluateUsersRoute(Set.of("R_SPACE_ADMIN"), READABLE_USERS_PATH, Action.UPDATE),
+                "POL_SPACE_ROUTE_NOT_GOVERNED");
     }
 }

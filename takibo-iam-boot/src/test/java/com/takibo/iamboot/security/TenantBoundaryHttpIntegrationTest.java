@@ -1,5 +1,6 @@
 package com.takibo.iamboot.security;
 
+import com.takibo.iamboot.support.TokenPermissions;
 import com.takibo.identitycore.domain.status.SpaceOperationalStatus;
 import com.takibo.identitycore.integration.space.port.SpaceOwnershipGuardCase;
 import com.takibo.identitycore.integration.space.port.SpaceStatusCheckerCase;
@@ -131,6 +132,8 @@ class TenantBoundaryHttpIntegrationTest {
         }
         claims.put("scopeLevel", scopeLevel);
         claims.put("roles", List.of(roles));
+        claims.put("permissions", TokenPermissions.of(List.of(roles), orgId.toString(),
+                spaceId == null ? null : spaceId.toString(), scopeLevel));
         return claims;
     }
 

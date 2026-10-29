@@ -19,8 +19,8 @@ import org.testcontainers.containers.PostgreSQLContainer;
  * heritent de ce socle ; Testcontainers le supprime a la sortie.
  * <p>
  * Les classes concretes portent {@code @EnabledIf("dockerIsAvailable")} : sans Docker, elles
- * sont ignorees plutot qu'en echec. Les runners GitHub {@code ubuntu-latest} utilises par la
- * CI disposent de Docker, donc ces tests s'y executent reellement.
+ * sont ignorees plutot qu'en echec, sauf en CI ({@code CI=true}) ou l'absence de Docker fait
+ * echouer la suite : une suite verte n'y cache jamais des tests PostgreSQL ignores.
  */
 abstract class TasPostgresBaseline {
 
@@ -34,15 +34,26 @@ abstract class TasPostgresBaseline {
      * declaree inapte.
      */
     static boolean dockerIsAvailable() {
+        boolean available;
         try {
-            return DockerClientFactory.instance().isDockerAvailable();
+            available = DockerClientFactory.instance().isDockerAvailable();
         } catch (RuntimeException | LinkageError ignored) {
             // Docker absent ou mal configure : l'initialisation de Testcontainers echoue
             // soit par une exception, soit par une erreur de chargement de classe.
             // Volontairement plus etroit que Throwable : une erreur de la JVM, une
             // interruption ou un depassement de pile doivent remonter.
-            return false;
+            available = false;
         }
+        return requiredInCi(available, System.getenv("CI"));
+    }
+
+    /** En CI, Docker est obligatoire : son absence fait echouer la classe au lieu de l'ignorer. */
+    static boolean requiredInCi(boolean dockerAvailable, String ciEnvironment) {
+        if (!dockerAvailable && "true".equalsIgnoreCase(ciEnvironment)) {
+            throw new IllegalStateException(
+                    "Docker indisponible en CI : les tests PostgreSQL ne peuvent pas etre ignores");
+        }
+        return dockerAvailable;
     }
 
     private static synchronized PostgreSQLContainer<?> container() {

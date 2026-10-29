@@ -40,11 +40,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class OutboxJpaClaimIntegrationTest {
 
     static boolean dockerIsAvailable() {
+        boolean available;
         try {
-            return DockerClientFactory.instance().isDockerAvailable();
+            available = DockerClientFactory.instance().isDockerAvailable();
         } catch (Throwable ignored) {
-            return false;
+            available = false;
         }
+        // En CI, Docker est obligatoire : la classe échoue au lieu d'être ignorée.
+        if (!available && "true".equalsIgnoreCase(System.getenv("CI"))) {
+            throw new IllegalStateException(
+                    "Docker indisponible en CI : les tests PostgreSQL ne peuvent pas être ignorés");
+        }
+        return available;
     }
 
     @Container

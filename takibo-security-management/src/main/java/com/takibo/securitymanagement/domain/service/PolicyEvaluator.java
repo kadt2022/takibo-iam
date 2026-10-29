@@ -1,6 +1,6 @@
 package com.takibo.securitymanagement.domain.service;
 
-import com.takibo.identitycore.domain.catalogrbac.TechnicalRole;
+import com.takibo.identitycore.domain.catalogrbac.TechnicalPermission;
 import com.takibo.securitymanagement.domain.model.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -76,7 +76,6 @@ public class PolicyEvaluator {
                                                    Action action) {
 
         String path = resource.path();
-        boolean tenantAdmin = isTenantAdmin(subject);
 
         // ORDONNANCEMENT : la règle clients OAuth2 DOIT précéder denyTmsSpaceSurface —
         // TmsSpaceRoute.parse classe .../spaces/{uuid}/clients comme sous-route et la
@@ -84,9 +83,7 @@ public class PolicyEvaluator {
         return organizationSignupPolicy(path, action)
                 .or(() -> currentUserSpacesPolicy(subject, path, action))
                 .or(() -> denyOrgDashboardSurface(subject, path, action))
-                .or(() -> denyUserRbacGovernanceSurface(path, tenantAdmin))
-                .or(() -> denyReadableUsersSurface(path, tenantAdmin))
-                .or(() -> denyReadableRbacCatalogSurface(path, tenantAdmin))
+                .or(() -> readableSpaceSurface(subject, path, action))
                 .or(() -> denyOAuthClientSurface(subject, path, action))
                 .or(() -> denyTmsSpaceSurface(subject, path, action))
                 .or(() -> denyUngovernedTmsSurface(path))
@@ -102,25 +99,16 @@ public class PolicyEvaluator {
     }
 
     /**
-     * Admin tenant = pouvoir d'agir dans la frontière portée par le token.
-     * Ce statut n'élargit JAMAIS la frontière elle-même (token.space_id reste strict).
-     * Seuls les codes réels du catalogue technique confèrent ce statut.
+     * RBAC-05/06 : une décision lit une permission située du token, jamais un nom de rôle.
+     * Les permissions sont calculées à l'émission pour la frontière du token (projection
+     * ORGANIZATION -> SPACE seulement) : un token SPACE ne porte jamais de P_ORG_*.
      */
-    private static boolean isTenantAdmin(Subject subject) {
-        return hasAnyRole(subject,
-                TechnicalRole.PLATFORM_ADMIN.code(),
-                TechnicalRole.ORG_OWNER.code(),
-                TechnicalRole.ORG_ADMIN.code(),
-                TechnicalRole.SPACE_ADMIN.code());
+    private static boolean hasPermission(Subject subject, TechnicalPermission permission) {
+        return subject.permissions() != null && subject.permissions().contains(permission.code());
     }
 
-    private static boolean hasAnyRole(Subject subject, String... codes) {
-        for (String code : codes) {
-            if (subject.roles().contains(code)) {
-                return true;
-            }
-        }
-        return false;
+    private static boolean isSpaceScoped(Subject subject) {
+        return "SPACE".equals(subject.scopeLevel()) && subject.spaceId() != null;
     }
 
     // POST /api/v1/orgs/signup: the bootstrap remains authenticated as before this
@@ -163,10 +151,9 @@ public class PolicyEvaluator {
     }
 
     // /api/v1/orgs/{UUID}/dashboard/** (récit Dashboard 01) : surface FAIL-CLOSED,
-    // à l'image de la surface OAuth2. Autorité ORG requise DANS la frontière du token :
-    // sujet HUMAIN de portée ORGANIZATION dont l'org == org du chemin, et R_ORG_OWNER /
-    // R_ORG_ADMIN. Un membre, un R_SPACE_ADMIN seul, un token PLATFORM ou d'une autre org :
-    // refusés. Seul /dashboard/summary en READ est gouverné : toute autre sous-route
+    // à l'image de la surface OAuth2. Plan ORGANIZATION : sujet HUMAIN de portée
+    // ORGANIZATION dont l'org == org du chemin, et permission P_ORG_READ. Un membre, un
+    // token SPACE, un token PLATFORM ou d'une autre org : refusés. Seul /dashboard/summary en READ est gouverné : toute autre sous-route
     // (POL_ORG_DASHBOARD_ROUTE_NOT_GOVERNED) ou action (POL_ORG_DASHBOARD_ACTION_NOT_SUPPORTED)
     // est refusée — rien de cette surface ne retombe jamais sur POL_DEFAULT_ALLOW.
     private static Optional<PolicyDecision> denyOrgDashboardSurface(Subject subject, String path,
@@ -183,9 +170,9 @@ public class PolicyEvaluator {
             return deny("POL_ORG_DASHBOARD_ORG_HUMAN_REQUIRED",
                     "Organization-scoped human token matching the target organization is required");
         }
-        if (!hasAnyRole(subject, TechnicalRole.ORG_OWNER.code(), TechnicalRole.ORG_ADMIN.code())) {
+        if (!hasPermission(subject, TechnicalPermission.ORG_READ)) {
             return deny("POL_ORG_DASHBOARD_ADMIN_REQUIRED",
-                    "R_ORG_OWNER or R_ORG_ADMIN required to read the organization dashboard");
+                    "P_ORG_READ required to read the organization dashboard");
         }
         if (!route.isSummary()) {
             return deny("POL_ORG_DASHBOARD_ROUTE_NOT_GOVERNED",
@@ -196,7 +183,7 @@ public class PolicyEvaluator {
                     "Only READ is governed on the organization dashboard summary");
         }
         return permit("POL_ORG_DASHBOARD_ADMIN_REQUIRED",
-                "Organization owner or administrator may read the dashboard summary");
+                "P_ORG_READ holder of the target organization may read the dashboard summary");
     }
 
     /**
@@ -226,46 +213,92 @@ public class PolicyEvaluator {
         }
     }
 
-    // /api/v1/orgs/{orgCode}/spaces/{spaceCode}/users/{userId}/{roles|groups}[...] (route lisible)
-    // Déléguer/retirer le pouvoir d'un user est l'acte d'admin le plus sensible de la
-    // surface : règle dédiée, évaluée AVANT la règle générale users.
-    private static Optional<PolicyDecision> denyUserRbacGovernanceSurface(String path, boolean tenantAdmin) {
-        if (isUserRbacGovernanceRoute(path) && !tenantAdmin) {
-            return deny("POL_USER_RBAC_ADMIN_REQUIRED",
-                    "R_ORG_OWNER, R_ORG_ADMIN or R_SPACE_ADMIN required to govern user roles and groups");
+    // /api/v1/orgs/{orgCode}/spaces/{spaceCode}/{users|roles|groups|permissions}[...]
+    // (routes lisibles, plan SPACE). Chaque paire route/action exige sa permission P_SPACE_*
+    // et un token situé dans un Space : la correspondance du Space désigné par les codes reste
+    // vérifiée par SpaceBoundaryGuard, qui seul résout ces codes. Paire non gouvernée, y compris
+    // une méthode sans endpoint : 403 (POL_SPACE_ROUTE_NOT_GOVERNED), jamais 405, comme sur les
+    // surfaces UUID — la réponse ne révèle pas quelles méthodes existent.
+    private static Optional<PolicyDecision> readableSpaceSurface(Subject subject, String path, Action action) {
+        ReadableSpaceRoute route = ReadableSpaceRoute.parse(path);
+        if (route == null) {
+            return Optional.empty();
         }
-        return Optional.empty();
+        TechnicalPermission required = route.requiredPermission(action);
+        if (required == null) {
+            return deny("POL_SPACE_ROUTE_NOT_GOVERNED",
+                    "No policy governs this space route and action — denied by default");
+        }
+        if (!isSpaceScoped(subject) || !hasPermission(subject, required)) {
+            return deny(route.policyId(),
+                    "A SPACE-scoped token holding " + required.code() + " is required");
+        }
+        return permit(route.policyId(), required.code() + " granted in the token space");
     }
 
-    // /api/v1/orgs/{orgCode}/spaces/{spaceCode}/users[...] (route lisible)
-    // Toute la surface user (list/get/create/patch/lifecycle) est un acte d'admin :
-    // lecture comprise — un membre sans rôle admin ne voit pas l'annuaire du space.
-    // Le rôle autorise l'action ; la frontière reste token.org_id/space_id.
-    private static Optional<PolicyDecision> denyReadableUsersSurface(String path, boolean tenantAdmin) {
-        if (isReadableUsersRoute(path) && !tenantAdmin) {
-            return deny("POL_USER_ADMIN_REQUIRED",
-                    "R_ORG_OWNER, R_ORG_ADMIN or R_SPACE_ADMIN required to administer users");
-        }
-        return Optional.empty();
-    }
+    /**
+     * Route lisible du plan SPACE : /api/v1/orgs/{code}/spaces/{code}/... Le segment org
+     * n'est PAS un UUID (doctrine : TIS-CORE parle en codes, TMS en UUID).
+     */
+    record ReadableSpaceRoute(java.util.List<String> rest) {
 
-    // /api/v1/orgs/{orgCode}/spaces/{spaceCode}/{roles|groups|permissions}[...] (route lisible)
-    // Le catalogue RBAC décrit la structure du pouvoir : sa lecture est un acte
-    // d'admin tenant, pas une liste publique pour tout membre du space.
-    private static Optional<PolicyDecision> denyReadableRbacCatalogSurface(String path, boolean tenantAdmin) {
-        if (isReadableRbacCatalogRoute(path) && !tenantAdmin) {
-            return deny("POL_RBAC_READ_ADMIN_REQUIRED",
-                    "R_ORG_OWNER, R_ORG_ADMIN or R_SPACE_ADMIN required to read the RBAC catalog");
+        private static final java.util.Set<String> LIFECYCLE =
+                java.util.Set.of("suspend", "activate", "lock", "deactivate");
+
+        static ReadableSpaceRoute parse(String path) {
+            // ["", "api", "v1", "orgs", {orgCode}, "spaces", {spaceCode}, {surface}, ...]
+            String[] seg = path.split("/");
+            boolean onSurface = seg.length >= 8
+                    && seg[0].isEmpty()
+                    && "api".equals(seg[1]) && "v1".equals(seg[2])
+                    && "orgs".equals(seg[3]) && "spaces".equals(seg[5])
+                    && !isUuid(seg[4])
+                    && java.util.Set.of("users", "roles", "groups", "permissions").contains(seg[7]);
+            return onSurface ? new ReadableSpaceRoute(java.util.List.of(seg).subList(7, seg.length)) : null;
         }
-        return Optional.empty();
+
+        String policyId() {
+            if (!"users".equals(rest.getFirst())) {
+                return "POL_RBAC_READ_ADMIN_REQUIRED";
+            }
+            return rest.size() >= 3 && ("roles".equals(rest.get(2)) || "groups".equals(rest.get(2)))
+                    ? "POL_USER_RBAC_ADMIN_REQUIRED"
+                    : "POL_USER_ADMIN_REQUIRED";
+        }
+
+        TechnicalPermission requiredPermission(Action action) {
+            if (!"users".equals(rest.getFirst())) {
+                // Catalogue RBAC du Space : lecture seule.
+                return rest.size() <= 2 && action == Action.READ ? TechnicalPermission.SPACE_RBAC_READ : null;
+            }
+            return switch (rest.size()) {
+                case 1 -> action == Action.READ ? TechnicalPermission.SPACE_USERS_READ
+                        : action == Action.CREATE ? TechnicalPermission.SPACE_USERS_MANAGE : null;
+                case 2 -> action == Action.READ ? TechnicalPermission.SPACE_USERS_READ
+                        : action == Action.UPDATE ? TechnicalPermission.SPACE_USERS_MANAGE : null;
+                case 3 -> {
+                    if (LIFECYCLE.contains(rest.get(2))) {
+                        yield action == Action.CREATE ? TechnicalPermission.SPACE_USERS_LIFECYCLE : null;
+                    }
+                    if ("roles".equals(rest.get(2)) || "groups".equals(rest.get(2))) {
+                        yield action == Action.READ ? TechnicalPermission.SPACE_RBAC_READ
+                                : action == Action.CREATE ? TechnicalPermission.SPACE_RBAC_ASSIGN : null;
+                    }
+                    yield null;
+                }
+                case 4 -> ("roles".equals(rest.get(2)) || "groups".equals(rest.get(2))) && action == Action.DELETE
+                        ? TechnicalPermission.SPACE_RBAC_ASSIGN : null;
+                default -> null;
+            };
+        }
     }
 
     // /api/v1/orgs/{UUID}/spaces/{UUID}/clients[...] (management des clients OAuth2)
     // Règle POL_OAUTH_CLIENT_ADMIN_REQUIRED : créer un client machine ou faire tourner
     // son secret est l'acte le plus sensible du tenant (le secret sort en clair).
     // Exigences cumulatives : sujet HUMAIN, token de portée SPACE (org_id ET space_id
-    // présents), org et space du token == org et space du chemin, et un rôle d'admin
-    // tenant (R_ORG_OWNER / R_ORG_ADMIN / R_SPACE_ADMIN).
+    // présents), org et space du token == org et space du chemin, et la permission
+    // P_SPACE_CLIENTS_MANAGE (création) ou P_SPACE_CLIENTS_ROTATE_SECRET (rotation).
     // Un token ORGANIZATION (sans space_id) est REFUSÉ : la surface reste volontairement
     // inutilisable pour lui jusqu'à l'échange ORG->SPACE (IAM 34) — fail-closed assumé.
     // Cette règle gouverne TOUTE la surface clients : rien n'y retombe jamais sur
@@ -300,15 +333,15 @@ public class PolicyEvaluator {
             return deny("POL_OAUTH_CLIENT_ACTION_NOT_SUPPORTED",
                     "Only CREATE is governed on the OAuth clients surface");
         }
-        if (!hasAnyRole(subject,
-                TechnicalRole.ORG_OWNER.code(),
-                TechnicalRole.ORG_ADMIN.code(),
-                TechnicalRole.SPACE_ADMIN.code())) {
+        TechnicalPermission required = route.kind() == OAuthClientRouteKind.ROTATE_SECRET
+                ? TechnicalPermission.SPACE_CLIENTS_ROTATE_SECRET
+                : TechnicalPermission.SPACE_CLIENTS_MANAGE;
+        if (!hasPermission(subject, required)) {
             return deny("POL_OAUTH_CLIENT_ADMIN_REQUIRED",
-                    "R_ORG_OWNER, R_ORG_ADMIN or R_SPACE_ADMIN required to manage OAuth clients");
+                    required.code() + " required to manage OAuth clients");
         }
         return permit("POL_OAUTH_CLIENT_ADMIN_REQUIRED",
-                "Tenant administrator bound to the target space may manage OAuth clients");
+                required.code() + " holder bound to the target space may manage OAuth clients");
     }
 
     /**
@@ -380,25 +413,26 @@ public class PolicyEvaluator {
                     "No policy governs this space route yet — denied by default");
         }
 
-        boolean orgAuthority =
-                hasAnyRole(subject, TechnicalRole.ORG_OWNER.code(), TechnicalRole.ORG_ADMIN.code());
+        // Plan ORGANIZATION (E3) : l'autorité organisationnelle s'exerce avec un token situé
+        // au niveau ORGANIZATION. Un token SPACE ne porte de toute façon aucune P_ORG_*.
+        boolean organizationScoped = "ORGANIZATION".equals(subject.scopeLevel());
 
         if (route.isCollectionRoute()) {
             if (action != Action.READ && action != Action.CREATE) {
                 return deny("POL_SPACE_ACTION_NOT_SUPPORTED",
                         "Only READ and CREATE are governed on the spaces collection");
             }
-            if (orgAuthority) {
-                return permit(action == Action.READ
-                                ? "POL_SPACE_LIST_ORG_AUTHORITY_REQUIRED"
-                                : "POL_SPACE_CREATE_ORG_AUTHORITY_REQUIRED",
-                        "Organization owner or administrator may access the spaces collection");
+            boolean read = action == Action.READ;
+            TechnicalPermission required = read
+                    ? TechnicalPermission.ORG_SPACES_READ
+                    : TechnicalPermission.ORG_SPACES_CREATE;
+            String policyId = read
+                    ? "POL_SPACE_LIST_ORG_AUTHORITY_REQUIRED"
+                    : "POL_SPACE_CREATE_ORG_AUTHORITY_REQUIRED";
+            if (organizationScoped && hasPermission(subject, required)) {
+                return permit(policyId, required.code() + " holder may access the spaces collection");
             }
-            return action == Action.READ
-                    ? deny("POL_SPACE_LIST_ORG_AUTHORITY_REQUIRED",
-                            "R_ORG_OWNER or R_ORG_ADMIN required to list the spaces of an organization")
-                    : deny("POL_SPACE_CREATE_ORG_AUTHORITY_REQUIRED",
-                            "R_ORG_OWNER or R_ORG_ADMIN required to create a space in an organization");
+            return deny(policyId, "An ORGANIZATION-scoped token holding " + required.code() + " is required");
         }
 
         // Détail : seule la lecture est gouvernée — UPDATE/DELETE/lifecycle restent
@@ -407,20 +441,21 @@ public class PolicyEvaluator {
             return deny("POL_SPACE_ACTION_NOT_SUPPORTED",
                     "Only READ is governed on a space detail route");
         }
-        if (orgAuthority) {
+        if (organizationScoped && hasPermission(subject, TechnicalPermission.ORG_SPACES_READ)) {
             return permit("POL_SPACE_READ_ORG_OR_LOCAL_ADMIN_REQUIRED",
-                    "Organization owner or administrator may read the space detail");
+                    "P_ORG_SPACES_READ holder may read the space detail");
         }
-        // Exception locale, strictement READ : un R_SPACE_ADMIN lit le space que
-        // son token désigne déjà (org ET space du chemin == org ET space du token).
-        boolean localSpaceAdmin = hasAnyRole(subject, TechnicalRole.SPACE_ADMIN.code())
-                && route.spaceId().equalsIgnoreCase(subject.spaceId());
-        if (localSpaceAdmin) {
+        // Exception locale, strictement READ : un token SPACE lit le space qu'il désigne
+        // déjà (org ET space du chemin == org ET space du token) avec P_SPACE_READ.
+        boolean localSpaceReader = isSpaceScoped(subject)
+                && route.spaceId().equalsIgnoreCase(subject.spaceId())
+                && hasPermission(subject, TechnicalPermission.SPACE_READ);
+        if (localSpaceReader) {
             return permit("POL_SPACE_READ_ORG_OR_LOCAL_ADMIN_REQUIRED",
-                    "Local space administrator may read the target space detail");
+                    "P_SPACE_READ holder of this space may read its detail");
         }
         return deny("POL_SPACE_READ_ORG_OR_LOCAL_ADMIN_REQUIRED",
-                "R_ORG_OWNER/R_ORG_ADMIN required, or R_SPACE_ADMIN of this space for read");
+                "P_ORG_SPACES_READ (ORGANIZATION token), or P_SPACE_READ for the token's own space");
     }
 
     /**
@@ -519,22 +554,5 @@ public class PolicyEvaluator {
                 .policyId(policyId)
                 .reason(reason)
                 .build());
-    }
-
-    private static boolean isReadableUsersRoute(String path) {
-        return path.startsWith("/api/v1/orgs/")
-                && path.contains("/spaces/")
-                && path.contains("/users");
-    }
-
-    private static boolean isReadableRbacCatalogRoute(String path) {
-        return path.startsWith("/api/v1/orgs/")
-                && path.contains("/spaces/")
-                && (path.contains("/roles") || path.contains("/groups") || path.contains("/permissions"));
-    }
-
-    private static boolean isUserRbacGovernanceRoute(String path) {
-        return isReadableUsersRoute(path)
-                && (path.contains("/roles") || path.contains("/groups"));
     }
 }

@@ -1,5 +1,6 @@
 package com.takibo.iamboot.security;
 
+import com.takibo.iamboot.support.TokenPermissions;
 import com.takibo.managementservice.application.query.port.SpaceQueryCase;
 import com.takibo.managementservice.application.query.result.SpaceDetailsResult;
 import com.takibo.managementservice.application.query.result.SpacePageResult;
@@ -71,12 +72,14 @@ class SpaceSurfaceSecurityIntegrationTest {
         mockMvc = MockMvcBuilders.webAppContextSetup(context)
                 .apply(springSecurity())
                 .build();
-        when(tokenValidatorAdapter.validate("org-admin-token"))
-                .thenReturn(humanClaims(ORG_ID, SPACE_ID, "R_ORG_ADMIN"));
-        when(tokenValidatorAdapter.validate("space-admin-token"))
-                .thenReturn(humanClaims(ORG_ID, SPACE_ID, "R_SPACE_ADMIN"));
-        when(tokenValidatorAdapter.validate("cross-org-token"))
-                .thenReturn(humanClaims(OTHER_ORG_ID, SPACE_ID, "R_ORG_ADMIN"));
+        token("org-admin-token", humanClaims(ORG_ID, null, "R_ORG_ADMIN"));
+        token("space-scoped-org-admin-token", humanClaims(ORG_ID, SPACE_ID, "R_ORG_ADMIN"));
+        token("space-admin-token", humanClaims(ORG_ID, SPACE_ID, "R_SPACE_ADMIN"));
+        token("cross-org-token", humanClaims(OTHER_ORG_ID, SPACE_ID, "R_ORG_ADMIN"));
+    }
+
+    private void token(String name, Map<String, Object> claims) throws Exception {
+        when(tokenValidatorAdapter.validate(name)).thenReturn(claims);
     }
 
     private static Map<String, Object> humanClaims(UUID orgId, UUID spaceId, String... roles) {
@@ -86,8 +89,14 @@ class SpaceSurfaceSecurityIntegrationTest {
         claims.put("authMethod", "PASSWORD");
         claims.put("userId", USER_ID.toString());
         claims.put("orgId", orgId.toString());
-        claims.put("spaceId", spaceId.toString());
+        String scopeLevel = spaceId == null ? "ORGANIZATION" : "SPACE";
+        if (spaceId != null) {
+            claims.put("spaceId", spaceId.toString());
+        }
+        claims.put("scopeLevel", scopeLevel);
         claims.put("roles", List.of(roles));
+        claims.put("permissions", TokenPermissions.of(List.of(roles), orgId.toString(),
+                spaceId == null ? null : spaceId.toString(), scopeLevel));
         return claims;
     }
 
@@ -127,6 +136,16 @@ class SpaceSurfaceSecurityIntegrationTest {
                         .header("Authorization", "Bearer org-admin-token"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content").isEmpty());
+    }
+
+    @Test
+    void spaceScopedOrgAdmin_listingSpaces_isForbidden() throws Exception {
+        // E3 : l'autorité ORG s'exerce avec un token ORGANIZATION.
+        mockMvc.perform(get(BASE)
+                        .header("Authorization", "Bearer space-scoped-org-admin-token"))
+                .andExpect(status().isForbidden());
+
+        verify(spaceQueryCase, never()).listSpaces(any(), any(), any(), anyInt(), anyInt(), any());
     }
 
     @Test
