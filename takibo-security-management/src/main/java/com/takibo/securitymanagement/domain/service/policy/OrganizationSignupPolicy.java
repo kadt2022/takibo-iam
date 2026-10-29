@@ -7,8 +7,8 @@ import com.takibo.securitymanagement.domain.model.Subject;
 
 import java.util.Optional;
 
-import static com.takibo.securitymanagement.domain.service.policy.PolicyDecisions.deny;
-import static com.takibo.securitymanagement.domain.service.policy.PolicyDecisions.permit;
+import static com.takibo.securitymanagement.domain.service.policy.Decisions.deny;
+import static com.takibo.securitymanagement.domain.service.policy.Decisions.permit;
 
 /**
  * POST /api/v1/orgs/signup: the bootstrap remains authenticated as before this
@@ -17,16 +17,16 @@ import static com.takibo.securitymanagement.domain.service.policy.PolicyDecision
  */
 public final class OrganizationSignupPolicy implements ResourcePolicy {
 
+    private static final String SIGNUP_PATH = "/api/v1/orgs/signup";
+
     @Override
     public Optional<PolicyDecision> evaluate(Subject subject, Resource resource, Action action) {
-        if (!"/api/v1/orgs/signup".equals(resource.path())) {
-            return Optional.empty();
-        }
-        if (action != Action.CREATE) {
-            return deny("POL_ORG_SIGNUP_ACTION_NOT_SUPPORTED",
-                    "Only CREATE is governed on the organization signup route");
-        }
-        return permit("POL_ORG_SIGNUP_AUTHENTICATED_CREATE",
-                "An authenticated caller may bootstrap a new organization");
+        return Optional.of(resource.path())
+                .filter(SIGNUP_PATH::equals)
+                .map(path -> action == Action.CREATE
+                        ? permit("POL_ORG_SIGNUP_AUTHENTICATED_CREATE",
+                                "An authenticated caller may bootstrap a new organization")
+                        : deny("POL_ORG_SIGNUP_ACTION_NOT_SUPPORTED",
+                                "Only CREATE is governed on the organization signup route"));
     }
 }

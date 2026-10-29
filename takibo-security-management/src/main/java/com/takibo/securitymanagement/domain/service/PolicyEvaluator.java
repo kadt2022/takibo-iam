@@ -1,6 +1,11 @@
 package com.takibo.securitymanagement.domain.service;
 
-import com.takibo.securitymanagement.domain.model.*;
+import com.takibo.securitymanagement.domain.model.Action;
+import com.takibo.securitymanagement.domain.model.Effect;
+import com.takibo.securitymanagement.domain.model.Environment;
+import com.takibo.securitymanagement.domain.model.PolicyDecision;
+import com.takibo.securitymanagement.domain.model.Resource;
+import com.takibo.securitymanagement.domain.model.Subject;
 import com.takibo.securitymanagement.domain.service.policy.CurrentUserSpacesPolicy;
 import com.takibo.securitymanagement.domain.service.policy.OAuthClientPolicy;
 import com.takibo.securitymanagement.domain.service.policy.OrgDashboardPolicy;
@@ -47,20 +52,22 @@ public class PolicyEvaluator {
                                    Environment env) {
         return TENANT_ISOLATION.evaluate(subject, resource, action)
                 .or(() -> firstDecision(subject, resource, action))
-                .orElseGet(() -> PolicyDecision.builder()
-                        .effect(Effect.PERMIT)
-                        .policyId("POL_DEFAULT_ALLOW")
-                        .reason("No denying policy matched")
-                        .build());
+                .orElseGet(PolicyEvaluator::defaultAllow);
     }
 
+    private static PolicyDecision defaultAllow() {
+        return PolicyDecision.builder()
+                .effect(Effect.PERMIT)
+                .policyId("POL_DEFAULT_ALLOW")
+                .reason("No denying policy matched")
+                .build();
+    }
+
+    /** Flux paresseux : les règles suivant la première qui décide ne sont pas évaluées. */
     private static Optional<PolicyDecision> firstDecision(Subject subject, Resource resource, Action action) {
-        for (ResourcePolicy policy : RESOURCE_POLICIES) {
-            Optional<PolicyDecision> decision = policy.evaluate(subject, resource, action);
-            if (decision.isPresent()) {
-                return decision;
-            }
-        }
-        return Optional.empty();
+        return RESOURCE_POLICIES.stream()
+                .map(policy -> policy.evaluate(subject, resource, action))
+                .flatMap(Optional::stream)
+                .findFirst();
     }
 }

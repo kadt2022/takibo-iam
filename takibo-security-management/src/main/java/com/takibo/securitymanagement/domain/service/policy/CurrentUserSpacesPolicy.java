@@ -7,8 +7,11 @@ import com.takibo.securitymanagement.domain.model.Subject;
 
 import java.util.Optional;
 
-import static com.takibo.securitymanagement.domain.service.policy.PolicyDecisions.deny;
-import static com.takibo.securitymanagement.domain.service.policy.PolicyDecisions.permit;
+import static com.takibo.securitymanagement.domain.service.policy.Decisions.Requirement.require;
+import static com.takibo.securitymanagement.domain.service.policy.Decisions.firstUnmet;
+import static com.takibo.securitymanagement.domain.service.policy.Decisions.permit;
+import static com.takibo.securitymanagement.domain.service.policy.Subjects.isOrganizationHuman;
+import static com.takibo.securitymanagement.domain.service.policy.Subjects.isPresent;
 
 /**
  * /api/v1/me/spaces (IAM 32) : surface personnelle, sans rôle, mais strictement
@@ -16,25 +19,24 @@ import static com.takibo.securitymanagement.domain.service.policy.PolicyDecision
  */
 public final class CurrentUserSpacesPolicy implements ResourcePolicy {
 
+    private static final String MY_SPACES_PATH = "/api/v1/me/spaces";
     private static final String POLICY_ID = "POL_MY_SPACES_ORG_HUMAN_REQUIRED";
 
     @Override
     public Optional<PolicyDecision> evaluate(Subject subject, Resource resource, Action action) {
-        if (!"/api/v1/me/spaces".equals(resource.path())) {
-            return Optional.empty();
-        }
-        if (action != Action.READ
-                || !Subject.TYPE_HUMAN.equals(subject.subjectType())
-                || !"ORGANIZATION".equals(subject.scopeLevel())
-                || subject.orgId() == null
-                || subject.orgId().isBlank()
-                || subject.accountId() == null
-                || subject.accountId().isBlank()
-                || subject.spaceId() != null) {
-            return deny(POLICY_ID,
-                    "Organization-scoped human account token required to list accessible spaces");
-        }
-        return permit(POLICY_ID,
-                "Organization-scoped human account token may list its own accessible spaces");
+        return Optional.of(resource.path())
+                .filter(MY_SPACES_PATH::equals)
+                .map(path -> firstUnmet(
+                        require(() -> action == Action.READ && isOrganizationAccount(subject), POLICY_ID,
+                                "Organization-scoped human account token required to list accessible spaces"))
+                        .orElseGet(() -> permit(POLICY_ID,
+                                "Organization-scoped human account token may list its own accessible spaces")));
+    }
+
+    private static boolean isOrganizationAccount(Subject subject) {
+        return isOrganizationHuman(subject)
+                && isPresent(subject.orgId())
+                && isPresent(subject.accountId())
+                && subject.spaceId() == null;
     }
 }

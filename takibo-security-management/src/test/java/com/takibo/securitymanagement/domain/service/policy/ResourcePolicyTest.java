@@ -73,4 +73,22 @@ class ResourcePolicyTest {
                     assertThat(decision.getPolicyId()).isEqualTo("POL_ORG_MISMATCH");
                 });
     }
+
+    @Test
+    void currentUserSpaces_organizationTokenCarryingASpace_isDenied() {
+        String account = "cccccccc-0000-0000-0000-000000000003";
+        Subject organizationHuman = new Subject("actor", Set.of(), Set.of(), ORG, null, "HUMAN", "ORGANIZATION", account);
+        Subject organizationHumanWithSpace = new Subject("actor", Set.of(), Set.of(), ORG, SPACE, "HUMAN",
+                "ORGANIZATION", account);
+        Resource mySpaces = new Resource("/api/v1/me/spaces", null, null);
+        CurrentUserSpacesPolicy policy = new CurrentUserSpacesPolicy();
+
+        assertThat(policy.evaluate(organizationHuman, mySpaces, Action.READ))
+                .hasValueSatisfying(decision -> assertThat(decision.isPermit()).isTrue());
+        assertThat(policy.evaluate(organizationHumanWithSpace, mySpaces, Action.READ))
+                .hasValueSatisfying(decision -> {
+                    assertThat(decision.isDeny()).isTrue();
+                    assertThat(decision.getPolicyId()).isEqualTo("POL_MY_SPACES_ORG_HUMAN_REQUIRED");
+                });
+    }
 }

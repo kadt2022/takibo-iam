@@ -8,10 +8,14 @@ import com.takibo.securitymanagement.domain.model.Subject;
 
 import java.util.Optional;
 
-import static com.takibo.securitymanagement.domain.service.policy.PolicyConditions.hasPermission;
-import static com.takibo.securitymanagement.domain.service.policy.PolicyDecisions.POL_ORG_MISMATCH;
-import static com.takibo.securitymanagement.domain.service.policy.PolicyDecisions.deny;
-import static com.takibo.securitymanagement.domain.service.policy.PolicyDecisions.permit;
+import static com.takibo.securitymanagement.domain.service.policy.Decisions.ORG_MISMATCH_REASON;
+import static com.takibo.securitymanagement.domain.service.policy.Decisions.POL_ORG_MISMATCH;
+import static com.takibo.securitymanagement.domain.service.policy.Decisions.Requirement.require;
+import static com.takibo.securitymanagement.domain.service.policy.Decisions.firstUnmet;
+import static com.takibo.securitymanagement.domain.service.policy.Decisions.permit;
+import static com.takibo.securitymanagement.domain.service.policy.Subjects.SCOPE_SPACE;
+import static com.takibo.securitymanagement.domain.service.policy.Subjects.hasPermission;
+import static com.takibo.securitymanagement.domain.service.policy.Subjects.sameIgnoringCase;
 
 /**
  * /api/v1/orgs/{UUID}/spaces/{UUID}/clients[...] (management des clients OAuth2)
@@ -27,45 +31,31 @@ import static com.takibo.securitymanagement.domain.service.policy.PolicyDecision
  */
 public final class OAuthClientPolicy implements ResourcePolicy {
 
+    private static final String ADMIN_REQUIRED = "POL_OAUTH_CLIENT_ADMIN_REQUIRED";
+
     @Override
     public Optional<PolicyDecision> evaluate(Subject subject, Resource resource, Action action) {
-        OAuthClientRoute route = OAuthClientRoute.parse(resource.path());
-        if (route == null) {
-            return Optional.empty();
-        }
+        return OAuthClientRoute.parse(resource.path()).map(route -> decide(subject, route, action));
+    }
 
-        if (!subject.isHuman()) {
-            return deny("POL_OAUTH_CLIENT_ADMIN_REQUIRED",
-                    "Only a HUMAN subject may manage OAuth clients");
-        }
-        if (subject.orgId() == null || !subject.orgId().equalsIgnoreCase(route.orgId())) {
-            return deny(POL_ORG_MISMATCH,
-                    "Token organization does not match the target organization");
-        }
-        if (!"SPACE".equals(subject.scopeLevel())) {
-            return deny("POL_OAUTH_CLIENT_ADMIN_REQUIRED",
-                    "A SPACE-scoped token is required");
-        }
-        if (subject.spaceId() == null || !subject.spaceId().equalsIgnoreCase(route.spaceId())) {
-            return deny("POL_OAUTH_CLIENT_ADMIN_REQUIRED",
-                    "A SPACE-scoped token designating the target space is required to manage OAuth clients");
-        }
-        if (route.kind() == OAuthClientRoute.Kind.UNKNOWN) {
-            return deny("POL_OAUTH_CLIENT_ROUTE_NOT_GOVERNED",
-                    "No policy governs this OAuth client route yet");
-        }
-        if (action != Action.CREATE) {
-            return deny("POL_OAUTH_CLIENT_ACTION_NOT_SUPPORTED",
-                    "Only CREATE is governed on the OAuth clients surface");
-        }
-        TechnicalPermission required = route.kind() == OAuthClientRoute.Kind.ROTATE_SECRET
-                ? TechnicalPermission.SPACE_CLIENTS_ROTATE_SECRET
-                : TechnicalPermission.SPACE_CLIENTS_MANAGE;
-        if (!hasPermission(subject, required)) {
-            return deny("POL_OAUTH_CLIENT_ADMIN_REQUIRED",
-                    required.code() + " required to manage OAuth clients");
-        }
-        return permit("POL_OAUTH_CLIENT_ADMIN_REQUIRED",
-                required.code() + " holder bound to the target space may manage OAuth clients");
+    private static PolicyDecision decide(Subject subject, OAuthClientRoute route, Action action) {
+        TechnicalPermission required = route.kind().requiredPermission();
+        return firstUnmet(
+                require(subject::isHuman, ADMIN_REQUIRED,
+                        "Only a HUMAN subject may manage OAuth clients"),
+                require(() -> sameIgnoringCase(subject.orgId(), route.orgId()), POL_ORG_MISMATCH,
+                        ORG_MISMATCH_REASON),
+                require(() -> SCOPE_SPACE.equals(subject.scopeLevel()), ADMIN_REQUIRED,
+                        "A SPACE-scoped token is required"),
+                require(() -> sameIgnoringCase(subject.spaceId(), route.spaceId()), ADMIN_REQUIRED,
+                        "A SPACE-scoped token designating the target space is required to manage OAuth clients"),
+                require(() -> route.kind() != OAuthClientRoute.Kind.UNKNOWN, "POL_OAUTH_CLIENT_ROUTE_NOT_GOVERNED",
+                        "No policy governs this OAuth client route yet"),
+                require(() -> action == Action.CREATE, "POL_OAUTH_CLIENT_ACTION_NOT_SUPPORTED",
+                        "Only CREATE is governed on the OAuth clients surface"),
+                require(() -> hasPermission(subject, required), ADMIN_REQUIRED,
+                        required.code() + " required to manage OAuth clients"))
+                .orElseGet(() -> permit(ADMIN_REQUIRED,
+                        required.code() + " holder bound to the target space may manage OAuth clients"));
     }
 }
