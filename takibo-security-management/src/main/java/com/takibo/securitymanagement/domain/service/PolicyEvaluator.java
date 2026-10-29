@@ -240,7 +240,7 @@ public class PolicyEvaluator {
      * Route lisible du plan SPACE : /api/v1/orgs/{code}/spaces/{code}/... Le segment org
      * n'est PAS un UUID (doctrine : TIS-CORE parle en codes, TMS en UUID).
      */
-    record ReadableSpaceRoute(String[] rest) {
+    record ReadableSpaceRoute(java.util.List<String> rest) {
 
         private static final java.util.Set<String> LIFECYCLE =
                 java.util.Set.of("suspend", "activate", "lock", "deactivate");
@@ -254,39 +254,39 @@ public class PolicyEvaluator {
                     && "orgs".equals(seg[3]) && "spaces".equals(seg[5])
                     && !isUuid(seg[4])
                     && java.util.Set.of("users", "roles", "groups", "permissions").contains(seg[7]);
-            return onSurface ? new ReadableSpaceRoute(java.util.Arrays.copyOfRange(seg, 7, seg.length)) : null;
+            return onSurface ? new ReadableSpaceRoute(java.util.List.of(seg).subList(7, seg.length)) : null;
         }
 
         String policyId() {
-            if (!"users".equals(rest[0])) {
+            if (!"users".equals(rest.getFirst())) {
                 return "POL_RBAC_READ_ADMIN_REQUIRED";
             }
-            return rest.length >= 3 && ("roles".equals(rest[2]) || "groups".equals(rest[2]))
+            return rest.size() >= 3 && ("roles".equals(rest.get(2)) || "groups".equals(rest.get(2)))
                     ? "POL_USER_RBAC_ADMIN_REQUIRED"
                     : "POL_USER_ADMIN_REQUIRED";
         }
 
         TechnicalPermission requiredPermission(Action action) {
-            if (!"users".equals(rest[0])) {
+            if (!"users".equals(rest.getFirst())) {
                 // Catalogue RBAC du Space : lecture seule.
-                return rest.length <= 2 && action == Action.READ ? TechnicalPermission.SPACE_RBAC_READ : null;
+                return rest.size() <= 2 && action == Action.READ ? TechnicalPermission.SPACE_RBAC_READ : null;
             }
-            return switch (rest.length) {
+            return switch (rest.size()) {
                 case 1 -> action == Action.READ ? TechnicalPermission.SPACE_USERS_READ
                         : action == Action.CREATE ? TechnicalPermission.SPACE_USERS_MANAGE : null;
                 case 2 -> action == Action.READ ? TechnicalPermission.SPACE_USERS_READ
                         : action == Action.UPDATE ? TechnicalPermission.SPACE_USERS_MANAGE : null;
                 case 3 -> {
-                    if (LIFECYCLE.contains(rest[2])) {
+                    if (LIFECYCLE.contains(rest.get(2))) {
                         yield action == Action.CREATE ? TechnicalPermission.SPACE_USERS_LIFECYCLE : null;
                     }
-                    if ("roles".equals(rest[2]) || "groups".equals(rest[2])) {
+                    if ("roles".equals(rest.get(2)) || "groups".equals(rest.get(2))) {
                         yield action == Action.READ ? TechnicalPermission.SPACE_RBAC_READ
                                 : action == Action.CREATE ? TechnicalPermission.SPACE_RBAC_ASSIGN : null;
                     }
                     yield null;
                 }
-                case 4 -> ("roles".equals(rest[2]) || "groups".equals(rest[2])) && action == Action.DELETE
+                case 4 -> ("roles".equals(rest.get(2)) || "groups".equals(rest.get(2))) && action == Action.DELETE
                         ? TechnicalPermission.SPACE_RBAC_ASSIGN : null;
                 default -> null;
             };
