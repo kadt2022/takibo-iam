@@ -40,7 +40,7 @@ jobs:
           gh api "repos/$SOURCE_REPOSITORY/actions/runs/$RUN_ID/artifacts?per_page=100" > artifacts.json
           for job in 122536848562 122536848533; do
             gh api "repos/$SOURCE_REPOSITORY/actions/jobs/$job" > "job-$job.json"
-            gh api "repos/$SOURCE_REPOSITORY/actions/jobs/$job/logs" > "log-$job.txt"
+            gh api --allow-escape-sequences "repos/$SOURCE_REPOSITORY/actions/jobs/$job/logs" > "log-$job.txt"
           done
           ls -l
 
