@@ -54,13 +54,13 @@ class AccountDomainServiceTest {
     @Test
     void resolveAccountForRegistration_withAccountId_routesToExistingAccount() {
         Account existing = mockAccount(ACCOUNT_ID, ORG_ID);
-        when(accountRepository.findById(AccountId.of(ACCOUNT_ID))).thenReturn(Optional.of(existing));
+        when(accountRepository.findById(OrganizationId.of(ORG_ID), AccountId.of(ACCOUNT_ID))).thenReturn(Optional.of(existing));
         when(takiboIdentityRepository.existsByOrgIdAndAccountId(ORG_ID, ACCOUNT_ID)).thenReturn(true);
 
         Account result = service.resolveAccountForRegistration(commandWithAccountId(ACCOUNT_ID), ORG_ID);
 
         assertThat(result).isSameAs(existing);
-        verify(accountRepository).findById(AccountId.of(ACCOUNT_ID));
+        verify(accountRepository).findById(OrganizationId.of(ORG_ID), AccountId.of(ACCOUNT_ID));
         verify(accountRepository, never()).save(any());
     }
 
@@ -86,27 +86,44 @@ class AccountDomainServiceTest {
 
     @Test
     void resolveExistingAccount_accountNotFound_throws() {
-        when(accountRepository.findById(AccountId.of(ACCOUNT_ID))).thenReturn(Optional.empty());
+        when(accountRepository.findById(OrganizationId.of(ORG_ID), AccountId.of(ACCOUNT_ID))).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.resolveAccountForRegistration(commandWithAccountId(ACCOUNT_ID), ORG_ID))
                 .isInstanceOf(UserCreationException.class)
-                .hasMessageContaining("Account not found");
+                .hasMessage("Account not found: " + ACCOUNT_ID);
     }
 
     @Test
-    void resolveExistingAccount_orgMismatch_throws() {
-        Account wrongOrgAccount = mockAccount(ACCOUNT_ID, OTHER_ORG);
-        when(accountRepository.findById(AccountId.of(ACCOUNT_ID))).thenReturn(Optional.of(wrongOrgAccount));
+    void resolveExistingAccount_isLookedUpInTheRequestedOrganizationOnly() {
+        when(accountRepository.findById(OrganizationId.of(ORG_ID), AccountId.of(ACCOUNT_ID))).thenReturn(Optional.empty());
+        CreateUserCommand command = commandWithAccountId(ACCOUNT_ID);
 
-        assertThatThrownBy(() -> service.resolveAccountForRegistration(commandWithAccountId(ACCOUNT_ID), ORG_ID))
+        assertThatThrownBy(() -> service.resolveAccountForRegistration(command, ORG_ID))
+                .isInstanceOf(UserCreationException.class);
+
+        verify(accountRepository, never()).findById(any(AccountId.class));
+        verifyNoInteractions(takiboIdentityRepository);
+    }
+
+    @Test
+    void resolveExistingAccount_orgMismatch_throwsLikeAnAbsentAccount_withoutDisclosingTheOwner() {
+        // Défense en profondeur : même si la recherche rendait un compte d'une autre organisation.
+        Account wrongOrgAccount = mockAccount(ACCOUNT_ID, OTHER_ORG);
+        when(accountRepository.findById(OrganizationId.of(ORG_ID), AccountId.of(ACCOUNT_ID))).thenReturn(Optional.of(wrongOrgAccount));
+        CreateUserCommand command = commandWithAccountId(ACCOUNT_ID);
+
+        assertThatThrownBy(() -> service.resolveAccountForRegistration(command, ORG_ID))
                 .isInstanceOf(UserCreationException.class)
-                .hasMessageContaining("organization misalignment");
+                .hasMessage("Account not found: " + ACCOUNT_ID)
+                .hasMessageNotContaining(OTHER_ORG.toString())
+                .hasMessageNotContaining(ORG_ID.toString());
+        verifyNoInteractions(takiboIdentityRepository);
     }
 
     @Test
     void resolveExistingAccount_identityAlreadyExists_doesNotCreateIt() {
         Account existing = mockAccount(ACCOUNT_ID, ORG_ID);
-        when(accountRepository.findById(AccountId.of(ACCOUNT_ID))).thenReturn(Optional.of(existing));
+        when(accountRepository.findById(OrganizationId.of(ORG_ID), AccountId.of(ACCOUNT_ID))).thenReturn(Optional.of(existing));
         when(takiboIdentityRepository.existsByOrgIdAndAccountId(ORG_ID, ACCOUNT_ID)).thenReturn(true);
 
         service.resolveAccountForRegistration(commandWithAccountId(ACCOUNT_ID), ORG_ID);
@@ -117,7 +134,7 @@ class AccountDomainServiceTest {
     @Test
     void resolveExistingAccount_identityMissing_createsIt() {
         Account existing = mockAccount(ACCOUNT_ID, ORG_ID);
-        when(accountRepository.findById(AccountId.of(ACCOUNT_ID))).thenReturn(Optional.of(existing));
+        when(accountRepository.findById(OrganizationId.of(ORG_ID), AccountId.of(ACCOUNT_ID))).thenReturn(Optional.of(existing));
         when(takiboIdentityRepository.existsByOrgIdAndAccountId(ORG_ID, ACCOUNT_ID)).thenReturn(false);
         when(takiboIdentityRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 

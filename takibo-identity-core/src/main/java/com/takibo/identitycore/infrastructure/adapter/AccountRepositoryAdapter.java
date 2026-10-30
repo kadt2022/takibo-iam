@@ -29,6 +29,11 @@ public class AccountRepositoryAdapter implements AccountRepository {
     }
 
     @Override
+    public Optional<Account> findById(OrganizationId orgId, AccountId id) {
+        return jpa.findByIdAndOrgId(id.getValue(), orgId.getValue()).map(mapper::toDomain);
+    }
+
+    @Override
     public Optional<Account> findByEmail(EmailAddress email) {
         return jpa.findByEmailIgnoreCase(email.value()).map(mapper::toDomain);
     }

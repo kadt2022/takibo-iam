@@ -12,6 +12,8 @@ import java.util.Optional;
 public interface AccountRepository {
     Optional<Account> findById(AccountId id);
 
+    Optional<Account> findById(OrganizationId orgId, AccountId id);
+
     Optional<Account> findByEmail(EmailAddress email);
 
     Optional<Account> findByEmail(OrganizationId orgId, EmailAddress email);
