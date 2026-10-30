@@ -63,8 +63,8 @@ public class AccountDomainService {
     private Account resolveExistingAccount(UUID accountId, UUID organizationId) {
         AccountId id = AccountId.of(accountId);
 
-        Account account = accountRepository.findById(id)
-                .orElseThrow(() -> new UserCreationException("Account not found: " + accountId));
+        Account account = accountRepository.findById(OrganizationId.of(organizationId), id)
+                .orElseThrow(() -> accountNotFound(accountId));
 
         validateAccountOrganizationAlignment(account, organizationId);
 
@@ -140,10 +140,13 @@ public class AccountDomainService {
 
     private void validateAccountOrganizationAlignment(Account account, UUID expectedOrganizationId) {
         if (!account.getOrgId().equals(expectedOrganizationId)) {
-            throw new UserCreationException(
-                    "Account organization misalignment. Account belongs to %s, but organization requires %s"
-                            .formatted(account.getOrgId(), expectedOrganizationId)
-            );
+            throw accountNotFound(account.getId().getValue());
         }
+    }
+
+    // Hors de son organisation, un compte n'existe pas : même réponse qu'un compte absent,
+    // sans rien révéler de l'organisation qui le porte.
+    private static UserCreationException accountNotFound(UUID accountId) {
+        return new UserCreationException("Account not found: " + accountId);
     }
 }

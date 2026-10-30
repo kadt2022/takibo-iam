@@ -15,4 +15,6 @@ public interface JpaAccountRepository extends JpaRepository<AccountEntity, UUID>
     boolean existsByEmailIgnoreCase(String email);
 
     Optional<AccountEntity> findByOrgIdAndEmailIgnoreCase(UUID orgId, String email);
+
+    Optional<AccountEntity> findByIdAndOrgId(UUID id, UUID orgId);
 }
