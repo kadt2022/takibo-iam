@@ -96,8 +96,9 @@ class AccountDomainServiceTest {
     @Test
     void resolveExistingAccount_isLookedUpInTheRequestedOrganizationOnly() {
         when(accountRepository.findById(OrganizationId.of(ORG_ID), AccountId.of(ACCOUNT_ID))).thenReturn(Optional.empty());
+        CreateUserCommand command = commandWithAccountId(ACCOUNT_ID);
 
-        assertThatThrownBy(() -> service.resolveAccountForRegistration(commandWithAccountId(ACCOUNT_ID), ORG_ID))
+        assertThatThrownBy(() -> service.resolveAccountForRegistration(command, ORG_ID))
                 .isInstanceOf(UserCreationException.class);
 
         verify(accountRepository, never()).findById(any(AccountId.class));
@@ -109,8 +110,9 @@ class AccountDomainServiceTest {
         // Défense en profondeur : même si la recherche rendait un compte d'une autre organisation.
         Account wrongOrgAccount = mockAccount(ACCOUNT_ID, OTHER_ORG);
         when(accountRepository.findById(OrganizationId.of(ORG_ID), AccountId.of(ACCOUNT_ID))).thenReturn(Optional.of(wrongOrgAccount));
+        CreateUserCommand command = commandWithAccountId(ACCOUNT_ID);
 
-        assertThatThrownBy(() -> service.resolveAccountForRegistration(commandWithAccountId(ACCOUNT_ID), ORG_ID))
+        assertThatThrownBy(() -> service.resolveAccountForRegistration(command, ORG_ID))
                 .isInstanceOf(UserCreationException.class)
                 .hasMessage("Account not found: " + ACCOUNT_ID)
                 .hasMessageNotContaining(OTHER_ORG.toString())
