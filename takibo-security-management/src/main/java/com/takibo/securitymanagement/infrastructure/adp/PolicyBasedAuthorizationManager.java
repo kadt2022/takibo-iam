@@ -48,6 +48,20 @@ public class PolicyBasedAuthorizationManager implements AuthorizationManager<Req
             Supplier<? extends Authentication> authenticationSupplier,
             RequestAuthorizationContext context
     ) {
+        try {
+            return decide(authenticationSupplier, context);
+        } catch (RuntimeException e) {
+            // Fail-closed : une panne de l'évaluation refuse l'accès au lieu de s'échapper du filtre.
+            log.error("ADP: authorization evaluation failed, denying access: path={}",
+                    context.getRequest().getRequestURI(), e);
+            return new AuthorizationDecision(false);
+        }
+    }
+
+    private AuthorizationDecision decide(
+            Supplier<? extends Authentication> authenticationSupplier,
+            RequestAuthorizationContext context
+    ) {
         Authentication authentication = authenticationSupplier.get();
 
         if (isAnonymousOrUnauthenticated(authentication)) {

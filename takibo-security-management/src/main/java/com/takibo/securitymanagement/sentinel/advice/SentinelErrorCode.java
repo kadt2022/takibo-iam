@@ -52,6 +52,10 @@ public enum SentinelErrorCode {
 
     // VALIDATION
     BAD_REQUEST,
+    // HTTP (requête que le socle web ne peut pas servir)
+    METHOD_NOT_ALLOWED,
+    UNSUPPORTED_MEDIA_TYPE,
+    NOT_ACCEPTABLE,
     OAUTH_CLIENT_PROFILE_INVALID,
 
     // GENERIC

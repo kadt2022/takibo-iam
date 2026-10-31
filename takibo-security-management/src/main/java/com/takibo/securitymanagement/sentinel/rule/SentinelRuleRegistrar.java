@@ -6,7 +6,13 @@ import com.takibo.securitymanagement.domain.exception.InvalidTokenException;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BindException;
+import org.springframework.web.HttpMediaTypeNotAcceptableException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingRequestHeaderException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 public final class SentinelRuleRegistrar {
 
@@ -17,6 +23,15 @@ public final class SentinelRuleRegistrar {
         registry.register(ConstraintViolationException.class, SentinelRuleHandlers::ruleConstraintViolation);
         registry.register(BindException.class, SentinelRuleHandlers::ruleBind);
         registry.register(HttpMessageNotReadableException.class, SentinelRuleHandlers::ruleNotReadable);
+
+        // Socle web : requête autorisée que Spring MVC ne peut pas servir. Statut explicite,
+        // message générique : jamais de 500, jamais de nom de type ni de message de conversion.
+        registry.register(HttpRequestMethodNotSupportedException.class, SentinelRuleHandlers::ruleMethodNotAllowed);
+        registry.register(HttpMediaTypeNotSupportedException.class, SentinelRuleHandlers::ruleUnsupportedMediaType);
+        registry.register(HttpMediaTypeNotAcceptableException.class, SentinelRuleHandlers::ruleNotAcceptable);
+        registry.register(MethodArgumentTypeMismatchException.class, SentinelRuleHandlers::ruleInvalidRequestParameter);
+        registry.register(MissingServletRequestParameterException.class, SentinelRuleHandlers::ruleInvalidRequestParameter);
+        registry.register(MissingRequestHeaderException.class, SentinelRuleHandlers::ruleInvalidRequestParameter);
 
         registry.register(IllegalArgumentException.class, SentinelRuleHandlers::ruleIllegalArgument);
         registry.tryRegister("com.takibo.managementservice.domain.exception.InvalidClientConfigurationException",

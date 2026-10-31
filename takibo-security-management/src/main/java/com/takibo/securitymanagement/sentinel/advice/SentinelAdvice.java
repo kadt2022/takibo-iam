@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.core.NestedExceptionUtils;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -36,7 +37,9 @@ public class SentinelAdvice {
         log.warn("Exception intercepted [{}] traceId={} path={} -> code={} status={} message={}",
                 cause.getClass().getName(), traceId, path, resp.code(), resp.status(), resp.message(), cause);
 
-        return ResponseEntity.status(resp.status()).body(resp);
+        // Type fixé : la réponse d'erreur s'écrit en JSON même quand le client n'accepte pas le JSON
+        // (sinon son écriture échoue à son tour et le conteneur répond 500 sans corps).
+        return ResponseEntity.status(resp.status()).contentType(MediaType.APPLICATION_JSON).body(resp);
     }
 
     private Throwable resolveHandledCause(Exception failure) {

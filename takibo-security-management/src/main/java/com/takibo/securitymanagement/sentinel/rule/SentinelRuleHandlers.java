@@ -22,6 +22,7 @@ public final class SentinelRuleHandlers {
     private static final String MSG_BAD_CREDENTIALS = "Identifiants incorrects.";
     private static final String MSG_AUTH_REQUIRED = "Authentification requise.";
     private static final String MSG_ACCESS_DENIED = "Accès refusé.";
+    private static final String MSG_UNEXPECTED = "Une erreur inattendue est survenue.";
 
     private SentinelRuleHandlers() {}
 
@@ -29,10 +30,32 @@ public final class SentinelRuleHandlers {
         return (ex, path, trace) -> response(
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 SentinelErrorCode.INTERNAL_ERROR,
-                "Une erreur inattendue est survenue.",
+                MSG_UNEXPECTED,
                 path,
                 trace
         );
+    }
+
+    // ===== SOCLE WEB =====
+
+    static SentinelResponse ruleMethodNotAllowed(Throwable ex, String path, String traceId) {
+        return response(HttpStatus.METHOD_NOT_ALLOWED, SentinelErrorCode.METHOD_NOT_ALLOWED,
+                "Méthode non autorisée sur cette ressource.", path, traceId);
+    }
+
+    static SentinelResponse ruleUnsupportedMediaType(Throwable ex, String path, String traceId) {
+        return response(HttpStatus.UNSUPPORTED_MEDIA_TYPE, SentinelErrorCode.UNSUPPORTED_MEDIA_TYPE,
+                "Type de contenu non supporté.", path, traceId);
+    }
+
+    static SentinelResponse ruleNotAcceptable(Throwable ex, String path, String traceId) {
+        return response(HttpStatus.NOT_ACCEPTABLE, SentinelErrorCode.NOT_ACCEPTABLE,
+                "Format de réponse non disponible.", path, traceId);
+    }
+
+    static SentinelResponse ruleInvalidRequestParameter(Throwable ex, String path, String traceId) {
+        return response(HttpStatus.BAD_REQUEST, SentinelErrorCode.BAD_REQUEST,
+                "Paramètre de requête invalide ou manquant.", path, traceId);
     }
 
     static SentinelResponse ruleMethodArgumentNotValid(MethodArgumentNotValidException ex, String path, String traceId) {
@@ -274,8 +297,9 @@ public final class SentinelRuleHandlers {
         return response(HttpStatus.UNAUTHORIZED, SentinelErrorCode.OAUTH2_INVALID_CLIENT, ex.getMessage(), path, traceId);
     }
 
+    // Erreur serveur : la cause reste dans les logs, la réponse ne la décrit pas.
     static SentinelResponse ruleTenantResolutionFailed(Throwable ex, String path, String traceId) {
-        return response(HttpStatus.INTERNAL_SERVER_ERROR, SentinelErrorCode.TENANT_RESOLUTION_FAILED, ex.getMessage(), path, traceId);
+        return response(HttpStatus.INTERNAL_SERVER_ERROR, SentinelErrorCode.TENANT_RESOLUTION_FAILED, MSG_UNEXPECTED, path, traceId);
     }
 
     private static SentinelResponse response(HttpStatus status, SentinelErrorCode code, String message, String path, String traceId) {
