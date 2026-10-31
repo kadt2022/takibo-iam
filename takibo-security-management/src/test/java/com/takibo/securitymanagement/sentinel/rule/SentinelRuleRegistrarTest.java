@@ -17,11 +17,20 @@ import com.takibo.identitycore.domain.status.UserStatus;
 import com.takibo.securitymanagement.sentinel.advice.SentinelErrorCode;
 import com.takibo.securitymanagement.sentinel.advice.SentinelResponse;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.HttpMediaTypeNotAcceptableException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.bind.MissingRequestHeaderException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 class SentinelRuleRegistrarTest {
 
@@ -68,6 +77,29 @@ class SentinelRuleRegistrarTest {
     @Test
     void registerDefaults_resolvesSpringSecuritySoftDependency() {
         assertResolved(new AccessDeniedException("denied"), 403, SentinelErrorCode.ACCESS_DENIED);
+    }
+
+    @Test
+    void registerDefaults_resolvesWebRequestFailures_withoutInternalDetail() {
+        assertResolved(new HttpRequestMethodNotSupportedException("PUT"),
+                405, SentinelErrorCode.METHOD_NOT_ALLOWED);
+        assertResolved(new HttpMediaTypeNotSupportedException("text/plain"),
+                415, SentinelErrorCode.UNSUPPORTED_MEDIA_TYPE);
+        assertResolved(new HttpMediaTypeNotAcceptableException(List.of(MediaType.APPLICATION_JSON)),
+                406, SentinelErrorCode.NOT_ACCEPTABLE);
+        assertResolved(new MissingServletRequestParameterException("page", "int"),
+                400, SentinelErrorCode.BAD_REQUEST);
+        assertResolved(mock(MissingRequestHeaderException.class), 400, SentinelErrorCode.BAD_REQUEST);
+        assertResolved(mock(MethodArgumentTypeMismatchException.class), 400, SentinelErrorCode.BAD_REQUEST);
+    }
+
+    @Test
+    void webRequestFailures_neverEchoTheExceptionMessage() {
+        Throwable failure = new MissingServletRequestParameterException("secret-param", "int");
+
+        SentinelResponse response = registry.resolve(failure).toResponse(failure, PATH, TRACE_ID);
+
+        assertThat(response.message()).doesNotContain("secret-param").doesNotContain("int");
     }
 
     private void assertResolved(Throwable throwable, int status, SentinelErrorCode code) {

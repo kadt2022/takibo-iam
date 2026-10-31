@@ -4,6 +4,7 @@ import com.takibo.securitymanagement.sentinel.rule.SentinelRuleRegistry;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.MDC;
+import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpServletRequest;
 
 import java.time.Instant;
@@ -65,6 +66,17 @@ class SentinelAdviceTest {
         assertThat(result.getStatusCode().value()).isEqualTo(500);
         assertThat(result.getBody()).isNotNull();
         assertThat(result.getBody().message()).isEqualTo("standalone failure");
+    }
+
+    @Test
+    void handle_answersInJson_whateverTheClientAccepts() {
+        SentinelAdvice advice = new SentinelAdvice(registry());
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", PATH);
+        request.addHeader("Accept", "application/xml");
+
+        var result = advice.handle(new Exception("any failure"), request);
+
+        assertThat(result.getHeaders().getContentType()).isEqualTo(MediaType.APPLICATION_JSON);
     }
 
     private static SentinelRuleRegistry registry() {

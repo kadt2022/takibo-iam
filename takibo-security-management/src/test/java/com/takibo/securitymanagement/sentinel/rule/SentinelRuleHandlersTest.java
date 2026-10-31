@@ -22,6 +22,17 @@ class SentinelRuleHandlersTest {
     private static final UUID USER_ID = UUID.fromString("cccccccc-0000-0000-0000-000000000003");
 
     @Test
+    void tenantResolutionFailure_isA500_withoutTheInternalCause() {
+        SentinelResponse response = SentinelRuleHandlers.ruleTenantResolutionFailed().toResponse(
+                new IllegalStateException("tenant lookup failed for client secret-client"),
+                PATH,
+                TRACE_ID
+        );
+
+        assertResponse(response, 500, SentinelErrorCode.TENANT_RESOLUTION_FAILED, "Une erreur inattendue est survenue.");
+    }
+
+    @Test
     void invalidCredentials_mapsToBadCredentials401() {
         SentinelResponse response = SentinelRuleHandlers.ruleInvalidCredentials(
                 new InvalidCredentialsException(),

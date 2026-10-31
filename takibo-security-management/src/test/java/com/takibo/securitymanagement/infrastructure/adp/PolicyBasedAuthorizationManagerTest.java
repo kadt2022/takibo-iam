@@ -4,6 +4,7 @@ import com.takibo.adp.api.AdaptiveDecisionPort;
 import com.takibo.adp.api.Decision;
 import com.takibo.adp.api.DecisionResponse;
 import com.takibo.adp.spring.adapter.RequestVelocityTracker;
+import com.takibo.securitycontext.exception.TakiboSecurityContextNotAvailableException;
 import com.takibo.securitycontext.model.AuthenticationMethod;
 import com.takibo.securitycontext.model.SubjectIdentity;
 import com.takibo.securitycontext.model.SubjectNature;
@@ -20,6 +21,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -36,6 +38,7 @@ import static org.mockito.Mockito.*;
 /**
  * Vérifie que la politique déterministe (PolicyEvaluator) est bien câblée dans le chemin
  * d'autorisation ACTIF : un DENY de politique court-circuite l'ADP, un PERMIT le consulte.
+ * Chaque chemin d'échec refuse l'accès (fail-closed), sans jamais laisser passer la requête.
  */
 @ExtendWith(MockitoExtension.class)
 class PolicyBasedAuthorizationManagerTest {
@@ -182,5 +185,90 @@ class PolicyBasedAuthorizationManagerTest {
         assertThat(resource.getValue().orgId()).isEqualTo(otherOrg);
         assertThat(decision.isGranted()).isFalse();
         verify(adaptiveDecisionPort, never()).evaluate(any());
+    }
+
+    // ---------- Fail-closed : tout chemin d'échec refuse ----------
+
+    @Test
+    void anonymousCaller_isDenied_withoutReadingTheContext() {
+        Authentication anonymous = new AnonymousAuthenticationToken(
+                "key", "anonymous", List.of(new SimpleGrantedAuthority("ROLE_ANONYMOUS")));
+
+        AuthorizationDecision decision = manager().authorize(() -> anonymous, createUserRequest());
+
+        assertThat(decision.isGranted()).isFalse();
+        verifyNoInteractions(contextProvider, adaptiveDecisionPort);
+    }
+
+    @Test
+    void absentOrUnauthenticatedCaller_isDenied() {
+        when(authentication.isAuthenticated()).thenReturn(false);
+
+        assertThat(manager().authorize(() -> null, createUserRequest()).isGranted()).isFalse();
+        assertThat(manager().authorize(() -> authentication, createUserRequest()).isGranted()).isFalse();
+        verifyNoInteractions(contextProvider, adaptiveDecisionPort);
+    }
+
+    @Test
+    void missingSecurityContext_isDenied_beforePolicyAndAdp() {
+        when(authentication.isAuthenticated()).thenReturn(true);
+        when(contextProvider.current()).thenThrow(new TakiboSecurityContextNotAvailableException("no context"));
+
+        AuthorizationDecision decision = manager().authorize(() -> authentication, createUserRequest());
+
+        assertThat(decision.isGranted()).isFalse();
+        verifyNoInteractions(adaptiveDecisionPort);
+    }
+
+    @Test
+    void unexpectedFailureBeforeAdp_isDenied_insteadOfEscaping() {
+        givenAuthenticatedHuman(Set.of("R_ORG_OWNER", "R_SPACE_ADMIN"));
+        PolicyEvaluator brokenEvaluator = mock(PolicyEvaluator.class);
+        when(brokenEvaluator.evaluate(any(), any(), any(), any())).thenThrow(new IllegalStateException("policy bug"));
+
+        AuthorizationDecision decision = new PolicyBasedAuthorizationManager(
+                adaptiveDecisionPort, velocityTracker, contextProvider, brokenEvaluator)
+                .authorize(() -> authentication, createUserRequest());
+
+        assertThat(decision.isGranted()).isFalse();
+        verifyNoInteractions(adaptiveDecisionPort);
+    }
+
+    @Test
+    void adpFailure_isDenied() {
+        givenPolicyPermitsAndAdpIsConsulted();
+        when(adaptiveDecisionPort.evaluate(any())).thenThrow(new IllegalStateException("adp down"));
+
+        assertThat(manager().authorize(() -> authentication, createUserRequest()).isGranted()).isFalse();
+    }
+
+    @Test
+    void adpWithoutAnswer_isDenied() {
+        givenPolicyPermitsAndAdpIsConsulted();
+        when(adaptiveDecisionPort.evaluate(any())).thenReturn(null);
+
+        assertThat(manager().authorize(() -> authentication, createUserRequest()).isGranted()).isFalse();
+    }
+
+    @Test
+    void adpChallenge_isDenied_andFlaggedOnTheRequest() {
+        givenPolicyPermitsAndAdpIsConsulted();
+        DecisionResponse challenge = new DecisionResponse(
+                "d-3", Decision.CHALLENGE, 60.0, 1.0, 0.0, "step-up",
+                null, List.of(), null, Instant.now(), 1);
+        when(adaptiveDecisionPort.evaluate(any())).thenReturn(challenge);
+        RequestAuthorizationContext context = createUserRequest();
+
+        AuthorizationDecision decision = manager().authorize(() -> authentication, context);
+
+        assertThat(decision.isGranted()).isFalse();
+        assertThat(context.getRequest().getAttribute("adp.challenge.required")).isEqualTo(true);
+        assertThat(context.getRequest().getAttribute("adp.decision.response")).isSameAs(challenge);
+    }
+
+    private void givenPolicyPermitsAndAdpIsConsulted() {
+        givenAuthenticatedHuman(Set.of("R_ORG_OWNER", "R_SPACE_ADMIN"));
+        when(velocityTracker.getVelocity("user-1"))
+                .thenReturn(new RequestVelocityTracker.VelocitySnapshot(0, 0));
     }
 }

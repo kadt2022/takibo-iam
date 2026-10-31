@@ -5,14 +5,32 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Predicate;
+import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 @Getter
 @Setter
 @NoArgsConstructor
 public class PasswordPolicy {
+
+    // BCrypt ne hache que les 72 premiers octets et refuse au-delà : la limite fait partie de la
+    // politique, pour que le refus soit une violation de politique et non une erreur du hacheur.
+    static final int MAX_BYTES = 72;
+
+    // Une classe de caractères cherchée par find() : coût linéaire, sans retour arrière.
+    private static final Pattern UPPERCASE = Pattern.compile("[A-Z]");
+    private static final Pattern LOWERCASE = Pattern.compile("[a-z]");
+    private static final Pattern DIGIT = Pattern.compile("\\d");
+    private static final Pattern SPECIAL = Pattern.compile("[!@#$%^&*()_+\\-=\\[\\]{};':\"\\\\|,.<>/?]");
+    // Fins de ligne que « . » ne traverse pas : les anciennes expressions « .*X.* » les refusaient
+    // dès qu'une règle de caractères était active. Ce refus est conservé, rendu explicite.
+    private static final Pattern LINE_TERMINATOR = Pattern.compile("[\\n\\r\\u0085\\u2028\\u2029]");
 
     private UUID id;
     private String name;
@@ -67,23 +85,7 @@ public class PasswordPolicy {
      * @return true si le mot de passe est valide, false sinon
      */
     public boolean isValid(String password) {
-        if (password == null || password.length() < minLength) {
-            return false;
-        }
-
-        if (requireUppercase && !password.matches(".*[A-Z].*")) {
-            return false;
-        }
-
-        if (requireLowercase && !password.matches(".*[a-z].*")) {
-            return false;
-        }
-
-        if (requireDigit && !password.matches(".*\\d.*")) {
-            return false;
-        }
-
-        return !requireSpecialChar || password.matches(".*[!@#$%^&*()_+\\-=\\[\\]{};':\"\\\\|,.<>/?].*");
+        return violation(password).isEmpty();
     }
 
     /**
@@ -92,28 +94,48 @@ public class PasswordPolicy {
      * @throws PasswordPolicyViolationException si non conforme
      */
     public void validate(String password) {
-        if (password == null) {
-            throw new PasswordPolicyViolationException("Password cannot be null");
-        }
-
-        if (password.length() < minLength) {
-            throw new PasswordPolicyViolationException(
-                    String.format("Password must be at least %d characters long", minLength)
-            );
-        }
-        if (requireUppercase && !password.matches(".*[A-Z].*")) {
-            throw new PasswordPolicyViolationException("Password must contain at least one uppercase letter");
-        }
-        if (requireLowercase && !password.matches(".*[a-z].*")) {
-            throw new PasswordPolicyViolationException("Password must contain at least one lowercase letter");
-        }
-        if (requireDigit && !password.matches(".*\\d.*")) {
-            throw new PasswordPolicyViolationException("Password must contain at least one digit");
-        }
-        if (requireSpecialChar && !password.matches(".*[!@#$%^&*()_+\\-=\\[\\]{};':\"\\\\|,.<>/?].*")) {
-            throw new PasswordPolicyViolationException("Password must contain at least one special character");
-        }
-
+        violation(password).ifPresent(message -> {
+            throw new PasswordPolicyViolationException(message);
+        });
         // Note: La vérification de l'historique et de l'âge du mot de passe irait ici, si implémentée.
+    }
+
+    /** Première règle enfreinte, dans l'ordre de déclaration ; vide si le mot de passe est conforme. */
+    private Optional<String> violation(String password) {
+        if (password == null) {
+            return Optional.of("Password cannot be null");
+        }
+        return rules()
+                .filter(rule -> rule.isBrokenBy(password))
+                .map(Rule::message)
+                .findFirst();
+    }
+
+    private Stream<Rule> rules() {
+        return Stream.of(
+                new Rule(password -> password.length() < minLength,
+                        String.format("Password must be at least %d characters long", minLength)),
+                new Rule(password -> password.getBytes(StandardCharsets.UTF_8).length > MAX_BYTES,
+                        String.format("Password must not exceed %d bytes", MAX_BYTES)),
+                new Rule(password -> anyCharacterRule() && LINE_TERMINATOR.matcher(password).find(),
+                        "Password must not contain line breaks"),
+                new Rule(password -> requireUppercase && !UPPERCASE.matcher(password).find(),
+                        "Password must contain at least one uppercase letter"),
+                new Rule(password -> requireLowercase && !LOWERCASE.matcher(password).find(),
+                        "Password must contain at least one lowercase letter"),
+                new Rule(password -> requireDigit && !DIGIT.matcher(password).find(),
+                        "Password must contain at least one digit"),
+                new Rule(password -> requireSpecialChar && !SPECIAL.matcher(password).find(),
+                        "Password must contain at least one special character"));
+    }
+
+    private boolean anyCharacterRule() {
+        return requireUppercase || requireLowercase || requireDigit || requireSpecialChar;
+    }
+
+    private record Rule(Predicate<String> broken, String message) {
+        boolean isBrokenBy(String password) {
+            return broken.test(password);
+        }
     }
 }
