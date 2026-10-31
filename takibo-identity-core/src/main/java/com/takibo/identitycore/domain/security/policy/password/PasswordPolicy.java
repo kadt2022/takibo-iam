@@ -23,10 +23,14 @@ public class PasswordPolicy {
     // politique, pour que le refus soit une violation de politique et non une erreur du hacheur.
     static final int MAX_BYTES = 72;
 
-    private static final Pattern UPPERCASE = Pattern.compile(".*[A-Z].*");
-    private static final Pattern LOWERCASE = Pattern.compile(".*[a-z].*");
-    private static final Pattern DIGIT = Pattern.compile(".*\\d.*");
-    private static final Pattern SPECIAL = Pattern.compile(".*[!@#$%^&*()_+\\-=\\[\\]{};':\"\\\\|,.<>/?].*");
+    // Une classe de caractères cherchée par find() : coût linéaire, sans retour arrière.
+    private static final Pattern UPPERCASE = Pattern.compile("[A-Z]");
+    private static final Pattern LOWERCASE = Pattern.compile("[a-z]");
+    private static final Pattern DIGIT = Pattern.compile("\\d");
+    private static final Pattern SPECIAL = Pattern.compile("[!@#$%^&*()_+\\-=\\[\\]{};':\"\\\\|,.<>/?]");
+    // Fins de ligne que « . » ne traverse pas : les anciennes expressions « .*X.* » les refusaient
+    // dès qu'une règle de caractères était active. Ce refus est conservé, rendu explicite.
+    private static final Pattern LINE_TERMINATOR = Pattern.compile("[\\n\\r\\u0085\\u2028\\u2029]");
 
     private UUID id;
     private String name;
@@ -113,14 +117,20 @@ public class PasswordPolicy {
                         String.format("Password must be at least %d characters long", minLength)),
                 new Rule(password -> password.getBytes(StandardCharsets.UTF_8).length > MAX_BYTES,
                         String.format("Password must not exceed %d bytes", MAX_BYTES)),
-                new Rule(password -> requireUppercase && !UPPERCASE.matcher(password).matches(),
+                new Rule(password -> anyCharacterRule() && LINE_TERMINATOR.matcher(password).find(),
+                        "Password must not contain line breaks"),
+                new Rule(password -> requireUppercase && !UPPERCASE.matcher(password).find(),
                         "Password must contain at least one uppercase letter"),
-                new Rule(password -> requireLowercase && !LOWERCASE.matcher(password).matches(),
+                new Rule(password -> requireLowercase && !LOWERCASE.matcher(password).find(),
                         "Password must contain at least one lowercase letter"),
-                new Rule(password -> requireDigit && !DIGIT.matcher(password).matches(),
+                new Rule(password -> requireDigit && !DIGIT.matcher(password).find(),
                         "Password must contain at least one digit"),
-                new Rule(password -> requireSpecialChar && !SPECIAL.matcher(password).matches(),
+                new Rule(password -> requireSpecialChar && !SPECIAL.matcher(password).find(),
                         "Password must contain at least one special character"));
+    }
+
+    private boolean anyCharacterRule() {
+        return requireUppercase || requireLowercase || requireDigit || requireSpecialChar;
     }
 
     private record Rule(Predicate<String> broken, String message) {

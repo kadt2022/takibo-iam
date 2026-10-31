@@ -71,6 +71,20 @@ class PasswordPolicyTest {
     }
 
     @Test
+    void lineBreak_isRefused_whileACharacterRuleIsActive() {
+        for (String lineBreak : new String[]{"\n", "\r", "\u0085", "\u2028", "\u2029"}) {
+            String password = "Abcd" + lineBreak + "efg1!";
+            assertThat(policy.isValid(password)).as("U+%04X", (int) lineBreak.charAt(0)).isFalse();
+            assertThatThrownBy(() -> policy.validate(password)).hasMessage("Password must not contain line breaks");
+        }
+    }
+
+    @Test
+    void lineBreak_isAccepted_whenNoCharacterRuleIsActive() {
+        assertThat(policy(false, false, false, false).isValid("abcdefgh\n")).isTrue();
+    }
+
+    @Test
     void disabledCharacterRules_areNotEnforced() {
         PasswordPolicy lenient = policy(false, false, false, false);
 

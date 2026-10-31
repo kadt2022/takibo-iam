@@ -26,12 +26,12 @@ public final class SentinelRuleRegistrar {
 
         // Socle web : requête autorisée que Spring MVC ne peut pas servir. Statut explicite,
         // message générique : jamais de 500, jamais de nom de type ni de message de conversion.
-        registry.register(HttpRequestMethodNotSupportedException.class, SentinelRuleHandlers::ruleMethodNotAllowed);
-        registry.register(HttpMediaTypeNotSupportedException.class, SentinelRuleHandlers::ruleUnsupportedMediaType);
-        registry.register(HttpMediaTypeNotAcceptableException.class, SentinelRuleHandlers::ruleNotAcceptable);
-        registry.register(MethodArgumentTypeMismatchException.class, SentinelRuleHandlers::ruleInvalidRequestParameter);
-        registry.register(MissingServletRequestParameterException.class, SentinelRuleHandlers::ruleInvalidRequestParameter);
-        registry.register(MissingRequestHeaderException.class, SentinelRuleHandlers::ruleInvalidRequestParameter);
+        registry.register(HttpRequestMethodNotSupportedException.class, SentinelRuleHandlers.ruleMethodNotAllowed());
+        registry.register(HttpMediaTypeNotSupportedException.class, SentinelRuleHandlers.ruleUnsupportedMediaType());
+        registry.register(HttpMediaTypeNotAcceptableException.class, SentinelRuleHandlers.ruleNotAcceptable());
+        registry.register(MethodArgumentTypeMismatchException.class, SentinelRuleHandlers.ruleInvalidRequestParameter());
+        registry.register(MissingServletRequestParameterException.class, SentinelRuleHandlers.ruleInvalidRequestParameter());
+        registry.register(MissingRequestHeaderException.class, SentinelRuleHandlers.ruleInvalidRequestParameter());
 
         registry.register(IllegalArgumentException.class, SentinelRuleHandlers::ruleIllegalArgument);
         registry.tryRegister("com.takibo.managementservice.domain.exception.InvalidClientConfigurationException",
@@ -89,7 +89,7 @@ public final class SentinelRuleRegistrar {
         registry.tryRegister("com.takibo.authorizationserver.domain.exception.TakiboInvalidClientException",
                 SentinelRuleHandlers::ruleOAuth2InvalidClient);
         registry.tryRegister("com.takibo.authorizationserver.domain.exception.TakiboServerErrorException",
-                SentinelRuleHandlers::ruleTenantResolutionFailed);
+                SentinelRuleHandlers.ruleTenantResolutionFailed());
 
         // Spring Security exceptions (soft dependency)
         registry.tryRegister("org.springframework.security.authentication.BadCredentialsException",

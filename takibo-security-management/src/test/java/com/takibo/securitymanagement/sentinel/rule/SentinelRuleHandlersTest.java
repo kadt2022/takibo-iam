@@ -23,7 +23,7 @@ class SentinelRuleHandlersTest {
 
     @Test
     void tenantResolutionFailure_isA500_withoutTheInternalCause() {
-        SentinelResponse response = SentinelRuleHandlers.ruleTenantResolutionFailed(
+        SentinelResponse response = SentinelRuleHandlers.ruleTenantResolutionFailed().toResponse(
                 new IllegalStateException("tenant lookup failed for client secret-client"),
                 PATH,
                 TRACE_ID

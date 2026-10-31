@@ -38,24 +38,24 @@ public final class SentinelRuleHandlers {
 
     // ===== SOCLE WEB =====
 
-    static SentinelResponse ruleMethodNotAllowed(Throwable ex, String path, String traceId) {
-        return response(HttpStatus.METHOD_NOT_ALLOWED, SentinelErrorCode.METHOD_NOT_ALLOWED,
-                "Méthode non autorisée sur cette ressource.", path, traceId);
+    static <T extends Throwable> SentinelRule<T> ruleMethodNotAllowed() {
+        return fixed(HttpStatus.METHOD_NOT_ALLOWED, SentinelErrorCode.METHOD_NOT_ALLOWED,
+                "Méthode non autorisée sur cette ressource.");
     }
 
-    static SentinelResponse ruleUnsupportedMediaType(Throwable ex, String path, String traceId) {
-        return response(HttpStatus.UNSUPPORTED_MEDIA_TYPE, SentinelErrorCode.UNSUPPORTED_MEDIA_TYPE,
-                "Type de contenu non supporté.", path, traceId);
+    static <T extends Throwable> SentinelRule<T> ruleUnsupportedMediaType() {
+        return fixed(HttpStatus.UNSUPPORTED_MEDIA_TYPE, SentinelErrorCode.UNSUPPORTED_MEDIA_TYPE,
+                "Type de contenu non supporté.");
     }
 
-    static SentinelResponse ruleNotAcceptable(Throwable ex, String path, String traceId) {
-        return response(HttpStatus.NOT_ACCEPTABLE, SentinelErrorCode.NOT_ACCEPTABLE,
-                "Format de réponse non disponible.", path, traceId);
+    static <T extends Throwable> SentinelRule<T> ruleNotAcceptable() {
+        return fixed(HttpStatus.NOT_ACCEPTABLE, SentinelErrorCode.NOT_ACCEPTABLE,
+                "Format de réponse non disponible.");
     }
 
-    static SentinelResponse ruleInvalidRequestParameter(Throwable ex, String path, String traceId) {
-        return response(HttpStatus.BAD_REQUEST, SentinelErrorCode.BAD_REQUEST,
-                "Paramètre de requête invalide ou manquant.", path, traceId);
+    static <T extends Throwable> SentinelRule<T> ruleInvalidRequestParameter() {
+        return fixed(HttpStatus.BAD_REQUEST, SentinelErrorCode.BAD_REQUEST,
+                "Paramètre de requête invalide ou manquant.");
     }
 
     static SentinelResponse ruleMethodArgumentNotValid(MethodArgumentNotValidException ex, String path, String traceId) {
@@ -298,8 +298,13 @@ public final class SentinelRuleHandlers {
     }
 
     // Erreur serveur : la cause reste dans les logs, la réponse ne la décrit pas.
-    static SentinelResponse ruleTenantResolutionFailed(Throwable ex, String path, String traceId) {
-        return response(HttpStatus.INTERNAL_SERVER_ERROR, SentinelErrorCode.TENANT_RESOLUTION_FAILED, MSG_UNEXPECTED, path, traceId);
+    static <T extends Throwable> SentinelRule<T> ruleTenantResolutionFailed() {
+        return fixed(HttpStatus.INTERNAL_SERVER_ERROR, SentinelErrorCode.TENANT_RESOLUTION_FAILED, MSG_UNEXPECTED);
+    }
+
+    /** Réponse indépendante de l'exception : statut, code et message toujours identiques. */
+    private static <T extends Throwable> SentinelRule<T> fixed(HttpStatus status, SentinelErrorCode code, String message) {
+        return (ex, path, traceId) -> response(status, code, message, path, traceId);
     }
 
     private static SentinelResponse response(HttpStatus status, SentinelErrorCode code, String message, String path, String traceId) {
