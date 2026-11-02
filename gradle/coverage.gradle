@@ -1,0 +1,207 @@
+// Couverture de tests fiable, module par module.
+//
+//   ./gradlew takiboCoverage
+//
+// Lance tous les tests, puis mesure chaque module de deux façons, en lignes et en branches :
+//   - propre    : les seuls tests du module (rapport jacocoTestReport existant) ;
+//   - agrégée   : tous les tests du dépôt, dont les tests d'intégration d'iam-boot qui
+//                 exercent les autres modules.
+// Le tableau est écrit dans build/reports/coverage/ (Markdown et TSV) et affiché en console.
+//
+// Garanties, sinon la tâche échoue :
+//   - les tests sont toujours réexécutés : ni résultat « à jour », ni cache de build ;
+//   - chaque module doté de tests a produit, pendant cette invocation, ses résultats JUnit,
+//     son fichier d'exécution JaCoCo et ses rapports : rien d'antérieur n'est lu ;
+//   - aucun test n'est ignoré, hors la liste explicite ci-dessous.
+
+// Seul test dont l'absence d'exécution est attendue : il ne tourne que dans le job CI
+// « Database Check », contre une base dédiée (variables TAKIBO_DATABASE_CHECK, SPRING_DATASOURCE_*).
+def allowedSkips = [
+        'com.takibo.iamboot.database.DatabaseMigrationTest#' +
+                'given_configured_database_check_environment_when_flyway_migrates_then_all_migrations_apply()'
+] as Set
+
+def coveredModules = { ->
+    subprojects.findAll { it.plugins.hasPlugin('java') && it.file('src/main/java').isDirectory() }.sort { it.path }
+}
+
+def measuring = { -> gradle.taskGraph.hasTask(':takiboCoverage') }
+def measureStart = 0L
+gradle.taskGraph.whenReady { measureStart = System.currentTimeMillis() }
+
+subprojects {
+    pluginManager.withPlugin('java') {
+        // Pendant une mesure, tests et rapports sont toujours recalculés.
+        tasks.withType(Test).configureEach {
+            outputs.upToDateWhen { !measuring() }
+            outputs.cacheIf { !measuring() }
+        }
+        tasks.withType(JacocoReport).configureEach {
+            outputs.upToDateWhen { !measuring() }
+            outputs.cacheIf { !measuring() }
+        }
+        if (!file('src/main/java').isDirectory()) {
+            return
+        }
+        tasks.register('coverageAggregated', JacocoReport) {
+            description = 'Couverture du module par tous les tests du dépôt.'
+            // Toutes les exécutions de la même invocation : aucune mesure ne vient d'une passe antérieure.
+            dependsOn { coveredModules().collect { it.tasks.named('test') } }
+            executionData.from { coveredModules().collect { it.layout.buildDirectory.file('jacoco/test.exec').get().asFile } }
+            sourceSets(project.sourceSets.main)
+            reports {
+                xml.required = true
+                html.required = true
+                csv.required = false
+            }
+        }
+    }
+}
+
+tasks.register('takiboCoverage') {
+    description = 'Couverture propre et agrégée de chaque module, en lignes et en branches.'
+    group = 'verification'
+    dependsOn { coveredModules().collect { it.tasks.named('jacocoTestReport') } }
+    dependsOn { coveredModules().collect { it.tasks.named('coverageAggregated') } }
+
+    def output = layout.buildDirectory.dir('reports/coverage')
+    outputs.dir(output)
+    outputs.upToDateWhen { false }
+
+    doLast {
+        def problems = coveredModules().collectMany { SuiteEvidence.check(it, measureStart, allowedSkips) }
+        if (problems) {
+            throw new GradleException('Mesure de couverture refusée :\n - ' + problems.join('\n - '))
+        }
+        def rows = coveredModules().collect { module ->
+            def ownReport = module.layout.buildDirectory.file('reports/jacoco/test/jacocoTestReport.xml').get().asFile
+            def aggregatedReport = module.layout.buildDirectory
+                    .file('reports/jacoco/coverageAggregated/coverageAggregated.xml').get().asFile
+            if (!aggregatedReport.isFile()) {
+                throw new GradleException("Rapport agrégé absent pour ${module.path} : mesure impossible")
+            }
+            [module: module.path.substring(1), own: CoverageCounters.read(ownReport), aggregated: CoverageCounters.read(aggregatedReport)]
+        }
+        def total = [module: 'TOTAL',
+                     own: CoverageCounters.sum(rows*.own),
+                     aggregated: CoverageCounters.sum(rows*.aggregated)]
+
+        def dir = output.get().asFile
+        dir.mkdirs()
+        new File(dir, 'coverage-summary.md').text = CoverageCounters.markdown(rows + [total])
+        new File(dir, 'coverage-summary.tsv').text = CoverageCounters.tsv(rows + [total])
+        println CoverageCounters.markdown(rows + [total])
+    }
+}
+
+/** Preuves qu'un module a réellement exécuté ses tests pendant la mesure en cours. */
+class SuiteEvidence {
+
+    static List<String> check(Project module, long since, Set<String> allowedSkips) {
+        def build = module.layout.buildDirectory.get().asFile
+        def problems = []
+        problems += fresh(module, new File(build, 'reports/jacoco/coverageAggregated/coverageAggregated.xml'), since)
+        if (!module.file('src/test/java').isDirectory()) {
+            return problems
+        }
+        problems += fresh(module, new File(build, 'jacoco/test.exec'), since)
+        problems += fresh(module, new File(build, 'reports/jacoco/test/jacocoTestReport.xml'), since)
+
+        def results = (new File(build, 'test-results/test').listFiles() ?: [])
+                .findAll { it.name.startsWith('TEST-') && it.name.endsWith('.xml') }
+        if (results.isEmpty()) {
+            return problems + "${module.path} : aucun résultat de test"
+        }
+        problems += results.findAll { it.lastModified() < since }.collect { "${module.path} : résultat périmé ${it.name}" }
+        def cases = results.collectMany { testCases(it) }
+        if (cases.isEmpty()) {
+            problems << "${module.path} : aucun test exécuté"
+        }
+        problems + cases.findAll { it.skipped && !allowedSkips.contains(it.name) }
+                .collect { "${module.path} : test ignoré ${it.name}" }
+    }
+
+    private static List<String> fresh(Project module, File file, long since) {
+        if (!file.isFile()) {
+            return ["${module.path} : ${file.name} absent".toString()]
+        }
+        file.lastModified() < since ? ["${module.path} : ${file.name} antérieur à la mesure".toString()] : []
+    }
+
+    private static List<Map> testCases(File result) {
+        def parser = new XmlSlurper(false, false)
+        parser.setFeature('http://apache.org/xml/features/disallow-doctype-decl', true)
+        parser.parse(result).testcase.collect {
+            [name: "${it.@classname}#${it.@name}".toString(), skipped: !it.skipped.isEmpty()]
+        }
+    }
+}
+
+/** Compteurs LINE et BRANCH d'un rapport XML JaCoCo, et leur mise en forme. */
+class CoverageCounters {
+    long linesCovered
+    long linesTotal
+    long branchesCovered
+    long branchesTotal
+
+    static CoverageCounters read(File report) {
+        if (!report.isFile()) {
+            return null
+        }
+        def parser = new XmlSlurper(false, false)
+        // Le rapport déclare une DTD distante : la déclaration est admise, son chargement jamais.
+        parser.setFeature('http://apache.org/xml/features/disallow-doctype-decl', false)
+        parser.setFeature('http://apache.org/xml/features/nonvalidating/load-external-dtd', false)
+        parser.setFeature('http://xml.org/sax/features/external-general-entities', false)
+        parser.setFeature('http://xml.org/sax/features/external-parameter-entities', false)
+        def counters = parser.parse(report).counter
+        def line = counters.find { it.@type == 'LINE' }
+        def branch = counters.find { it.@type == 'BRANCH' }
+        new CoverageCounters(
+                linesCovered: count(line, 'covered'), linesTotal: count(line, 'covered') + count(line, 'missed'),
+                branchesCovered: count(branch, 'covered'), branchesTotal: count(branch, 'covered') + count(branch, 'missed'))
+    }
+
+    static CoverageCounters sum(List<CoverageCounters> all) {
+        def present = all.findAll { it != null }
+        new CoverageCounters(
+                linesCovered: present.sum(0L) { it.linesCovered }, linesTotal: present.sum(0L) { it.linesTotal },
+                branchesCovered: present.sum(0L) { it.branchesCovered }, branchesTotal: present.sum(0L) { it.branchesTotal })
+    }
+
+    static String markdown(List<Map> rows) {
+        def lines = ['| Module | Lignes (propre) | Branches (propre) | Lignes (agrégée) | Branches (agrégée) |',
+                     '|---|---:|---:|---:|---:|']
+        rows.each { row ->
+            lines << "| ${row.module} | ${cell(row.own, 'lines')} | ${cell(row.own, 'branches')} " +
+                    "| ${cell(row.aggregated, 'lines')} | ${cell(row.aggregated, 'branches')} |"
+        }
+        lines.join('\n') + '\n'
+    }
+
+    static String tsv(List<Map> rows) {
+        def lines = ['module\town_lines_covered\town_lines_total\town_branches_covered\town_branches_total\t' +
+                             'agg_lines_covered\tagg_lines_total\tagg_branches_covered\tagg_branches_total']
+        rows.each { row ->
+            lines << ([row.module] + values(row.own) + values(row.aggregated)).join('\t')
+        }
+        lines.join('\n') + '\n'
+    }
+
+    private static long count(def counter, String attribute) {
+        counter.isEmpty() ? 0L : (counter.@"${attribute}".text() as long)
+    }
+
+    private static List values(CoverageCounters c) {
+        c == null ? ['', '', '', ''] : [c.linesCovered, c.linesTotal, c.branchesCovered, c.branchesTotal]
+    }
+
+    private static String cell(CoverageCounters c, String kind) {
+        if (c == null) {
+            return '—'
+        }
+        long covered = kind == 'lines' ? c.linesCovered : c.branchesCovered
+        long total = kind == 'lines' ? c.linesTotal : c.branchesTotal
+        total == 0 ? 'n/a' : String.format(Locale.ROOT, '%.2f %% (%d/%d)', 100.0d * covered / total, covered, total)
+    }
+}
