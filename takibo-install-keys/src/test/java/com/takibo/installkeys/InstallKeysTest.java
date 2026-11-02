@@ -93,6 +93,56 @@ class InstallKeysTest {
     }
 
     @Test
+    void given_a_missing_material_then_the_construction_is_refused_by_name() {
+        // Un tableau absent doit produire le meme refus nomme qu'une mauvaise longueur, et non
+        // une NullPointerException anonyme que personne ne saurait rattacher a une cle.
+        assertThatThrownBy(() -> new InstallKeys("k-1", null, new byte[32]))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("INSTALL_CIPHER_KEY_MUST_BE_32_BYTES");
+
+        assertThatThrownBy(() -> new InstallKeys("k-1", new byte[32], null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("INSTALL_USER_CODE_HMAC_KEY_MUST_BE_32_BYTES");
+    }
+
+    @Test
+    void given_a_caller_that_alters_its_arrays_then_the_keys_are_unaffected() {
+        // La matiere est copiee a l'entree comme a la sortie : ni le tableau fourni, ni celui
+        // rendu par l'accesseur ne permettent d'alterer une cle deja construite.
+        byte[] cipher = new byte[32];
+        byte[] hmac = new byte[32];
+        hmac[0] = 1;
+        InstallKeys keys = new InstallKeys("k-1", cipher, hmac);
+
+        cipher[0] = 42;
+        keys.userCodeHmacMaterial()[1] = 42;
+
+        assertThat(keys.cipherKeyMaterial()).isEqualTo(new byte[32]);
+        assertThat(keys.userCodeHmacMaterial()[1]).isZero();
+    }
+
+    @Test
+    void given_the_same_identifier_but_another_material_then_the_instances_differ() {
+        // Chaque matiere participe a l'egalite : un meme identifiant ne doit pas suffire a
+        // confondre deux cles, faute de quoi une rotation pourrait passer pour un doublon.
+        InstallKeys keys = InstallKeys.generate(new SecureRandom());
+        InstallKeys other = InstallKeys.generate(new SecureRandom());
+
+        assertThat(new InstallKeys(keys.cipherKeyId(), other.cipherKeyMaterial(),
+                keys.userCodeHmacMaterial())).isNotEqualTo(keys);
+        assertThat(new InstallKeys(keys.cipherKeyId(), keys.cipherKeyMaterial(),
+                other.userCodeHmacMaterial())).isNotEqualTo(keys);
+    }
+
+    @Test
+    void given_an_object_of_another_type_then_it_is_never_equal() {
+        InstallKeys keys = InstallKeys.generate(new SecureRandom());
+
+        assertThat(keys.equals(keys.cipherKeyId())).isFalse();
+        assertThat(keys.equals(null)).isFalse();
+    }
+
+    @Test
     void given_two_instances_holding_the_same_material_then_they_are_equal() {
         // Un record compare ses tableaux par reference : sans redefinition, deux instances
         // portant la meme matiere seraient declarees differentes.

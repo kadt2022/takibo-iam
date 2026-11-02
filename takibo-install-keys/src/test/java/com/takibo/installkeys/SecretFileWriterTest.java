@@ -3,12 +3,18 @@ package com.takibo.installkeys;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.io.PrintStream;
+import com.takibo.installkeys.InterceptingFileSystem.Operation;
+
+import java.io.IOException;
 import java.io.OutputStream;
+import java.io.PrintStream;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AccessDeniedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.AclEntry;
+import java.nio.file.attribute.AclEntryPermission;
 import java.nio.file.attribute.AclEntryType;
 import java.nio.file.attribute.AclFileAttributeView;
 import java.nio.file.attribute.PosixFilePermission;
@@ -22,11 +28,15 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.UnaryOperator;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 
 /**
  * L'écriture protégée du fichier de secrets (TAKIBO-INSTALL-KEYS-01).
@@ -345,7 +355,357 @@ class SecretFileWriterTest {
         assertThat(drawn).isFalse();
     }
 
+    @Test
+    void given_a_leftover_whose_identity_cannot_be_read_then_nothing_is_deleted()
+            throws Exception {
+        // Le doute ne vaut pas preuve : si le systeme ne sait pas dire que les deux noms
+        // designent le meme fichier, ils sont traites comme deux jeux de cles distincts, et
+        // aucun n'est efface — meme lorsqu'il s'agit en realite du meme inode.
+        Path realTarget = directory.resolve("secrets.env");
+        Path realPending = directory.resolve("secrets.env" + SecretFileWriter.PENDING_SUFFIX);
+        writeFile(realTarget, CONTENT);
+        Files.createLink(realPending, realTarget);
+        Path target = filesystem((operation, path) -> {
+            if (operation == Operation.SAME_FILE) {
+                throw new IOException("stat refuse");
+            }
+        }).wrap(realTarget);
+
+        assertThat(refusalOf(() -> SecretFileWriter.write(target, () -> CONTENT)).exitCode())
+                .isEqualTo(ExitCode.INTERRUPTED_INSTALLATION);
+
+        assertThat(realPending).content(StandardCharsets.UTF_8).isEqualTo(CONTENT);
+        assertThat(realTarget).content(StandardCharsets.UTF_8).isEqualTo(CONTENT);
+    }
+
+    // ---------- Durabilite declaree ----------
+
+    @Test
+    void given_a_directory_that_can_be_flushed_then_the_durability_is_flushed_to_disk() {
+        Path target = directory.resolve("secrets.env");
+
+        assertThat(SecretFileWriter.write(target, () -> CONTENT))
+                .isEqualTo(SecretFileWriter.Durability.FLUSHED_TO_DISK);
+    }
+
+    @Test
+    void given_a_directory_that_refuses_to_be_flushed_then_the_write_succeeds_in_best_effort() {
+        // Le cas Windows : le repertoire ne s'ouvre pas en canal. Ce n'est pas un echec — le
+        // fichier est ecrit et publie — mais la garantie moindre doit etre rendue, jamais tue.
+        Path realTarget = directory.resolve("secrets.env");
+        Path target = filesystem((operation, path) -> {
+            if (operation == Operation.OPEN_CHANNEL && path.equals(directory)) {
+                throw new IOException("repertoire non ouvrable");
+            }
+        }).wrap(realTarget);
+
+        assertThat(SecretFileWriter.write(target, () -> CONTENT))
+                .isEqualTo(SecretFileWriter.Durability.BEST_EFFORT);
+
+        assertThat(realTarget).content(StandardCharsets.UTF_8).isEqualTo(CONTENT);
+        assertThat(fileNamesIn(directory)).containsExactly("secrets.env");
+    }
+
+    @Test
+    void given_a_flush_lost_only_after_publication_then_the_lower_guarantee_is_still_declared() {
+        // Les deux forcages comptent : un temoin bien force ne rachete pas une cible dont
+        // l'entree de repertoire n'a pas atteint le disque.
+        AtomicInteger directoryOpenings = new AtomicInteger();
+        Path target = filesystem((operation, path) -> {
+            if (operation == Operation.OPEN_CHANNEL && path.equals(directory)
+                    && directoryOpenings.incrementAndGet() == 2) {
+                throw new IOException("repertoire non ouvrable");
+            }
+        }).wrap(directory.resolve("secrets.env"));
+
+        assertThat(SecretFileWriter.write(target, () -> CONTENT))
+                .isEqualTo(SecretFileWriter.Durability.BEST_EFFORT);
+        assertThat(directoryOpenings).hasValue(2);
+    }
+
+    // ---------- Pannes du systeme de fichiers ----------
+
+    @Test
+    void given_a_disk_failure_while_writing_then_io_failure_and_no_secret_is_left_behind() {
+        // Disque plein au moment d'ecrire les cles : le .pending, deja rempli de leur tirage,
+        // ne doit ni etre publie ni rester dans le repertoire.
+        Path realTarget = directory.resolve("secrets.env");
+        Path realPending = directory.resolve("secrets.env" + SecretFileWriter.PENDING_SUFFIX);
+        Path target = filesystem((operation, path) -> {
+            if (operation == Operation.OPEN_CHANNEL && path.equals(realPending)) {
+                throw new IOException("No space left on device");
+            }
+        }).wrap(realTarget);
+
+        SecretFileException refusal = refusalOf(() -> SecretFileWriter.write(target, () -> CONTENT));
+
+        assertThat(refusal.exitCode()).isEqualTo(ExitCode.IO_FAILURE);
+        assertThat(refusal).hasMessageContaining(realTarget.toString())
+                .hasRootCauseMessage("No space left on device");
+        assertThat(fileNamesIn(directory)).isEmpty();
+    }
+
+    @Test
+    void given_a_creation_refused_by_the_filesystem_then_io_failure_and_no_key_is_drawn() {
+        AtomicBoolean drawn = new AtomicBoolean();
+        Path target = filesystem((operation, path) -> {
+            if (operation == Operation.CREATE_FILE) {
+                throw new AccessDeniedException(path.toString());
+            }
+        }).wrap(directory.resolve("secrets.env"));
+
+        SecretFileException refusal = refusalOf(() -> SecretFileWriter.write(target, () -> {
+            drawn.set(true);
+            return CONTENT;
+        }));
+
+        assertThat(refusal.exitCode()).isEqualTo(ExitCode.IO_FAILURE);
+        assertThat(refusal).hasCauseInstanceOf(AccessDeniedException.class);
+        assertThat(drawn).isFalse();
+        assertThat(fileNamesIn(directory)).isEmpty();
+    }
+
+    @Test
+    void given_a_volume_that_cannot_be_inspected_then_io_failure_before_anything_exists() {
+        AtomicBoolean drawn = new AtomicBoolean();
+        Path target = filesystem((operation, path) -> {
+            if (operation == Operation.FILE_STORE) {
+                throw new IOException("montage inaccessible");
+            }
+        }).wrap(directory.resolve("secrets.env"));
+
+        SecretFileException refusal = refusalOf(() -> SecretFileWriter.write(target, () -> {
+            drawn.set(true);
+            return CONTENT;
+        }));
+
+        assertThat(refusal.exitCode()).isEqualTo(ExitCode.IO_FAILURE);
+        assertThat(refusal).hasMessageContaining(directory.toString());
+        assertThat(drawn).isFalse();
+        assertThat(fileNamesIn(directory)).isEmpty();
+    }
+
+    @Test
+    void given_a_target_without_a_parent_directory_then_the_write_is_refused() {
+        // La racine du systeme de fichiers n'a pas de repertoire parent : il n'y a nulle part
+        // ou poser le temoin, donc rien n'est tente.
+        Path root = directory.getRoot();
+
+        assertThat(refusalOf(() -> SecretFileWriter.write(root, () -> CONTENT)).exitCode())
+                .isEqualTo(ExitCode.IO_FAILURE);
+    }
+
+    @Test
+    void given_a_cleanup_that_fails_then_the_original_cause_is_still_reported() {
+        // Le nettoyage est accessoire : son echec ne doit pas remplacer le diagnostic qui
+        // compte — ici, une panne du tirage, que l'operateur resout en relancant.
+        Path target = filesystem((operation, path) -> {
+            if (operation == Operation.DELETE) {
+                throw new IOException("suppression refusee");
+            }
+        }).wrap(directory.resolve("secrets.env"));
+
+        SecretFileException refusal = refusalOf(() -> SecretFileWriter.write(target, () -> {
+            throw new IllegalStateException("fournisseur indisponible");
+        }));
+
+        assertThat(refusal.exitCode()).isEqualTo(ExitCode.GENERATION_FAILURE);
+        assertThat(refusal).hasRootCauseMessage("fournisseur indisponible");
+    }
+
+    @Test
+    void given_a_filesystem_without_hard_links_then_unsafe_filesystem_and_no_secret_is_left() {
+        // Sans lien physique, la seule publication restante ecraserait une cible existante :
+        // refus, et le .pending deja rempli de cles est retire.
+        Path target = filesystem((operation, path) -> {
+            if (operation == Operation.CREATE_LINK) {
+                throw new UnsupportedOperationException("liens physiques non supportes");
+            }
+        }).wrap(directory.resolve("secrets.env"));
+
+        SecretFileException refusal = refusalOf(() -> SecretFileWriter.write(target, () -> CONTENT));
+
+        assertThat(refusal.exitCode()).isEqualTo(ExitCode.UNSAFE_FILESYSTEM);
+        assertThat(refusal).hasCauseInstanceOf(UnsupportedOperationException.class);
+        assertThat(fileNamesIn(directory)).isEmpty();
+    }
+
+    // ---------- Capacites du volume ----------
+
+    @Test
+    void given_a_volume_with_neither_posix_nor_acl_then_refused_before_any_key_is_drawn() {
+        // FAT, exFAT, certains montages reseau : aucun moyen de restreindre le fichier. Le
+        // refus intervient avant qu'un secret n'existe, meme vide.
+        AtomicBoolean drawn = new AtomicBoolean();
+        Path target = new InterceptingFileSystem(directory).declaringViews("basic")
+                .wrap(directory.resolve("secrets.env"));
+
+        SecretFileException refusal = refusalOf(() -> SecretFileWriter.write(target, () -> {
+            drawn.set(true);
+            return CONTENT;
+        }));
+
+        assertThat(refusal.exitCode()).isEqualTo(ExitCode.UNSAFE_FILESYSTEM);
+        assertThat(drawn).isFalse();
+        assertThat(fileNamesIn(directory)).isEmpty();
+    }
+
+    @Test
+    void given_an_unsafe_volume_holding_an_installed_target_then_target_exists_is_reported() {
+        // Ce que l'installation a deja laisse prime sur ce que le volume sait faire : le
+        // diagnostic utile est « restaurez », pas « changez de disque ».
+        writeFile(directory.resolve("secrets.env"), CONTENT);
+        Path target = new InterceptingFileSystem(directory).declaringViews("basic")
+                .wrap(directory.resolve("secrets.env"));
+
+        assertThat(refusalOf(() -> SecretFileWriter.write(target, () -> CONTENT)).exitCode())
+                .isEqualTo(ExitCode.TARGET_EXISTS);
+    }
+
+    @Test
+    void given_an_unsafe_volume_holding_an_interrupted_installation_then_it_is_reported() {
+        Path realPending = directory.resolve("secrets.env" + SecretFileWriter.PENDING_SUFFIX);
+        writeFile(realPending, CONTENT);
+        Path target = new InterceptingFileSystem(directory).declaringViews("basic")
+                .wrap(directory.resolve("secrets.env"));
+
+        assertThat(refusalOf(() -> SecretFileWriter.write(target, () -> CONTENT)).exitCode())
+                .isEqualTo(ExitCode.INTERRUPTED_INSTALLATION);
+        assertThat(realPending).content(StandardCharsets.UTF_8).isEqualTo(CONTENT);
+    }
+
+    // ---------- Volume a ACL ----------
+
+    @Test
+    void given_an_acl_volume_then_the_file_is_restricted_while_it_is_still_empty() {
+        // Sous Windows, aucune ACL ne peut etre fournie a la creation : ce qui existe
+        // brievement sous les droits herites doit etre un fichier vide, jamais un secret.
+        Path realTarget = directory.resolve("secrets.env");
+        Path realPending = directory.resolve("secrets.env" + SecretFileWriter.PENDING_SUFFIX);
+        RecordingAclView view = new RecordingAclView(realPending, applied -> applied);
+        Path target = aclVolume(view).wrap(realTarget);
+
+        SecretFileWriter.write(target, () -> CONTENT);
+
+        assertThat(realTarget).content(StandardCharsets.UTF_8).isEqualTo(CONTENT);
+        assertThat(view.sizeWhenRestricted).isZero();
+        assertThat(view.entries).singleElement().satisfies(entry -> {
+            assertThat(entry.principal()).isEqualTo(RecordingAclView.OWNER);
+            assertThat(entry.type()).isEqualTo(AclEntryType.ALLOW);
+        });
+        assertThat(fileNamesIn(directory)).containsExactly("secrets.env");
+    }
+
+    @Test
+    void given_an_acl_volume_that_keeps_another_principal_then_refused_and_nothing_is_left() {
+        // Le volume accepte setAcl sans erreur mais garde SYSTEM : la relecture le detecte,
+        // et le fichier vide est retire avant qu'aucune cle ne soit tiree.
+        AtomicBoolean drawn = new AtomicBoolean();
+        RecordingAclView view = new RecordingAclView(
+                directory.resolve("secrets.env" + SecretFileWriter.PENDING_SUFFIX),
+                applied -> Stream.concat(applied.stream(), Stream.of(AclEntry.newBuilder()
+                        .setType(AclEntryType.ALLOW)
+                        .setPrincipal(new StubPrincipal("SYSTEM"))
+                        .setPermissions(AclEntryPermission.READ_DATA)
+                        .build())).toList());
+        Path target = aclVolume(view).wrap(directory.resolve("secrets.env"));
+
+        SecretFileException refusal = refusalOf(() -> SecretFileWriter.write(target, () -> {
+            drawn.set(true);
+            return CONTENT;
+        }));
+
+        assertThat(refusal.exitCode()).isEqualTo(ExitCode.UNSAFE_FILESYSTEM);
+        assertThat(drawn).isFalse();
+        assertThat(fileNamesIn(directory)).isEmpty();
+    }
+
+    @Test
+    void given_an_acl_volume_that_cannot_apply_the_acl_then_refused_with_its_cause() {
+        RecordingAclView view = new RecordingAclView(
+                directory.resolve("secrets.env" + SecretFileWriter.PENDING_SUFFIX),
+                applied -> {
+                    throw new UncheckedIOException(new IOException("ACL refusee"));
+                });
+        Path target = aclVolume(view).wrap(directory.resolve("secrets.env"));
+
+        SecretFileException refusal = refusalOf(() -> SecretFileWriter.write(target, () -> CONTENT));
+
+        assertThat(refusal.exitCode()).isEqualTo(ExitCode.UNSAFE_FILESYSTEM);
+        assertThat(refusal).hasRootCauseMessage("ACL refusee");
+        assertThat(fileNamesIn(directory)).isEmpty();
+    }
+
     // ---------- Fixtures ----------
+
+    private InterceptingFileSystem filesystem(InterceptingFileSystem.Interceptor interceptor) {
+        return new InterceptingFileSystem(directory).intercept(interceptor);
+    }
+
+    /** Un volume qui ne déclare que les ACL : le chemin emprunté sous Windows. */
+    private InterceptingFileSystem aclVolume(AclFileAttributeView view) {
+        return new InterceptingFileSystem(directory).declaringViews("basic", "owner", "acl")
+                .withAclView(view);
+    }
+
+    private static SecretFileException refusalOf(Runnable write) {
+        Throwable thrown = catchThrowable(write::run);
+        assertThat(thrown).isInstanceOf(SecretFileException.class);
+        return (SecretFileException) thrown;
+    }
+
+    /**
+     * Vue ACL qui retient ce qu'on lui demande et la taille du fichier à cet instant ; le
+     * volume simulé applique {@code applied} à la liste reçue, ce qui le rend docile,
+     * désobéissant ou défaillant selon le test.
+     */
+    private static final class RecordingAclView implements AclFileAttributeView {
+
+        static final UserPrincipal OWNER = new StubPrincipal("OWNER");
+
+        private final Path file;
+        private final UnaryOperator<List<AclEntry>> applied;
+        private List<AclEntry> entries = List.of();
+        private long sizeWhenRestricted = -1;
+
+        RecordingAclView(Path file, UnaryOperator<List<AclEntry>> applied) {
+            this.file = file;
+            this.applied = applied;
+        }
+
+        @Override
+        public void setAcl(List<AclEntry> acl) throws IOException {
+            sizeWhenRestricted = Files.size(file);
+            try {
+                entries = applied.apply(acl);
+            } catch (UncheckedIOException e) {
+                throw e.getCause();
+            }
+        }
+
+        @Override
+        public List<AclEntry> getAcl() {
+            return entries;
+        }
+
+        @Override
+        public UserPrincipal getOwner() {
+            return OWNER;
+        }
+
+        @Override
+        public void setOwner(UserPrincipal owner) {
+            throw new UnsupportedOperationException("l'ecriture ne change jamais de proprietaire");
+        }
+
+        @Override
+        public String name() {
+            return "acl";
+        }
+    }
+
+    private record StubPrincipal(String getName) implements UserPrincipal {
+    }
 
     /** Canal qui n'accepte qu'un nombre borné d'octets par appel, comme le permet le contrat. */
     private static final class ChunkedChannel implements java.nio.channels.WritableByteChannel {
