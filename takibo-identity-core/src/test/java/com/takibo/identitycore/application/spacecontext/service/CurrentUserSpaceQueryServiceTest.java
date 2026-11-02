@@ -126,6 +126,58 @@ class CurrentUserSpaceQueryServiceTest {
         });
     }
 
+    @Test
+    void listAccessibleSpaces_membershipWhoseSpaceIsUnresolved_isDropped() {
+        stubContext();
+        when(memberships.findByOrganizationAndAccount(ORG_ID, ACCOUNT_ID)).thenReturn(List.of(
+                new UserSpaceMembership(FINANCE_SPACE_ID, FINANCE_USER_ID, UserStatus.ACTIVE),
+                new UserSpaceMembership(ARCHIVES_SPACE_ID, ARCHIVES_USER_ID, UserStatus.ACTIVE)));
+        when(spaceCatalog.findByOrganizationAndIds(org.mockito.Mockito.eq(ORG_ID), org.mockito.Mockito.anySet()))
+                .thenReturn(List.of(
+                        new SpaceContextSummary(ORG_ID, FINANCE_SPACE_ID, "finance", "Finance", "ACTIVE"),
+                        new SpaceContextSummary(ORG_ID, null, "ghost", "Ghost", "ACTIVE")));
+
+        CurrentUserSpacesResponse response = service.listAccessibleSpaces();
+
+        assertThat(response.items()).extracting("spaceId").containsExactly(FINANCE_SPACE_ID);
+    }
+
+    @Test
+    void listAccessibleSpaces_duplicateTmsSummaries_keepOneItemPerMembership() {
+        stubContext();
+        when(memberships.findByOrganizationAndAccount(ORG_ID, ACCOUNT_ID)).thenReturn(List.of(
+                new UserSpaceMembership(FINANCE_SPACE_ID, FINANCE_USER_ID, UserStatus.ACTIVE)));
+        when(spaceCatalog.findByOrganizationAndIds(org.mockito.Mockito.eq(ORG_ID), org.mockito.Mockito.anySet()))
+                .thenReturn(List.of(
+                        new SpaceContextSummary(ORG_ID, FINANCE_SPACE_ID, "finance", "Finance", "ACTIVE"),
+                        new SpaceContextSummary(ORG_ID, FINANCE_SPACE_ID, "finance", "Finance (dup)", "SUSPENDED")));
+
+        CurrentUserSpacesResponse response = service.listAccessibleSpaces();
+
+        assertThat(response.items()).singleElement().satisfies(item -> {
+            assertThat(item.name()).isEqualTo("Finance");
+            assertThat(item.selectable()).isTrue();
+        });
+    }
+
+    @Test
+    void listAccessibleSpaces_spacesWithoutName_areSortedLast_thenByCodeIgnoringCase() {
+        stubContext();
+        when(memberships.findByOrganizationAndAccount(ORG_ID, ACCOUNT_ID)).thenReturn(List.of(
+                new UserSpaceMembership(FINANCE_SPACE_ID, FINANCE_USER_ID, UserStatus.ACTIVE),
+                new UserSpaceMembership(ARCHIVES_SPACE_ID, ARCHIVES_USER_ID, UserStatus.ACTIVE),
+                new UserSpaceMembership(FOREIGN_SPACE_ID, FOREIGN_USER_ID, UserStatus.ACTIVE)));
+        when(spaceCatalog.findByOrganizationAndIds(org.mockito.Mockito.eq(ORG_ID), org.mockito.Mockito.anySet()))
+                .thenReturn(List.of(
+                        new SpaceContextSummary(ORG_ID, FINANCE_SPACE_ID, "zeta", null, "ACTIVE"),
+                        new SpaceContextSummary(ORG_ID, ARCHIVES_SPACE_ID, "Alpha", null, "ACTIVE"),
+                        new SpaceContextSummary(ORG_ID, FOREIGN_SPACE_ID, "beta", "beta", "ACTIVE")));
+
+        CurrentUserSpacesResponse response = service.listAccessibleSpaces();
+
+        assertThat(response.items()).extracting("code").containsExactly("beta", "Alpha", "zeta");
+    }
+
     private void stubContext() {
         when(currentOrganizationContext.requireCurrentOrganizationId()).thenReturn(ORG_ID);
         when(currentAccountContext.requireCurrentAccountId()).thenReturn(ACCOUNT_ID);

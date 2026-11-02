@@ -292,4 +292,95 @@ class UserGroupGovernanceServiceTest {
         verify(memberships).deleteOrgLevelMembership(ORG_ID, TARGET_ACCOUNT_ID, "G_ORG_ADMINS");
         verify(memberships, never()).deleteMembership(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID, "G_ORG_ADMINS");
     }
+
+    @Test
+    void remove_spaceAdminsMember_whenAnotherMemberRemains_deletesSpaceLevelMembership() {
+        stubActor();
+        stubTargetUser();
+        when(memberships.existsMembership(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID, "G_SPACE_ADMINS")).thenReturn(true);
+        when(memberships.countIdentitiesInGroup(ORG_ID, SPACE_ID, "G_SPACE_ADMINS")).thenReturn(2L);
+        when(memberships.findDirectMemberships(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID)).thenReturn(List.of());
+
+        service.removeFromGroup(KEY, new RemoveUserFromGroupCommand(USER_ID, "G_SPACE_ADMINS", "rotation"));
+
+        verify(memberships).deleteMembership(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID, "G_SPACE_ADMINS");
+        verify(memberships, never()).deleteOrgLevelMembership(any(), any(), any());
+    }
+
+    @Test
+    void remove_ownOrgAdminsGroup_isSelfDemotionDenied_evenWithOrgAuthority() {
+        when(currentAccountContext.requireCurrentAccountId()).thenReturn(TARGET_ACCOUNT_ID);
+        stubTargetUser();
+        when(roleAssignments.findAssignedTechnicalRoleCodes(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID))
+                .thenReturn(List.of("R_ORG_ADMIN"));
+        when(memberships.existsMembership(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID, "G_ORG_ADMINS")).thenReturn(true);
+
+        assertThatThrownBy(() -> service.removeFromGroup(
+                KEY, new RemoveUserFromGroupCommand(USER_ID, "G_ORG_ADMINS", null)))
+                .isInstanceOf(SelfDemotionException.class)
+                .hasMessageContaining("G_ORG_ADMINS");
+
+        verify(memberships, never()).deleteOrgLevelMembership(any(), any(), any());
+    }
+
+    @Test
+    void remove_orgScopedGroup_withoutOrgAuthority_isEscalationDenied_beforeAnyLookup() {
+        stubActor();
+        stubTargetUser();
+        when(roleAssignments.findAssignedTechnicalRoleCodes(ORG_ID, SPACE_ID, ACTOR_ACCOUNT_ID))
+                .thenReturn(List.of("R_SPACE_ADMIN", "R_ORG_USER_ADMIN"));
+
+        assertThatThrownBy(() -> service.removeFromGroup(
+                KEY, new RemoveUserFromGroupCommand(USER_ID, "G_ORG_USERS", null)))
+                .isInstanceOf(RoleScopeEscalationException.class);
+
+        verify(memberships, never()).existsMembership(any(), any(), any(), any());
+        verify(memberships, never()).deleteOrgLevelMembership(any(), any(), any());
+    }
+
+    @Test
+    void remove_businessGroup_isForbiddenByGovernancePolicy() {
+        stubActor();
+        stubTargetUser();
+        when(groupRepository.findBySpaceIdAndCode(SpaceId.of(SPACE_ID), "GRP_FINANCE"))
+                .thenReturn(Optional.of(Group.createNew(
+                        SpaceId.of(SPACE_ID), "GRP_FINANCE", "Finance", null, GroupNature.BUSINESS)));
+
+        assertThatThrownBy(() -> service.removeFromGroup(
+                KEY, new RemoveUserFromGroupCommand(USER_ID, "GRP_FINANCE", null)))
+                .isInstanceOf(GroupTypeNotAllowedException.class);
+
+        verify(memberships, never()).deleteMembership(any(), any(), any(), any());
+    }
+
+    @Test
+    void listDirectGroups_returnsCurrentMembershipsOfUserInSpace() {
+        stubTargetUser();
+        when(memberships.findDirectMemberships(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID)).thenReturn(List.of(
+                membership("G_SPACE_USERS", GroupSource.TECHNICAL)));
+
+        UserGroupMembershipsResponse state = service.listDirectGroups(KEY, USER_ID);
+
+        assertThat(state.userId()).isEqualTo(USER_ID);
+        assertThat(state.groups()).extracting("code").containsExactly("G_SPACE_USERS");
+        verify(spaceContextVerifier).validateSpaceContext(SPACE_ID);
+        verify(spaceBoundaryGuard).assertTokenMatches(KEY);
+    }
+
+    @Test
+    void listDirectGroups_userOfAnotherSpace_isNotFound_antiEnumeration() {
+        User foreignUser = User.builder()
+                .id(UserId.of(USER_ID))
+                .orgId(ORG_ID)
+                .spaceId(SpaceId.of(UUID.fromString("99999999-0000-0000-0000-000000000009")))
+                .accountId(AccountId.of(TARGET_ACCOUNT_ID))
+                .username("jdoe")
+                .build();
+        when(userRepository.findById(UserId.of(USER_ID))).thenReturn(Optional.of(foreignUser));
+
+        assertThatThrownBy(() -> service.listDirectGroups(KEY, USER_ID))
+                .isInstanceOf(UserNotFoundException.class);
+
+        verify(memberships, never()).findDirectMemberships(any(), any(), any());
+    }
 }

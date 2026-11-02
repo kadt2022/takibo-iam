@@ -224,6 +224,19 @@ class UserRoleGovernanceServiceTest {
     }
 
     @Test
+    void assign_unknownRole_isNotFound() {
+        stubActor();
+        stubTargetUser();
+        when(roleRepository.findBySpaceIdAndCode(SpaceId.of(SPACE_ID), "GOV_GHOST")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.assignRole(KEY, new AssignUserRoleCommand(USER_ID, "GOV_GHOST", null)))
+                .isInstanceOf(RoleNotFoundException.class)
+                .hasMessageContaining("GOV_GHOST");
+
+        verify(assignments, never()).saveGovernanceAssignment(any());
+    }
+
+    @Test
     void assign_userOutsideSpace_isNotFound_antiEnumeration() {
         stubActor();
         User foreignUser = User.builder()
@@ -410,6 +423,97 @@ class UserRoleGovernanceServiceTest {
 
         verify(assignments).deleteOrgLevelAssignment(ORG_ID, TARGET_ACCOUNT_ID, "R_ORG_ADMIN");
         verify(assignments, never()).deleteAssignment(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID, "R_ORG_ADMIN");
+    }
+
+    @Test
+    void remove_spaceAdmin_whenAnotherAdminRemains_deletesSpaceLevelAssignment() {
+        stubActor();
+        stubTargetUser();
+        when(assignments.existsAssignment(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID, "R_SPACE_ADMIN")).thenReturn(true);
+        when(assignments.countIdentitiesHoldingRole(ORG_ID, SPACE_ID, "R_SPACE_ADMIN")).thenReturn(2L);
+        when(assignments.findDirectAssignments(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID)).thenReturn(List.of());
+
+        service.removeRole(KEY, new RemoveUserRoleCommand(USER_ID, "R_SPACE_ADMIN", "rotation"));
+
+        verify(assignments).deleteAssignment(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID, "R_SPACE_ADMIN");
+        verify(assignments, never()).deleteOrgLevelAssignment(any(), any(), any());
+    }
+
+    @Test
+    void remove_ownOrgAdminRole_isSelfDemotionDenied_evenWithOrgAuthority() {
+        when(currentAccountContext.requireCurrentAccountId()).thenReturn(TARGET_ACCOUNT_ID);
+        stubTargetUser();
+        when(assignments.findAssignedTechnicalRoleCodes(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID))
+                .thenReturn(List.of("R_ORG_ADMIN"));
+        when(assignments.existsAssignment(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID, "R_ORG_ADMIN")).thenReturn(true);
+
+        assertThatThrownBy(() -> service.removeRole(KEY, new RemoveUserRoleCommand(USER_ID, "R_ORG_ADMIN", null)))
+                .isInstanceOf(SelfDemotionException.class)
+                .hasMessageContaining("R_ORG_ADMIN");
+
+        verify(assignments, never()).deleteOrgLevelAssignment(any(), any(), any());
+    }
+
+    @Test
+    void remove_ownNonAdministrativeRole_isAllowed() {
+        when(currentAccountContext.requireCurrentAccountId()).thenReturn(TARGET_ACCOUNT_ID);
+        stubTargetUser();
+        when(assignments.existsAssignment(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID, "R_SPACE_AUDITOR")).thenReturn(true);
+        when(assignments.findDirectAssignments(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID)).thenReturn(List.of());
+
+        service.removeRole(KEY, new RemoveUserRoleCommand(USER_ID, "R_SPACE_AUDITOR", null));
+
+        verify(assignments).deleteAssignment(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID, "R_SPACE_AUDITOR");
+        verify(assignments, never()).countIdentitiesHoldingRole(any(), any(), any());
+    }
+
+    @Test
+    void remove_businessRole_isForbiddenByGovernancePolicy() {
+        stubActor();
+        stubTargetUser();
+        when(roleRepository.findBySpaceIdAndCode(SpaceId.of(SPACE_ID), "B_APPROVER"))
+                .thenReturn(Optional.of(dbRole("B_APPROVER", RoleNature.BUSINESS)));
+
+        assertThatThrownBy(() -> service.removeRole(KEY, new RemoveUserRoleCommand(USER_ID, "B_APPROVER", null)))
+                .isInstanceOf(RoleTypeNotAllowedException.class);
+
+        verify(assignments, never()).deleteAssignment(any(), any(), any(), any());
+    }
+
+    @Test
+    void remove_platformRole_doesNotExistForTenants() {
+        stubActor();
+        stubTargetUser();
+
+        assertThatThrownBy(() -> service.removeRole(
+                KEY, new RemoveUserRoleCommand(USER_ID, "R_TAKIBO_PLATFORM_AUDITOR", null)))
+                .isInstanceOf(RoleNotFoundException.class);
+
+        verifyNoInteractions(roleRepository, assignments);
+    }
+
+    @Test
+    void remove_unknownRole_isNotFound() {
+        stubActor();
+        stubTargetUser();
+        when(roleRepository.findBySpaceIdAndCode(SpaceId.of(SPACE_ID), "GOV_GHOST")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.removeRole(KEY, new RemoveUserRoleCommand(USER_ID, "GOV_GHOST", null)))
+                .isInstanceOf(RoleNotFoundException.class)
+                .hasMessageContaining("GOV_GHOST");
+
+        verifyNoInteractions(assignments);
+    }
+
+    @Test
+    void remove_unknownUser_isNotFound_beforeResolvingTheRole() {
+        stubActor();
+        when(userRepository.findById(UserId.of(USER_ID))).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.removeRole(KEY, new RemoveUserRoleCommand(USER_ID, "R_SPACE_ADMIN", null)))
+                .isInstanceOf(UserNotFoundException.class);
+
+        verifyNoInteractions(roleRepository, assignments);
     }
 
     // ─────────────────────────── frontière ───────────────────────────

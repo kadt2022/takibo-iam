@@ -1,5 +1,6 @@
 package com.takibo.identitycore.application.rbac.service;
 
+import com.takibo.identitycore.domain.exception.SpaceNotFoundException;
 import com.takibo.identitycore.domain.model.Group;
 import com.takibo.identitycore.domain.model.GroupNature;
 import com.takibo.identitycore.domain.repository.GroupRepository;
@@ -12,14 +13,20 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -80,5 +87,56 @@ class GroupApplicationServiceTest {
         ArgumentCaptor<Group> captor = ArgumentCaptor.forClass(Group.class);
         verify(groupRepository).save(captor.capture());
         assertThat(captor.getValue().getNature()).isEqualTo(GroupNature.GOVERNANCE);
+    }
+
+    @Test
+    void ensure_unknownSpace_isRejectedBeforeAnyLookup() {
+        doThrow(new SpaceNotFoundException(SPACE_UUID))
+                .when(spaceStatusCheckerCase).assertSpaceExistsAndActive(SPACE_UUID);
+
+        assertThatThrownBy(() -> service.ensure(SPACE_ID, "G_OPS", "Ops", null, GroupNature.GOVERNANCE))
+                .isInstanceOf(SpaceNotFoundException.class);
+
+        verifyNoInteractions(groupRepository);
+    }
+
+    @Test
+    void ensure_existingGroup_isIdempotent() {
+        when(groupRepository.findBySpaceIdAndCode(SPACE_ID, "G_OPS"))
+                .thenReturn(Optional.of(Group.createNew(SPACE_ID, "G_OPS", "Ops", null, GroupNature.GOVERNANCE)));
+
+        service.ensure(SPACE_ID, "G_OPS", "Ops", null, GroupNature.GOVERNANCE);
+
+        verify(groupRepository, never()).save(any());
+    }
+
+    @Test
+    void ensure_concurrentInsertOfSameGroup_isTreatedAsIdempotent() {
+        when(groupRepository.findBySpaceIdAndCode(SPACE_ID, "G_OPS"))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(Group.createNew(SPACE_ID, "G_OPS", "Ops", null, GroupNature.GOVERNANCE)));
+        when(groupRepository.save(any())).thenThrow(new DataIntegrityViolationException("uk_group_space_code"));
+
+        assertThatCode(() -> service.ensure(SPACE_ID, "G_OPS", "Ops", null, GroupNature.GOVERNANCE))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void ensure_integrityViolationWithoutConcurrentGroup_isPropagated() {
+        when(groupRepository.findBySpaceIdAndCode(SPACE_ID, "G_OPS")).thenReturn(Optional.empty());
+        when(groupRepository.save(any())).thenThrow(new DataIntegrityViolationException("fk_space"));
+
+        assertThatThrownBy(() -> service.ensure(SPACE_ID, "G_OPS", "Ops", null, GroupNature.GOVERNANCE))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void ensureGroup_existingGroup_returnsItsIdWithoutSaving() {
+        when(groupRepository.findIdBySpaceIdAndCode(SPACE_ID, "G_OPS")).thenReturn(Optional.of(GroupId.of(GROUP_UUID)));
+
+        assertThat(service.ensureGroup(SPACE_UUID, "G_OPS", "Ops", null, GroupNature.GOVERNANCE))
+                .isEqualTo(GROUP_UUID);
+
+        verify(groupRepository, never()).save(any());
     }
 }

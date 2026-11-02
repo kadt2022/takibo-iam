@@ -273,6 +273,174 @@ class EffectivePermissionResolverTest {
                 .isInstanceOf(UnsupportedOperationException.class);
     }
 
+    // ───────────── frontières de la cible (refus avant toute résolution) ─────────────
+
+    @Test
+    void platformResolutionCarryingAnOrganization_isRefused() {
+        EffectivePermissionRequest request = request(Set.of(), Set.of(), PLATFORM, ORG_ID, null);
+
+        assertThatThrownBy(() -> resolver.resolve(request))
+                .isInstanceOf(EffectivePermissionResolutionException.class)
+                .hasMessageContaining("PLATFORM resolution cannot carry");
+    }
+
+    @Test
+    void platformResolutionCarryingASpace_isRefused() {
+        EffectivePermissionRequest request = request(Set.of(), Set.of(), PLATFORM, null, SPACE_ID);
+
+        assertThatThrownBy(() -> resolver.resolve(request))
+                .isInstanceOf(EffectivePermissionResolutionException.class)
+                .hasMessageContaining("PLATFORM resolution cannot carry");
+    }
+
+    @Test
+    void organizationResolutionCarryingASpace_isRefused() {
+        EffectivePermissionRequest request = request(Set.of(), Set.of(), ORGANIZATION, ORG_ID, SPACE_ID);
+
+        assertThatThrownBy(() -> resolver.resolve(request))
+                .isInstanceOf(EffectivePermissionResolutionException.class)
+                .hasMessageContaining("cannot carry spaceId");
+        verifyNoInteractions(spaceManagementCase);
+    }
+
+    @Test
+    void spaceResolutionWithoutOrgId_isRefused_withoutLookingUpTheSpace() {
+        EffectivePermissionRequest request = request(Set.of(), Set.of(), SPACE, null, SPACE_ID);
+
+        assertThatThrownBy(() -> resolver.resolve(request))
+                .isInstanceOf(EffectivePermissionResolutionException.class)
+                .hasMessageContaining("SPACE resolution requires orgId");
+        verifyNoInteractions(spaceManagementCase);
+    }
+
+    @Test
+    void spaceWithoutKnownOrganization_isRefused() {
+        when(spaceManagementCase.findOrgIdBySpaceId(SpaceId.of(SPACE_ID))).thenReturn(java.util.Optional.empty());
+        EffectivePermissionRequest request = request(Set.of(), Set.of(), SPACE, ORG_ID, SPACE_ID);
+
+        assertThatThrownBy(() -> resolver.resolve(request))
+                .isInstanceOf(EffectivePermissionResolutionException.class)
+                .hasMessageContaining("Organization not found for space");
+    }
+
+    // ───────────── frontières des assignations ─────────────
+
+    @Test
+    void platformRoleCarryingATenantBoundary_isRefusedOnPlatform() {
+        EffectivePermissionRequest request = request(
+                Set.of(new SituatedTechnicalRole(PLATFORM_AUDITOR, ORG_ID, null)),
+                Set.of(), PLATFORM, null, null);
+
+        assertThatThrownBy(() -> resolver.resolve(request))
+                .isInstanceOf(EffectivePermissionResolutionException.class)
+                .hasMessageContaining("cannot carry a tenant boundary");
+    }
+
+    @Test
+    void tenantRolesAndGroups_grantNothingOnPlatform() {
+        EffectivePermissionRequest request = request(
+                Set.of(new SituatedTechnicalRole(ORG_OWNER, ORG_ID, null)),
+                Set.of(new SituatedTechnicalGroup(TechnicalGroup.ORG_ADMINS, ORG_ID, null)),
+                PLATFORM, null, null);
+
+        assertThat(resolver.resolve(request)).isEmpty();
+    }
+
+    @Test
+    void organizationRoleStoredWithASpace_isRefusedAsInvalidBoundary() {
+        EffectivePermissionRequest request = request(
+                Set.of(new SituatedTechnicalRole(ORG_ADMIN, ORG_ID, SPACE_ID)),
+                Set.of(), ORGANIZATION, ORG_ID, null);
+
+        assertThatThrownBy(() -> resolver.resolve(request))
+                .isInstanceOf(EffectivePermissionResolutionException.class)
+                .hasMessageContaining("invalid boundary");
+    }
+
+    @Test
+    void organizationRoleOfAnotherOrganization_isRefusedWhenProjectedToSpace() {
+        givenSpaceInOrganization(SPACE_ID, ORG_ID);
+        EffectivePermissionRequest request = request(
+                Set.of(new SituatedTechnicalRole(ORG_ADMIN, OTHER_ORG_ID, null)),
+                Set.of(), SPACE, ORG_ID, SPACE_ID);
+
+        assertThatThrownBy(() -> resolver.resolve(request))
+                .isInstanceOf(EffectivePermissionResolutionException.class)
+                .hasMessageContaining("belongs to another organization");
+    }
+
+    @Test
+    void spaceRoleWithoutSpaceBoundary_isRefusedAsIncomplete() {
+        givenSpaceInOrganization(SPACE_ID, ORG_ID);
+        EffectivePermissionRequest request = request(
+                Set.of(new SituatedTechnicalRole(SPACE_ADMIN, ORG_ID, null)),
+                Set.of(), SPACE, ORG_ID, SPACE_ID);
+
+        assertThatThrownBy(() -> resolver.resolve(request))
+                .isInstanceOf(EffectivePermissionResolutionException.class)
+                .hasMessageContaining("incomplete boundary");
+    }
+
+    @Test
+    void spaceRoleOfSameSpaceIdButAnotherOrganization_isRefused() {
+        givenSpaceInOrganization(SPACE_ID, ORG_ID);
+        EffectivePermissionRequest request = request(
+                Set.of(new SituatedTechnicalRole(SPACE_ADMIN, OTHER_ORG_ID, SPACE_ID)),
+                Set.of(), SPACE, ORG_ID, SPACE_ID);
+
+        assertThatThrownBy(() -> resolver.resolve(request))
+                .isInstanceOf(EffectivePermissionResolutionException.class)
+                .hasMessageContaining("belongs to another space");
+    }
+
+    @Test
+    void organizationGroup_isProjectedToSpaceThroughItsInheritableRole() {
+        givenSpaceInOrganization(SPACE_ID, ORG_ID);
+        EffectivePermissionRequest request = request(
+                Set.of(),
+                Set.of(new SituatedTechnicalGroup(TechnicalGroup.ORG_ADMINS, ORG_ID, null)),
+                SPACE, ORG_ID, SPACE_ID);
+
+        assertThat(resolver.resolve(request)).containsExactlyInAnyOrderElementsOf(codesForPlan(SPACE));
+    }
+
+    @Test
+    void spaceGroup_grantsNothingOnOrganization() {
+        EffectivePermissionRequest request = request(
+                Set.of(),
+                Set.of(new SituatedTechnicalGroup(TechnicalGroup.SPACE_ADMINS, ORG_ID, SPACE_ID)),
+                ORGANIZATION, ORG_ID, null);
+
+        assertThat(resolver.resolve(request)).isEmpty();
+    }
+
+    @Test
+    void spaceGroupOfAnotherSpace_isRefused() {
+        givenSpaceInOrganization(SPACE_ID, ORG_ID);
+        EffectivePermissionRequest request = request(
+                Set.of(),
+                Set.of(new SituatedTechnicalGroup(TechnicalGroup.SPACE_ADMINS, ORG_ID, OTHER_SPACE_ID)),
+                SPACE, ORG_ID, SPACE_ID);
+
+        assertThatThrownBy(() -> resolver.resolve(request))
+                .isInstanceOf(EffectivePermissionResolutionException.class)
+                .hasMessageContaining("G_SPACE_ADMINS")
+                .hasMessageContaining("belongs to another space");
+    }
+
+    @Test
+    void organizationGroupStoredWithASpace_isRefusedAsInvalidBoundary() {
+        EffectivePermissionRequest request = request(
+                Set.of(),
+                Set.of(new SituatedTechnicalGroup(TechnicalGroup.ORG_ADMINS, ORG_ID, SPACE_ID)),
+                ORGANIZATION, ORG_ID, null);
+
+        assertThatThrownBy(() -> resolver.resolve(request))
+                .isInstanceOf(EffectivePermissionResolutionException.class)
+                .hasMessageContaining("G_ORG_ADMINS")
+                .hasMessageContaining("invalid boundary");
+    }
+
     private void givenSpaceInOrganization(UUID spaceId, UUID organizationId) {
         when(spaceManagementCase.findOrgIdBySpaceId(SpaceId.of(spaceId)))
                 .thenReturn(java.util.Optional.of(organizationId));
