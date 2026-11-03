@@ -197,6 +197,17 @@ class EffectiveRbacQueryServiceTest {
     }
 
     @Test
+    void selfServiceRoleSeededAsTechnical_neverEntersSpaceClaims() {
+        givenDirectRoles(directRole("R_SELF", RoleSource.TECHNICAL));
+        givenMemberships();
+
+        EffectiveRbac rbac = effective();
+
+        assertThat(rbac.roles()).isEmpty();
+        assertThat(rbac.permissions()).isEmpty();
+    }
+
+    @Test
     void businessAssignments_areIgnoredByEffectiveComputation() {
         // Le contrat repository exclut déjà BUSINESS ; si une ligne difforme passait
         // quand même (code null, businessRoleId porté), elle n'entre pas dans le token.
