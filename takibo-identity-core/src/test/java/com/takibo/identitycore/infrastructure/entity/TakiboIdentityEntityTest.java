@@ -57,9 +57,12 @@ class TakiboIdentityEntityTest {
     void equality_isCarriedByTheIdentityIdentifier() {
         TakiboIdentityEntity a = TakiboIdentityEntity.builder().identityId(IDENTITY_UUID).riskScore(1).build();
         TakiboIdentityEntity b = TakiboIdentityEntity.builder().identityId(IDENTITY_UUID).riskScore(99).build();
+        TakiboIdentityEntity other = TakiboIdentityEntity.builder().identityId(UUID.randomUUID()).build();
 
-        assertThat(a).isEqualTo(b).hasSameHashCodeAs(b).isEqualTo(a);
-        assertThat(a).isNotEqualTo(TakiboIdentityEntity.builder().identityId(UUID.randomUUID()).build());
-        assertThat(a).isNotEqualTo("not an entity");
+        assertThat(a)
+                .isEqualTo(b)
+                .hasSameHashCodeAs(b)
+                .isNotEqualTo(other)
+                .isNotEqualTo("not an entity");
     }
 }

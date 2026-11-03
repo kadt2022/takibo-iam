@@ -14,8 +14,10 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.mapstruct.factory.Mappers;
 
+import java.lang.reflect.RecordComponent;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -38,7 +40,14 @@ class UserMapperTest {
 
     @Test
     void responseContract_neverCarriesTheAccountOrOrganizationAnchor() {
-        assertThat(Arrays.stream(UserResponse.class.getRecordComponents()).map(c -> c.getName()))
+        List<String> components = Arrays.stream(UserResponse.class.getRecordComponents())
+                .map(RecordComponent::getName)
+                .toList();
+
+        assertThat(components)
+                .containsExactly("id", "spaceId", "username", "email", "firstName", "lastName",
+                        "status", "type", "mfaEnabled", "passwordExpired", "lastLoginAt",
+                        "createdAt", "updatedAt", "version")
                 .doesNotContain("accountId", "orgId", "organizationId", "password", "passwordHash");
     }
 

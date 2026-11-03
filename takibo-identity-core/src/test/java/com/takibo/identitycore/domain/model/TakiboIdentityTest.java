@@ -121,8 +121,13 @@ class TakiboIdentityTest {
     void equality_isCarriedByTheIdentifierOnly() {
         TakiboIdentity human = TakiboIdentity.createHuman(ID, ORG, ACCOUNT);
 
-        assertThat(human).isEqualTo(human.disable()).hasSameHashCodeAs(human.disable());
-        assertThat(human).isNotEqualTo(TakiboIdentity.createHuman(TakiboIdentityId.newId(), ORG, ACCOUNT));
+        TakiboIdentity disabled = human.disable();
+        TakiboIdentity otherIdentity = TakiboIdentity.createHuman(TakiboIdentityId.newId(), ORG, ACCOUNT);
+
+        assertThat(human)
+                .isEqualTo(disabled)
+                .hasSameHashCodeAs(disabled)
+                .isNotEqualTo(otherIdentity);
     }
 
     @Test

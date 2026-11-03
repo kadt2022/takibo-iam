@@ -77,9 +77,11 @@ class UserDomainServiceTest {
 
     @Test
     void usernameAlreadyTakenInTheSpace_isRefused() {
-        when(userRepository.findByUsername(SPACE, "jane")).thenReturn(Optional.of(mock(User.class)));
+        User existing = mock(User.class);
+        when(userRepository.findByUsername(SPACE, "jane")).thenReturn(Optional.of(existing));
+        CreateUserCommand command = command();
 
-        assertThatThrownBy(() -> service.createNativeUser(command(), ORG_UUID, SPACE, ACCOUNT))
+        assertThatThrownBy(() -> service.createNativeUser(command, ORG_UUID, SPACE, ACCOUNT))
                 .isInstanceOf(UserAlreadyExistsException.class)
                 .hasMessageContaining("jane");
 

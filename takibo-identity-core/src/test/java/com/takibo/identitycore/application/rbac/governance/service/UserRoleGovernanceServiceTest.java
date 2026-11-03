@@ -229,7 +229,8 @@ class UserRoleGovernanceServiceTest {
         stubTargetUser();
         when(roleRepository.findBySpaceIdAndCode(SpaceId.of(SPACE_ID), "GOV_GHOST")).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.assignRole(KEY, new AssignUserRoleCommand(USER_ID, "GOV_GHOST", null)))
+        AssignUserRoleCommand command = new AssignUserRoleCommand(USER_ID, "GOV_GHOST", null);
+        assertThatThrownBy(() -> service.assignRole(KEY, command))
                 .isInstanceOf(RoleNotFoundException.class)
                 .hasMessageContaining("GOV_GHOST");
 
@@ -447,7 +448,8 @@ class UserRoleGovernanceServiceTest {
                 .thenReturn(List.of("R_ORG_ADMIN"));
         when(assignments.existsAssignment(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID, "R_ORG_ADMIN")).thenReturn(true);
 
-        assertThatThrownBy(() -> service.removeRole(KEY, new RemoveUserRoleCommand(USER_ID, "R_ORG_ADMIN", null)))
+        RemoveUserRoleCommand command = new RemoveUserRoleCommand(USER_ID, "R_ORG_ADMIN", null);
+        assertThatThrownBy(() -> service.removeRole(KEY, command))
                 .isInstanceOf(SelfDemotionException.class)
                 .hasMessageContaining("R_ORG_ADMIN");
 
@@ -474,7 +476,8 @@ class UserRoleGovernanceServiceTest {
         when(roleRepository.findBySpaceIdAndCode(SpaceId.of(SPACE_ID), "B_APPROVER"))
                 .thenReturn(Optional.of(dbRole("B_APPROVER", RoleNature.BUSINESS)));
 
-        assertThatThrownBy(() -> service.removeRole(KEY, new RemoveUserRoleCommand(USER_ID, "B_APPROVER", null)))
+        RemoveUserRoleCommand command = new RemoveUserRoleCommand(USER_ID, "B_APPROVER", null);
+        assertThatThrownBy(() -> service.removeRole(KEY, command))
                 .isInstanceOf(RoleTypeNotAllowedException.class);
 
         verify(assignments, never()).deleteAssignment(any(), any(), any(), any());
@@ -485,8 +488,8 @@ class UserRoleGovernanceServiceTest {
         stubActor();
         stubTargetUser();
 
-        assertThatThrownBy(() -> service.removeRole(
-                KEY, new RemoveUserRoleCommand(USER_ID, "R_TAKIBO_PLATFORM_AUDITOR", null)))
+        RemoveUserRoleCommand command = new RemoveUserRoleCommand(USER_ID, "R_TAKIBO_PLATFORM_AUDITOR", null);
+        assertThatThrownBy(() -> service.removeRole(KEY, command))
                 .isInstanceOf(RoleNotFoundException.class);
 
         verifyNoInteractions(roleRepository, assignments);
@@ -498,7 +501,8 @@ class UserRoleGovernanceServiceTest {
         stubTargetUser();
         when(roleRepository.findBySpaceIdAndCode(SpaceId.of(SPACE_ID), "GOV_GHOST")).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.removeRole(KEY, new RemoveUserRoleCommand(USER_ID, "GOV_GHOST", null)))
+        RemoveUserRoleCommand command = new RemoveUserRoleCommand(USER_ID, "GOV_GHOST", null);
+        assertThatThrownBy(() -> service.removeRole(KEY, command))
                 .isInstanceOf(RoleNotFoundException.class)
                 .hasMessageContaining("GOV_GHOST");
 
@@ -510,7 +514,8 @@ class UserRoleGovernanceServiceTest {
         stubActor();
         when(userRepository.findById(UserId.of(USER_ID))).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.removeRole(KEY, new RemoveUserRoleCommand(USER_ID, "R_SPACE_ADMIN", null)))
+        RemoveUserRoleCommand command = new RemoveUserRoleCommand(USER_ID, "R_SPACE_ADMIN", null);
+        assertThatThrownBy(() -> service.removeRole(KEY, command))
                 .isInstanceOf(UserNotFoundException.class);
 
         verifyNoInteractions(roleRepository, assignments);

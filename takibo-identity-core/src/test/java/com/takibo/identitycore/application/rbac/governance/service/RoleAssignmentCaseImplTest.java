@@ -140,10 +140,13 @@ class RoleAssignmentCaseImplTest {
 
     @Test
     void assignTechnicalRole_platformRoleWithoutScope_persistsUnscopedAssignment() {
-        when(governanceRoleAssignmentRepository.saveGovernanceAssignment(any()))
-                .thenReturn(mock(RoleAssignment.class));
+        RoleAssignment persisted = mock(RoleAssignment.class);
+        when(governanceRoleAssignmentRepository.saveGovernanceAssignment(any())).thenReturn(persisted);
 
-        service.assignTechnicalRole(null, null, FOUNDER, "R_TAKIBO_PLATFORM_AUDITOR", "bootstrap");
+        RoleAssignment result =
+                service.assignTechnicalRole(null, null, FOUNDER, "R_TAKIBO_PLATFORM_AUDITOR", "bootstrap");
+
+        assertThat(result).isSameAs(persisted);
 
         ArgumentCaptor<RoleAssignment> captor = ArgumentCaptor.forClass(RoleAssignment.class);
         verify(governanceRoleAssignmentRepository).saveGovernanceAssignment(captor.capture());
@@ -164,10 +167,12 @@ class RoleAssignmentCaseImplTest {
 
     @Test
     void assignTechnicalRole_orgRoleAtOrgLevel_persistsWithoutSpace() {
-        when(governanceRoleAssignmentRepository.saveGovernanceAssignment(any()))
-                .thenReturn(mock(RoleAssignment.class));
+        RoleAssignment persisted = mock(RoleAssignment.class);
+        when(governanceRoleAssignmentRepository.saveGovernanceAssignment(any())).thenReturn(persisted);
 
-        service.assignTechnicalRole(ORG_ID, null, FOUNDER, "R_ORG_OWNER", "system");
+        RoleAssignment result = service.assignTechnicalRole(ORG_ID, null, FOUNDER, "R_ORG_OWNER", "system");
+
+        assertThat(result).isSameAs(persisted);
 
         ArgumentCaptor<RoleAssignment> captor = ArgumentCaptor.forClass(RoleAssignment.class);
         verify(governanceRoleAssignmentRepository).saveGovernanceAssignment(captor.capture());

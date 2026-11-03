@@ -44,21 +44,27 @@ class SpaceStatusCheckerCaseTest {
 
     @Test
     void assertSpaceExistsAndActive_activeSpace_passes() {
-        assertThatCode(() -> returning(SpaceOperationalStatus.ACTIVE).assertSpaceExistsAndActive(SPACE_ID))
+        SpaceStatusCheckerCase checker = returning(SpaceOperationalStatus.ACTIVE);
+
+        assertThatCode(() -> checker.assertSpaceExistsAndActive(SPACE_ID))
                 .doesNotThrowAnyException();
     }
 
     @ParameterizedTest
     @EnumSource(value = SpaceOperationalStatus.class, names = {"SUSPENDED", "DISABLED"})
     void assertSpaceExistsAndActive_nonActiveSpace_isNotActive(SpaceOperationalStatus status) {
-        assertThatThrownBy(() -> returning(status).assertSpaceExistsAndActive(SPACE_ID))
+        SpaceStatusCheckerCase checker = returning(status);
+
+        assertThatThrownBy(() -> checker.assertSpaceExistsAndActive(SPACE_ID))
                 .isInstanceOfSatisfying(SpaceNotActiveException.class,
                         e -> assertThat(e.getSpaceId()).isEqualTo(SPACE_ID));
     }
 
     @Test
     void assertSpaceExistsAndActive_unknownSpace_isNotFound() {
-        assertThatThrownBy(() -> returning(null).assertSpaceExistsAndActive(SPACE_ID))
+        SpaceStatusCheckerCase checker = returning(null);
+
+        assertThatThrownBy(() -> checker.assertSpaceExistsAndActive(SPACE_ID))
                 .isInstanceOf(SpaceNotFoundException.class)
                 .hasMessageContaining(SPACE_ID.toString());
     }

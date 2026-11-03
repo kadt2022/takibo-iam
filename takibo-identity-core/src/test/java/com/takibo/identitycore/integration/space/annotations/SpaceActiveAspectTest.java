@@ -15,6 +15,9 @@ import org.springframework.aop.aspectj.annotation.AspectJProxyFactory;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.bind.annotation.PathVariable;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -66,16 +69,19 @@ class SpaceActiveAspectTest {
         @Test
         void activeSpace_letsTheCallThrough() {
             spaceIs(SPACE_ID, SpaceOperationalStatus.ACTIVE);
+            ClassGuarded target = new ClassGuarded();
 
-            assertThat(proxy(new ClassGuarded()).orgAndSpace(ORG_ID, SPACE_ID)).isEqualTo("done");
+            assertThat(proxy(target).orgAndSpace(ORG_ID, SPACE_ID)).isEqualTo("done");
+            assertThat(target.received).containsExactly(ORG_ID, SPACE_ID);
         }
 
         @Test
         void suspendedSpace_isRejectedWithSuspendedCode_andTargetIsNeverInvoked() {
             spaceIs(SPACE_ID, SpaceOperationalStatus.SUSPENDED);
             ClassGuarded target = new ClassGuarded();
+            ClassGuarded guarded = proxy(target);
 
-            assertThatThrownBy(() -> proxy(target).orgAndSpace(ORG_ID, SPACE_ID))
+            assertThatThrownBy(() -> guarded.orgAndSpace(ORG_ID, SPACE_ID))
                     .isInstanceOfSatisfying(SpaceGuardException.class, e -> {
                         assertThat(e.getCode()).isEqualTo(SpaceGuardStatus.SPACE_SUSPENDED);
                         assertThat(e.getSpaceId()).isEqualTo(SPACE_ID);
@@ -87,8 +93,9 @@ class SpaceActiveAspectTest {
         void disabledSpace_isRejectedWithDisabledCode_andTargetIsNeverInvoked() {
             spaceIs(SPACE_ID, SpaceOperationalStatus.DISABLED);
             ClassGuarded target = new ClassGuarded();
+            ClassGuarded guarded = proxy(target);
 
-            assertThatThrownBy(() -> proxy(target).orgAndSpace(ORG_ID, SPACE_ID))
+            assertThatThrownBy(() -> guarded.orgAndSpace(ORG_ID, SPACE_ID))
                     .isInstanceOfSatisfying(SpaceGuardException.class, e -> {
                         assertThat(e.getCode()).isEqualTo(SpaceGuardStatus.SPACE_DISABLED);
                         assertThat(e.getSpaceId()).isEqualTo(SPACE_ID);
@@ -100,8 +107,9 @@ class SpaceActiveAspectTest {
         void unknownSpace_isNotFound_failClosed() {
             when(spaceStatusChecker.findStatus(SPACE_ID)).thenReturn(Optional.empty());
             ClassGuarded target = new ClassGuarded();
+            ClassGuarded guarded = proxy(target);
 
-            assertThatThrownBy(() -> proxy(target).orgAndSpace(ORG_ID, SPACE_ID))
+            assertThatThrownBy(() -> guarded.orgAndSpace(ORG_ID, SPACE_ID))
                     .isInstanceOf(SpaceNotFoundException.class)
                     .hasMessageContaining(SPACE_ID.toString());
             assertThat(target.invocations).isZero();
@@ -110,8 +118,9 @@ class SpaceActiveAspectTest {
         @Test
         void noResolvableSpaceId_isRefused_withoutQueryingTheChecker() {
             ClassGuarded target = new ClassGuarded();
+            ClassGuarded guarded = proxy(target);
 
-            assertThatThrownBy(() -> proxy(target).noSpace("not-a-uuid"))
+            assertThatThrownBy(() -> guarded.noSpace("not-a-uuid"))
                     .isInstanceOf(IllegalStateException.class)
                     .hasMessageContaining("spaceId introuvable");
             verifyNoInteractions(spaceStatusChecker);
@@ -122,7 +131,10 @@ class SpaceActiveAspectTest {
         void disabledPolicy_skipsTheGuardEntirely() {
             ReflectionTestUtils.setField(aspect, "enabled", false);
 
-            assertThat(proxy(new ClassGuarded()).noSpace("not-a-uuid")).isEqualTo("done");
+            ClassGuarded target = new ClassGuarded();
+
+            assertThat(proxy(target).noSpace("not-a-uuid")).isEqualTo("done");
+            assertThat(target.received).containsExactly("not-a-uuid");
             verifyNoInteractions(spaceStatusChecker);
         }
     }
@@ -133,9 +145,11 @@ class SpaceActiveAspectTest {
         @Test
         void defaultKeys_checkTheSpaceIdPathVariable_notTheOrgIdThatPrecedesIt() {
             spaceIs(SPACE_ID, SpaceOperationalStatus.ACTIVE);
+            ClassGuarded target = new ClassGuarded();
 
-            proxy(new ClassGuarded()).orgAndSpace(ORG_ID, SPACE_ID);
+            proxy(target).orgAndSpace(ORG_ID, SPACE_ID);
 
+            assertThat(target.received).containsExactly(ORG_ID, SPACE_ID);
             verify(spaceStatusChecker).findStatus(SPACE_ID);
             verify(spaceStatusChecker, never()).findStatus(ORG_ID);
         }
@@ -144,39 +158,56 @@ class SpaceActiveAspectTest {
         void sidAlias_declaredThroughValue_isParsedFromString() {
             spaceIs(SPACE_ID, SpaceOperationalStatus.ACTIVE);
 
-            proxy(new ClassGuarded()).sidAsString(SPACE_ID.toString());
+            ClassGuarded target = new ClassGuarded();
 
+            proxy(target).sidAsString(SPACE_ID.toString());
+
+            assertThat(target.received).containsExactly(SPACE_ID.toString());
             verify(spaceStatusChecker).findStatus(SPACE_ID);
         }
 
         @Test
         void commandArgument_exposingSpaceId_isUsedWhenNoPathVariableMatches() {
             spaceIs(SPACE_ID, SpaceOperationalStatus.SUSPENDED);
+            ClassGuarded target = new ClassGuarded();
+            ClassGuarded guarded = proxy(target);
+            SpacedCommand command = new SpacedCommand(SPACE_ID);
 
-            assertThatThrownBy(() -> proxy(new ClassGuarded()).command(new SpacedCommand(SPACE_ID)))
+            assertThatThrownBy(() -> guarded.command(command))
                     .isInstanceOf(SpaceGuardException.class);
             verify(spaceStatusChecker).findStatus(SPACE_ID);
+            assertThat(target.received).isEmpty();
         }
 
         @Test
         void commandArgument_whoseSpaceIdAccessorFails_isIgnored_andCallIsRefused() {
-            assertThatThrownBy(() -> proxy(new ClassGuarded()).failingCommand(new FailingCommand()))
+            ClassGuarded target = new ClassGuarded();
+            ClassGuarded guarded = proxy(target);
+            FailingCommand command = new FailingCommand();
+
+            assertThatThrownBy(() -> guarded.failingCommand(command))
                     .isInstanceOf(IllegalStateException.class);
             verifyNoInteractions(spaceStatusChecker);
+            assertThat(target.received).isEmpty();
         }
 
         @Test
         void invalidUuidPathVariable_isNotTreatedAsASpace_andCallIsRefused() {
-            assertThatThrownBy(() -> proxy(new ClassGuarded()).sidAsString("finance"))
+            ClassGuarded target = new ClassGuarded();
+            ClassGuarded guarded = proxy(target);
+
+            assertThatThrownBy(() -> guarded.sidAsString("finance"))
                     .isInstanceOf(IllegalStateException.class);
             verifyNoInteractions(spaceStatusChecker);
+            assertThat(target.received).isEmpty();
         }
 
         @Test
         void methodAnnotation_customKeys_selectTheConfiguredPathVariable() {
             spaceIs(OTHER_ID, SpaceOperationalStatus.DISABLED);
+            MethodGuarded guarded = proxy(new MethodGuarded());
 
-            assertThatThrownBy(() -> proxy(new MethodGuarded()).customKey(SPACE_ID, OTHER_ID))
+            assertThatThrownBy(() -> guarded.customKey(SPACE_ID, OTHER_ID))
                     .isInstanceOfSatisfying(SpaceGuardException.class,
                             e -> assertThat(e.getSpaceId()).isEqualTo(OTHER_ID));
             verify(spaceStatusChecker, never()).findStatus(SPACE_ID);
@@ -184,52 +215,66 @@ class SpaceActiveAspectTest {
 
         @Test
         void unannotatedMethodOfUnannotatedClass_isNotIntercepted() {
-            assertThat(proxy(new MethodGuarded()).unguarded(SPACE_ID)).isEqualTo("done");
+            MethodGuarded target = new MethodGuarded();
+
+            assertThat(proxy(target).unguarded(SPACE_ID)).isEqualTo("done");
+            assertThat(target.received).containsExactly(SPACE_ID);
             verify(spaceStatusChecker, never()).findStatus(any());
         }
     }
 
     // ───────────────────────────── fixtures ─────────────────────────────
 
+    /**
+     * Cibles du proxy : leurs signatures (noms de path variables, types d'arguments)
+     * sont précisément ce que l'aspect lit. Chaque méthode enregistre les arguments
+     * reçus, ce qui prouve que l'appel autorisé atteint la cible avec ses valeurs
+     * intactes, et qu'un appel refusé ne l'atteint jamais.
+     */
     @RequireActiveSpace
     static class ClassGuarded {
         int invocations;
+        final List<Object> received = new ArrayList<>();
 
         public String orgAndSpace(@PathVariable("orgId") UUID orgId, @PathVariable("spaceId") UUID spaceId) {
-            return done();
+            return done(orgId, spaceId);
         }
 
         public String sidAsString(@PathVariable(value = "sid") String sid) {
-            return done();
+            return done(sid);
         }
 
         public String command(SpacedCommand command) {
-            return done();
+            return done(command);
         }
 
         public String failingCommand(FailingCommand command) {
-            return done();
+            return done(command);
         }
 
         public String noSpace(String label) {
-            return done();
+            return done(label);
         }
 
-        private String done() {
+        private String done(Object... args) {
             invocations++;
+            received.addAll(Arrays.asList(args));
             return "done";
         }
     }
 
     static class MethodGuarded {
+        final List<Object> received = new ArrayList<>();
 
         @RequireActiveSpace(pathVarKeys = "tenantSpace")
         public String customKey(@PathVariable("spaceId") UUID notTheGuardedOne,
                                 @PathVariable("tenantSpace") UUID guarded) {
+            received.addAll(Arrays.asList(notTheGuardedOne, guarded));
             return "done";
         }
 
         public String unguarded(UUID spaceId) {
+            received.add(spaceId);
             return "done";
         }
     }

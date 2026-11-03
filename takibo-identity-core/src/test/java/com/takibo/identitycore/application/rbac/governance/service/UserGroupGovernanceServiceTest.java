@@ -315,8 +315,8 @@ class UserGroupGovernanceServiceTest {
                 .thenReturn(List.of("R_ORG_ADMIN"));
         when(memberships.existsMembership(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID, "G_ORG_ADMINS")).thenReturn(true);
 
-        assertThatThrownBy(() -> service.removeFromGroup(
-                KEY, new RemoveUserFromGroupCommand(USER_ID, "G_ORG_ADMINS", null)))
+        RemoveUserFromGroupCommand command = new RemoveUserFromGroupCommand(USER_ID, "G_ORG_ADMINS", null);
+        assertThatThrownBy(() -> service.removeFromGroup(KEY, command))
                 .isInstanceOf(SelfDemotionException.class)
                 .hasMessageContaining("G_ORG_ADMINS");
 
@@ -330,8 +330,8 @@ class UserGroupGovernanceServiceTest {
         when(roleAssignments.findAssignedTechnicalRoleCodes(ORG_ID, SPACE_ID, ACTOR_ACCOUNT_ID))
                 .thenReturn(List.of("R_SPACE_ADMIN", "R_ORG_USER_ADMIN"));
 
-        assertThatThrownBy(() -> service.removeFromGroup(
-                KEY, new RemoveUserFromGroupCommand(USER_ID, "G_ORG_USERS", null)))
+        RemoveUserFromGroupCommand command = new RemoveUserFromGroupCommand(USER_ID, "G_ORG_USERS", null);
+        assertThatThrownBy(() -> service.removeFromGroup(KEY, command))
                 .isInstanceOf(RoleScopeEscalationException.class);
 
         verify(memberships, never()).existsMembership(any(), any(), any(), any());
@@ -346,8 +346,8 @@ class UserGroupGovernanceServiceTest {
                 .thenReturn(Optional.of(Group.createNew(
                         SpaceId.of(SPACE_ID), "GRP_FINANCE", "Finance", null, GroupNature.BUSINESS)));
 
-        assertThatThrownBy(() -> service.removeFromGroup(
-                KEY, new RemoveUserFromGroupCommand(USER_ID, "GRP_FINANCE", null)))
+        RemoveUserFromGroupCommand command = new RemoveUserFromGroupCommand(USER_ID, "GRP_FINANCE", null);
+        assertThatThrownBy(() -> service.removeFromGroup(KEY, command))
                 .isInstanceOf(GroupTypeNotAllowedException.class);
 
         verify(memberships, never()).deleteMembership(any(), any(), any(), any());
