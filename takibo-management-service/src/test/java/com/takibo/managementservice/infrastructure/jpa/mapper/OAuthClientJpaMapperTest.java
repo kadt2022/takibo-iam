@@ -229,20 +229,22 @@ class OAuthClientJpaMapperTest {
     }
 
     @Test
-    void toDomain_restoresTheClientWithItsBoundaryAndChildren() {
-        OAuthClientJpaMapper generated = new OAuthClientJpaMapperImpl();
-        OAuth2ClientEntity entity = generated.toEntity(fullClient(), id -> {
-            SpaceEntity space = new SpaceEntity();
-            space.setId(id);
-            return space;
-        });
+    void toDomain_restoresTheClientIdentityAndBoundary() {
         OAuthClient original = fullClient();
 
-        OAuthClient restored = generated.toDomain(entity);
+        OAuthClient restored = roundTrip();
 
         assertThat(restored.getId()).isEqualTo(original.getId());
         assertThat(restored.getOrgId()).isEqualTo(original.getOrgId());
         assertThat(restored.getSpaceId()).isEqualTo(original.getSpaceId());
+        assertThat(restored.getCreatedAt()).isEqualTo(original.getCreatedAt());
+        assertThat(restored.getVersion()).isEqualTo(3L);
+    }
+
+    @Test
+    void toDomain_restoresTheClientConfiguration() {
+        OAuthClient restored = roundTrip();
+
         assertThat(restored.getClientId()).isEqualTo("partner-portal");
         assertThat(restored.getClientName()).isEqualTo("Partner Portal");
         assertThat(restored.getClientType()).isEqualTo(ClientType.PUBLIC);
@@ -260,8 +262,12 @@ class OAuthClientJpaMapperTest {
         assertThat(restored.getRefreshTokenTtlSeconds()).isEqualTo(7200);
         assertThat(restored.getIdTokenTtlSeconds()).isEqualTo(300);
         assertThat(restored.getAdditionalSettings()).containsExactly(Map.entry("theme", "dark"));
-        assertThat(restored.getCreatedAt()).isEqualTo(original.getCreatedAt());
-        assertThat(restored.getVersion()).isEqualTo(3L);
+    }
+
+    @Test
+    void toDomain_restoresEveryChildCollection() {
+        OAuthClient restored = roundTrip();
+
         assertThat(restored.getScopes()).containsExactlyInAnyOrder("openid", "api:read");
         assertThat(restored.getGrantTypes())
                 .containsExactlyInAnyOrder("authorization_code", "refresh_token");
@@ -365,6 +371,16 @@ class OAuthClientJpaMapperTest {
     private static final String SECRET_HASH = "argon2id-hash";
     private static final Instant SECRET_EXPIRY = Instant.parse("2031-06-01T00:00:00Z");
     private static final String JWKS_JSON = "{\"keys\":[]}";
+
+    private static OAuthClient roundTrip() {
+        OAuthClientJpaMapper generated = new OAuthClientJpaMapperImpl();
+        OAuth2ClientEntity entity = generated.toEntity(fullClient(), id -> {
+            SpaceEntity space = new SpaceEntity();
+            space.setId(id);
+            return space;
+        });
+        return generated.toDomain(entity);
+    }
 
     private static OAuthClient fullClient() {
         return OAuthClient.builder()

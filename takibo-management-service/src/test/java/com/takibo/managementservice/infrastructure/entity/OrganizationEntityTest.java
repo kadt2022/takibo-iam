@@ -43,10 +43,14 @@ class OrganizationEntityTest {
         UUID id = UUID.randomUUID();
         OrganizationEntity first = OrganizationEntity.builder().id(id).code("acme").build();
 
-        assertThat(first).isEqualTo(OrganizationEntity.builder().id(id).code("other").build())
-                .hasSameHashCodeAs(OrganizationEntity.builder().id(id).build());
-        assertThat(first).isNotEqualTo(OrganizationEntity.builder().id(UUID.randomUUID()).build());
-        assertThat(first).isNotEqualTo("acme");
-        assertThat(first).isEqualTo(first);
+        Object otherType = "acme";
+        Object self = first;
+
+        assertThat(first)
+                .isEqualTo(OrganizationEntity.builder().id(id).code("other").build())
+                .hasSameHashCodeAs(OrganizationEntity.builder().id(id).build())
+                .isNotEqualTo(OrganizationEntity.builder().id(UUID.randomUUID()).build())
+                .isNotEqualTo(otherType);
+        assertThat(first.equals(self)).as("equals est réflexif").isTrue();
     }
 }

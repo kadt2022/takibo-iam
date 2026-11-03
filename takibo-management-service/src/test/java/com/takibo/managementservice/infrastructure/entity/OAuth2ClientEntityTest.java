@@ -80,9 +80,14 @@ class OAuth2ClientEntityTest {
         OAuth2ClientEntity sameRow = OAuth2ClientEntity.builder().id(id).clientId("b").build();
         OAuth2ClientEntity otherRow = OAuth2ClientEntity.builder().id(UUID.randomUUID()).clientId("a").build();
 
-        assertThat(first).isEqualTo(sameRow).hasSameHashCodeAs(sameRow);
-        assertThat(first).isNotEqualTo(otherRow);
-        assertThat(first).isNotEqualTo("a");
-        assertThat(first).isEqualTo(first);
+        Object otherType = "a";
+        Object self = first;
+
+        assertThat(first)
+                .isEqualTo(sameRow)
+                .hasSameHashCodeAs(sameRow)
+                .isNotEqualTo(otherRow)
+                .isNotEqualTo(otherType);
+        assertThat(first.equals(self)).as("equals est réflexif").isTrue();
     }
 }

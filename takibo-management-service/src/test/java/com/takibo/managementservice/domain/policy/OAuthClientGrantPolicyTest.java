@@ -91,10 +91,13 @@ class OAuthClientGrantPolicyTest {
 
     @Test
     void a_public_authorization_code_client_without_pkce_is_refused() {
+        OAuthClientRegistration withoutPkce = publicClient(false);
+        ValidatedSets sets = sets(ORIGINS);
+
         assertThatThrownBy(() -> policy.validateGrantProfile(
-                publicClient(false),
+                withoutPkce,
                 TokenEndpointAuthMethod.none,
-                sets(ORIGINS),
+                sets,
                 false
         )).isInstanceOf(PublicAuthorizationCodeRequiresPkceException.class);
     }
@@ -368,11 +371,13 @@ class OAuthClientGrantPolicyTest {
             ValidatedSets sets,
             String message
     ) {
+        boolean requirePkce = Boolean.TRUE.equals(registration.requirePkce());
+
         assertThatThrownBy(() -> policy.validateGrantProfile(
                 registration,
                 method,
                 sets,
-                Boolean.TRUE.equals(registration.requirePkce())
+                requirePkce
         ))
                 .isInstanceOf(InvalidClientConfigurationException.class)
                 .hasMessage(message);

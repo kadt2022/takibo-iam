@@ -80,9 +80,14 @@ class SpaceEntityTest {
         SpaceEntity first = SpaceEntity.builder().id(id).code("a").build();
         SpaceEntity sameRow = SpaceEntity.builder().id(id).code("b").build();
 
-        assertThat(first).isEqualTo(sameRow).hasSameHashCodeAs(sameRow);
-        assertThat(first).isNotEqualTo(SpaceEntity.builder().id(UUID.randomUUID()).build());
-        assertThat(first).isNotEqualTo(id);
-        assertThat(first).isEqualTo(first);
+        Object otherType = id;
+        Object self = first;
+
+        assertThat(first)
+                .isEqualTo(sameRow)
+                .hasSameHashCodeAs(sameRow)
+                .isNotEqualTo(SpaceEntity.builder().id(UUID.randomUUID()).build())
+                .isNotEqualTo(otherType);
+        assertThat(first.equals(self)).as("equals est réflexif").isTrue();
     }
 }

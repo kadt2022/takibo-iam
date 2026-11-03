@@ -17,6 +17,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -61,7 +62,7 @@ class OutboxSpaceEventPublisherTest {
         publisher.publish(EVENT);
 
         ArgumentCaptor<OutboxEnvelope> envelopes = ArgumentCaptor.forClass(OutboxEnvelope.class);
-        verify(outbox, org.mockito.Mockito.times(2)).publish(envelopes.capture());
+        verify(outbox, times(2)).publish(envelopes.capture());
         assertThat(envelopes.getAllValues())
                 .extracting(OutboxEnvelope::dedupKey)
                 .containsOnly("SPACE:CREATED:" + EVENT.spaceId());

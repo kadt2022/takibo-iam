@@ -75,10 +75,14 @@ class SpaceDomainEntityTest {
         UUID id = UUID.randomUUID();
         SpaceDomainEntity first = SpaceDomainEntity.builder().id(id).domain("a.example").build();
 
-        assertThat(first).isEqualTo(SpaceDomainEntity.builder().id(id).domain("b.example").build())
-                .hasSameHashCodeAs(SpaceDomainEntity.builder().id(id).build());
-        assertThat(first).isNotEqualTo(SpaceDomainEntity.builder().id(UUID.randomUUID()).build());
-        assertThat(first).isNotEqualTo("a.example");
-        assertThat(first).isEqualTo(first);
+        Object otherType = "a.example";
+        Object self = first;
+
+        assertThat(first)
+                .isEqualTo(SpaceDomainEntity.builder().id(id).domain("b.example").build())
+                .hasSameHashCodeAs(SpaceDomainEntity.builder().id(id).build())
+                .isNotEqualTo(SpaceDomainEntity.builder().id(UUID.randomUUID()).build())
+                .isNotEqualTo(otherType);
+        assertThat(first.equals(self)).as("equals est réflexif").isTrue();
     }
 }

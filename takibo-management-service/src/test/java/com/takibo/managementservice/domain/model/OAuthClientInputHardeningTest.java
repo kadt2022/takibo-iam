@@ -109,7 +109,8 @@ class OAuthClientInputHardeningTest {
         assertThatThrownBy(() -> ClientScope.ofAll(withNull))
                 .isInstanceOf(InvalidScopeException.class)
                 .hasMessageContaining("null");
-        assertThatThrownBy(() -> ClientScope.ofAll(Set.of("openid", "  ")))
+        Set<String> withBlank = Set.of("openid", "  ");
+        assertThatThrownBy(() -> ClientScope.ofAll(withBlank))
                 .isInstanceOf(InvalidScopeException.class);
     }
 
