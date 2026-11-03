@@ -56,3 +56,5 @@ subprojects {
         }
     }
 }
+
+apply from: "gradle/coverage.gradle"
