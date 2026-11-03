@@ -9,10 +9,12 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
 import java.io.UncheckedIOException;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AccessDeniedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.AclEntry;
 import java.nio.file.attribute.AclEntryPermission;
 import java.nio.file.attribute.AclEntryType;
@@ -381,11 +383,25 @@ class SecretFileWriterTest {
     // ---------- Durabilite declaree ----------
 
     @Test
-    void given_a_directory_that_can_be_flushed_then_the_durability_is_flushed_to_disk() {
+    void given_a_real_directory_then_the_declared_durability_matches_what_the_platform_can_flush() {
+        // La garantie annoncee suit la capacite reelle du volume : FLUSHED_TO_DISK partout ou un
+        // repertoire s'ouvre en canal (Linux, macOS), BEST_EFFORT la ou l'API ne le permet pas
+        // (Windows, documente dans le README). Aucun cas n'est ignore.
         Path target = directory.resolve("secrets.env");
+        SecretFileWriter.Durability expected = directoryCanBeFlushed(directory)
+                ? SecretFileWriter.Durability.FLUSHED_TO_DISK
+                : SecretFileWriter.Durability.BEST_EFFORT;
 
-        assertThat(SecretFileWriter.write(target, () -> CONTENT))
-                .isEqualTo(SecretFileWriter.Durability.FLUSHED_TO_DISK);
+        assertThat(SecretFileWriter.write(target, () -> CONTENT)).isEqualTo(expected);
+    }
+
+    private static boolean directoryCanBeFlushed(Path dir) {
+        try (FileChannel channel = FileChannel.open(dir, StandardOpenOption.READ)) {
+            channel.force(true);
+            return true;
+        } catch (IOException | UnsupportedOperationException e) {
+            return false;
+        }
     }
 
     @Test
