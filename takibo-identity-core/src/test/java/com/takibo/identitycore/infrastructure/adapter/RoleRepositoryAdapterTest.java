@@ -1,5 +1,6 @@
 package com.takibo.identitycore.infrastructure.adapter;
 
+import com.takibo.identitycore.domain.exception.ReservedTenantRoleCodeException;
 import com.takibo.identitycore.domain.model.Role;
 import com.takibo.identitycore.domain.model.RoleNature;
 import com.takibo.identitycore.domain.vo.RoleId;
@@ -19,7 +20,9 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -92,6 +95,45 @@ class RoleRepositoryAdapterTest {
 
         assertThat(result).contains(domain);
         verify(jpa).findById(ROLE_ID);
+    }
+
+    @Test
+    void save_reservedTechnicalCode_isRefusedAtThePersistenceEdge() {
+        // Défense en profondeur : un Role construit sans fabrique ne peut pas squatter
+        // l'espace de noms du catalogue technique.
+        Role squatter = domainRole(RoleNature.GOVERNANCE, "R_SPACE_ADMIN");
+
+        assertThatThrownBy(() -> adapter.save(squatter))
+                .isInstanceOf(ReservedTenantRoleCodeException.class);
+
+        verifyNoInteractions(jpa, roleJpaMapper);
+    }
+
+    @Test
+    void save_tenantCode_persistsTheMappedEntity_andReturnsTheDomainRole() {
+        Role role = domainRole(RoleNature.BUSINESS, "B_APPROVER");
+        RoleEntity entity = roleEntity(RoleNature.BUSINESS, "B_APPROVER");
+        when(roleJpaMapper.toEntity(role)).thenReturn(entity);
+
+        assertThat(adapter.save(role)).isSameAs(role);
+
+        verify(jpa).save(entity);
+    }
+
+    @Test
+    void lookupsAreScopedToTheSpace() {
+        when(jpa.existsBySpaceIdAndCode(SPACE_ID, "B_APPROVER")).thenReturn(true);
+        when(jpa.findIdBySpaceIdAndCode(SPACE_ID, "B_APPROVER")).thenReturn(Optional.of(ROLE_ID));
+        RoleEntity entity = roleEntity(RoleNature.BUSINESS, "B_APPROVER");
+        Role domain = domainRole(RoleNature.BUSINESS, "B_APPROVER");
+        when(jpa.findBySpaceIdAndCode(SPACE_ID, "B_APPROVER")).thenReturn(Optional.of(entity));
+        when(jpa.findByOrgIdAndSpaceIdOrderByCodeAsc(ORG_ID, SPACE_ID)).thenReturn(List.of(entity));
+        when(roleJpaMapper.toDomain(entity)).thenReturn(domain);
+
+        assertThat(adapter.existsBySpaceIdAndCode(SpaceId.of(SPACE_ID), "B_APPROVER")).isTrue();
+        assertThat(adapter.findIdBySpaceIdAndCode(SpaceId.of(SPACE_ID), "B_APPROVER")).contains(ROLE_ID);
+        assertThat(adapter.findBySpaceIdAndCode(SpaceId.of(SPACE_ID), "B_APPROVER")).contains(domain);
+        assertThat(adapter.findAllByOrgAndSpace(ORG_ID, SPACE_ID)).containsExactly(domain);
     }
 
     private RoleEntity roleEntity(RoleNature nature, String code) {

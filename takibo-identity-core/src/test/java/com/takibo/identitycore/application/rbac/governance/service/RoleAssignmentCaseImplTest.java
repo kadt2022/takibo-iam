@@ -137,4 +137,57 @@ class RoleAssignmentCaseImplTest {
                 .isInstanceOf(DuplicateAssignmentException.class)
                 .hasMessageContaining("already assigned");
     }
+
+    @Test
+    void assignTechnicalRole_platformRoleWithoutScope_persistsUnscopedAssignment() {
+        RoleAssignment persisted = mock(RoleAssignment.class);
+        when(governanceRoleAssignmentRepository.saveGovernanceAssignment(any())).thenReturn(persisted);
+
+        RoleAssignment result =
+                service.assignTechnicalRole(null, null, FOUNDER, "R_TAKIBO_PLATFORM_AUDITOR", "bootstrap");
+
+        assertThat(result).isSameAs(persisted);
+
+        ArgumentCaptor<RoleAssignment> captor = ArgumentCaptor.forClass(RoleAssignment.class);
+        verify(governanceRoleAssignmentRepository).saveGovernanceAssignment(captor.capture());
+        assertThat(captor.getValue().orgId()).isNull();
+        assertThat(captor.getValue().spaceId()).isNull();
+        assertThat(captor.getValue().roleCode()).isEqualTo("R_TAKIBO_PLATFORM_AUDITOR");
+    }
+
+    @Test
+    void assignTechnicalRole_platformRoleScopedToSpaceOnly_throwsScopeViolation() {
+        assertThatThrownBy(() ->
+                service.assignTechnicalRole(null, SPACE_ID, FOUNDER, "R_TAKIBO_PLATFORM_ADMIN", "system"))
+                .isInstanceOf(InvalidRoleScopeException.class)
+                .hasMessageContaining("R_TAKIBO_PLATFORM_ADMIN");
+
+        verify(governanceRoleAssignmentRepository, never()).saveGovernanceAssignment(any());
+    }
+
+    @Test
+    void assignTechnicalRole_orgRoleAtOrgLevel_persistsWithoutSpace() {
+        RoleAssignment persisted = mock(RoleAssignment.class);
+        when(governanceRoleAssignmentRepository.saveGovernanceAssignment(any())).thenReturn(persisted);
+
+        RoleAssignment result = service.assignTechnicalRole(ORG_ID, null, FOUNDER, "R_ORG_OWNER", "system");
+
+        assertThat(result).isSameAs(persisted);
+
+        ArgumentCaptor<RoleAssignment> captor = ArgumentCaptor.forClass(RoleAssignment.class);
+        verify(governanceRoleAssignmentRepository).saveGovernanceAssignment(captor.capture());
+        assertThat(captor.getValue().orgId()).isEqualTo(ORG_ID);
+        assertThat(captor.getValue().spaceId()).isNull();
+        assertThat(captor.getValue().roleSource()).isEqualTo(RoleSource.TECHNICAL);
+    }
+
+    @Test
+    void assignTechnicalRole_spaceRoleWithoutOrgId_throwsScopeViolation() {
+        assertThatThrownBy(() ->
+                service.assignTechnicalRole(null, SPACE_ID, FOUNDER, "R_SPACE_AUDITOR", "system"))
+                .isInstanceOf(InvalidRoleScopeException.class)
+                .hasMessageContaining("requires orgId and spaceId");
+
+        verify(governanceRoleAssignmentRepository, never()).saveGovernanceAssignment(any());
+    }
 }

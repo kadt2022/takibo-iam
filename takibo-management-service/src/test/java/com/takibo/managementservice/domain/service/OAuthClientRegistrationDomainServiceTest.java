@@ -1,5 +1,8 @@
 package com.takibo.managementservice.domain.service;
 
+import com.takibo.managementservice.domain.exception.InvalidClientConfigurationException;
+import com.takibo.managementservice.domain.exception.InvalidRedirectUriException;
+import com.takibo.managementservice.domain.exception.PublicClientAuthMethodNotNoneException;
 import com.takibo.managementservice.domain.model.ClientType;
 import com.takibo.managementservice.domain.model.OAuthClient;
 import com.takibo.managementservice.domain.model.OAuthClientRegistration;
@@ -22,6 +25,10 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
@@ -99,6 +106,98 @@ class OAuthClientRegistrationDomainServiceTest {
                 .containsExactly("https://app.example/callback");
         assertThat(client.getCorsOrigins())
                 .containsExactly("https://app.example");
+    }
+
+    @Test
+    void a_client_credentials_grant_written_in_another_case_is_still_refused_for_a_public_client() {
+        // La politique client_credentials ne promeut en CONFIDENTIAL que la
+        // valeur exacte "client_credentials" ; la variante en majuscules n'est
+        // pas promue mais reste refusée plus loin (fail-closed).
+        OAuthClientRegistration registration = registration(
+                ClientType.PUBLIC,
+                TokenEndpointAuthMethod.none,
+                false,
+                false,
+                Set.of(" CLIENT_CREDENTIALS "),
+                Set.of(),
+                Set.of()
+        );
+
+        assertThatThrownBy(() -> service.prepareRegistration(registration))
+                .isInstanceOf(InvalidClientConfigurationException.class)
+                .hasMessage("client_credentials requires clientType=CONFIDENTIAL");
+    }
+
+    @Test
+    void the_authentication_policy_refuses_a_public_client_before_grant_rules_run() {
+        OAuthClientRegistration registration = registration(
+                ClientType.PUBLIC,
+                TokenEndpointAuthMethod.client_secret_basic,
+                false,
+                true,
+                Set.of("authorization_code"),
+                Set.of("https://app.example/callback"),
+                Set.of("https://app.example")
+        );
+
+        assertThatThrownBy(() -> service.prepareRegistration(registration))
+                .isInstanceOf(PublicClientAuthMethodNotNoneException.class);
+        verify(grantPolicy, never()).validateGrantProfile(any(), any(), any(), anyBoolean());
+    }
+
+    @Test
+    void a_public_client_without_explicit_pkce_is_planned_with_pkce() {
+        OAuthClientRegistration registration = registration(
+                ClientType.PUBLIC,
+                null,
+                null,
+                null,
+                Set.of("authorization_code"),
+                Set.of("https://app.example/callback"),
+                Set.of("https://app.example")
+        );
+
+        var plan = service.prepareRegistration(registration);
+
+        assertThat(plan.authMethod()).isEqualTo(TokenEndpointAuthMethod.none);
+        assertThat(plan.requirePkce()).isTrue();
+        assertThat(plan.requireSecret()).isFalse();
+    }
+
+    @Test
+    void a_private_key_jwt_web_client_is_planned_without_a_shared_secret() {
+        OAuthClientRegistration registration = registration(
+                ClientType.CONFIDENTIAL,
+                TokenEndpointAuthMethod.private_key_jwt,
+                false,
+                null,
+                Set.of("authorization_code"),
+                Set.of("https://app.example/callback"),
+                Set.of()
+        );
+
+        var plan = service.prepareRegistration(registration);
+
+        assertThat(plan.authMethod()).isEqualTo(TokenEndpointAuthMethod.private_key_jwt);
+        assertThat(plan.requirePkce()).isFalse();
+        assertThat(plan.requireSecret()).isFalse();
+    }
+
+    @Test
+    void a_redirect_uri_that_is_not_https_is_refused_while_normalizing_collections() {
+        OAuthClientRegistration registration = registration(
+                ClientType.CONFIDENTIAL,
+                TokenEndpointAuthMethod.client_secret_basic,
+                true,
+                null,
+                Set.of("authorization_code"),
+                Set.of("http://app.example/callback"),
+                Set.of()
+        );
+
+        assertThatThrownBy(() -> service.prepareRegistration(registration))
+                .isInstanceOf(InvalidRedirectUriException.class)
+                .hasMessageContaining("http://app.example/callback");
     }
 
     private static OAuthClientRegistration clientCredentialsRegistration() {
