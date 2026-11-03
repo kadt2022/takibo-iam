@@ -4,6 +4,7 @@ import com.takibo.managementservice.domain.exception.InvalidCorsOriginException;
 import com.takibo.managementservice.domain.exception.InvalidGrantTypeException;
 import com.takibo.managementservice.domain.exception.InvalidPostLogoutRedirectUriException;
 import com.takibo.managementservice.domain.exception.InvalidRedirectUriException;
+import com.takibo.managementservice.domain.exception.InvalidScopeException;
 import org.junit.jupiter.api.Test;
 
 import java.util.Set;
@@ -66,6 +67,78 @@ class OAuthClientInputHardeningTest {
                 .singleElement()
                 .extracting(ClientCorsOrigin::getOrigin)
                 .isEqualTo("https://app.example");
+    }
+
+    @Test
+    void grant_types_are_trimmed_lower_cased_and_deduplicated() {
+        assertThat(ClientGrantType.ofAll(Set.of(" Authorization_Code ", "authorization_code", "REFRESH_TOKEN")))
+                .extracting(ClientGrantType::getValue)
+                .containsExactlyInAnyOrder("authorization_code", "refresh_token");
+    }
+
+    @Test
+    void every_rejected_grant_type_is_reported_and_none_is_silently_dropped() {
+        Set<String> values = new java.util.HashSet<>(Set.of("password", "implicit", "client_credentials"));
+        values.add(null);
+
+        assertThatThrownBy(() -> ClientGrantType.ofAll(values))
+                .isInstanceOf(InvalidGrantTypeException.class)
+                .hasMessageContaining("password")
+                .hasMessageContaining("implicit")
+                .hasMessageNotContaining("client_credentials");
+    }
+
+    @Test
+    void absent_collections_normalize_to_empty_sets() {
+        assertThat(ClientGrantType.ofAll(null)).isEmpty();
+        assertThat(ClientScope.ofAll(Set.of())).isEmpty();
+        assertThat(ClientScope.ofAll(null)).isEmpty();
+        assertThat(ClientRedirectUri.ofAll(null)).isEmpty();
+        assertThat(ClientPostLogoutRedirectUri.ofAll(Set.of())).isEmpty();
+        assertThat(ClientCorsOrigin.ofAll(null)).isEmpty();
+    }
+
+    @Test
+    void scopes_are_trimmed_and_blank_or_missing_scopes_are_refused() {
+        assertThat(ClientScope.ofAll(Set.of(" api:read ", "openid")))
+                .extracting(ClientScope::getValue)
+                .containsExactlyInAnyOrder("api:read", "openid");
+
+        Set<String> withNull = new java.util.HashSet<>(Set.of("openid"));
+        withNull.add(null);
+        assertThatThrownBy(() -> ClientScope.ofAll(withNull))
+                .isInstanceOf(InvalidScopeException.class)
+                .hasMessageContaining("null");
+        Set<String> withBlank = Set.of("openid", "  ");
+        assertThatThrownBy(() -> ClientScope.ofAll(withBlank))
+                .isInstanceOf(InvalidScopeException.class);
+    }
+
+    @Test
+    void a_missing_redirect_value_is_refused_rather_than_ignored() {
+        Set<String> withNull = new java.util.HashSet<>(Set.of("https://app.example/callback"));
+        withNull.add(null);
+
+        assertThatThrownBy(() -> ClientRedirectUri.ofAll(withNull))
+                .isInstanceOf(InvalidRedirectUriException.class);
+        assertThatThrownBy(() -> ClientPostLogoutRedirectUri.ofAll(withNull))
+                .isInstanceOf(InvalidPostLogoutRedirectUriException.class);
+        assertThatThrownBy(() -> ClientCorsOrigin.ofAll(withNull))
+                .isInstanceOf(InvalidCorsOriginException.class);
+    }
+
+    @Test
+    void redirect_values_are_trimmed_before_being_stored() {
+        assertThat(ClientRedirectUri.ofAll(Set.of("  https://app.example/callback  ")))
+                .extracting(ClientRedirectUri::getUri)
+                .containsExactly("https://app.example/callback");
+        assertThat(ClientRedirectUri.toStrings(ClientRedirectUri.ofAll(Set.of("https://app.example/cb"))))
+                .containsExactly("https://app.example/cb");
+        assertThat(ClientPostLogoutRedirectUri.toStrings(
+                ClientPostLogoutRedirectUri.ofAll(Set.of(" https://app.example/bye "))))
+                .containsExactly("https://app.example/bye");
+        assertThat(ClientCorsOrigin.toStrings(ClientCorsOrigin.ofAll(Set.of(" https://APP.example "))))
+                .containsExactly("https://app.example");
     }
 
     private static void assertInvalidRedirect(String uri) {

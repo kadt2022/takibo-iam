@@ -269,6 +269,142 @@ class CurrentActorProviderImplTest {
                 .isInstanceOf(IllegalStateException.class);
     }
 
+    @Test
+    void source_withUnauthenticatedToken_failsClosed() {
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(humanPrincipal(), "n/a"));
+        CurrentActorProviderImpl provider = provider();
+
+        assertThatThrownBy(provider::source)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("No authenticated actor");
+    }
+
+    @Test
+    void source_withUnsupportedLegacySubjectType_failsClosedEvenWithHumanClaims() {
+        authenticate(legacyJwt(Map.of(
+                "subject_type", "admin",
+                "user_id", USER_ID.toString(),
+                "account_id", ACCOUNT_ID.toString())));
+        CurrentActorProviderImpl provider = provider();
+
+        assertThatThrownBy(provider::source)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Unsupported legacy subject_type: ADMIN");
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"service", "SERVICE_ACCOUNT", "client_app"})
+    void source_withServiceLegacySubjectTypeInAnyCase_isServiceAccount(String subjectType) {
+        authenticate(legacyJwt(Map.of("subjectType", subjectType)));
+
+        assertThat(provider().source()).isEqualTo(ActorSource.SERVICE_ACCOUNT);
+    }
+
+    @Test
+    void source_withServiceSubjectType_winsOverHumanLookingClaims() {
+        authenticate(legacyJwt(Map.of(
+                "subject_type", "SERVICE",
+                "user_id", USER_ID.toString(),
+                "account_id", ACCOUNT_ID.toString())));
+        CurrentActorProviderImpl provider = provider();
+
+        assertThat(provider.source()).isEqualTo(ActorSource.SERVICE_ACCOUNT);
+        assertThatThrownBy(provider::currentUserId)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Current actor is not a human user");
+    }
+
+    @Test
+    void source_withLegacyJwtCarryingBothIdentityClaims_isHuman() {
+        authenticate(legacyJwt(Map.of(
+                "userId", USER_ID.toString(),
+                "accountId", ACCOUNT_ID.toString())));
+
+        assertThat(provider().source()).isEqualTo(ActorSource.HUMAN);
+        assertThat(provider().currentUserId()).isEqualTo(USER_ID);
+    }
+
+    @Test
+    void source_withBlankSubjectTypeFallsBackToTheLegacyClaims() {
+        authenticate(legacyJwt(Map.of(
+                "subject_type", "   ",
+                "user_id", USER_ID.toString(),
+                "account_id", ACCOUNT_ID.toString())));
+
+        assertThat(provider().source()).isEqualTo(ActorSource.HUMAN);
+    }
+
+    @Test
+    void source_withLegacyJwtCarryingOnlyAUserId_isNotTreatedAsHuman() {
+        authenticate(legacyJwt(Map.of("user_id", USER_ID.toString())));
+        CurrentActorProviderImpl provider = provider();
+
+        assertThatThrownBy(provider::source)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Unable to determine authenticated actor source");
+    }
+
+    @Test
+    void source_withLegacyJwtWhoseIdentityClaimsAreNotUuids_isNotTreatedAsHuman() {
+        authenticate(legacyJwt(Map.of(
+                "user_id", " ",
+                "account_id", "not-a-uuid")));
+        CurrentActorProviderImpl provider = provider();
+
+        assertThatThrownBy(provider::source)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Unable to determine authenticated actor source");
+    }
+
+    @Test
+    void source_withLegacyClientCredentialsJwt_isServiceAccount() {
+        authenticate(legacyJwt(Map.of("clientId", "tms-cli")));
+
+        assertThat(provider().source()).isEqualTo(ActorSource.SERVICE_ACCOUNT);
+    }
+
+    @Test
+    void source_withTakiboPrincipalWithoutAccount_failsClosed() {
+        authenticate(new TakiboPrincipal("sub", "jdoe", USER_ID, null, null, null, List.of(), List.of()));
+        CurrentActorProviderImpl provider = provider();
+
+        assertThatThrownBy(provider::source)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Unable to determine authenticated actor source");
+    }
+
+    @Test
+    void source_withTakiboPrincipalWithoutUser_failsClosed() {
+        authenticate(new TakiboPrincipal("sub", "jdoe", null, ACCOUNT_ID, null, null, List.of(), List.of()));
+        CurrentActorProviderImpl provider = provider();
+
+        assertThatThrownBy(provider::source)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Unable to determine authenticated actor source");
+    }
+
+    @Test
+    void currentUserId_withHumanLegacyJwtWithoutUsableUserClaim_failsClosed() {
+        authenticate(legacyJwt(Map.of("subject_type", "HUMAN", "user_id", "not-a-uuid")));
+        CurrentActorProviderImpl provider = provider();
+
+        assertThatThrownBy(provider::currentUserId)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Authenticated human actor does not expose a valid user_id");
+    }
+
+    private static Jwt legacyJwt(Map<String, Object> claims) {
+        Map<String, Object> withSubject = new java.util.HashMap<>(claims);
+        withSubject.putIfAbsent("sub", "legacy");
+        return new Jwt(
+                "token",
+                Instant.parse("2026-07-20T00:00:00Z"),
+                Instant.parse("2026-07-20T01:00:00Z"),
+                Map.of("alg", "none"),
+                withSubject);
+    }
+
     private void authenticateHuman(UUID subjectId, Map<com.takibo.securitycontext.model.AttributeKey, Object> attributes) {
         TakiboSecurityContext context = TakiboSecurityContext.builder()
                 .subject(new SubjectIdentity(
