@@ -44,7 +44,7 @@ class DeliveryProcessorTest {
     private final DeliveryProcessor processor = new DeliveryProcessor(
             fakeRepository.repository(),
             channels,
-            attempt -> Duration.ofMinutes(attempt),
+            Duration::ofMinutes,
             new DeliveryProcessor.DeliveryProcessorSettings(25, MAX_ATTEMPTS, LOCK_TIMEOUT, "node-1"),
             Clock.fixed(NOW, ZoneOffset.UTC),
             transactionManager,

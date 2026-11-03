@@ -6,7 +6,6 @@ import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -65,8 +64,8 @@ class RecipientTest {
         assertNotEquals(reference, new Recipient("SMS", "a@b.c", "email:a@b.c"));
         assertNotEquals(reference, new Recipient("EMAIL", "A@b.c", "email:a@b.c"));
         assertNotEquals(reference, new Recipient("EMAIL", "a@b.c", "email:other"));
-        assertFalse(reference.equals("a@b.c"));
-        assertFalse(reference.equals(null));
+        assertNotEquals(reference, "a@b.c");
+        assertNotEquals(reference, null);
     }
 
     @Test

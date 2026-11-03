@@ -55,8 +55,9 @@ class MessageActionTest {
     @NullAndEmptySource
     @ValueSource(strings = {"   "})
     void rejectsMissingMessageType(String messageType) {
-        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                () -> MessageAction.builder(messageType).dedupKey("D").build());
+        MessageAction.Builder builder = MessageAction.builder(messageType).dedupKey("D");
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, builder::build);
         assertEquals("messageType is required", ex.getMessage());
     }
 
@@ -64,8 +65,9 @@ class MessageActionTest {
     @NullAndEmptySource
     @ValueSource(strings = {"\t"})
     void rejectsMissingDedupKey(String dedupKey) {
-        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                () -> MessageAction.builder("T").dedupKey(dedupKey).build());
+        MessageAction.Builder builder = MessageAction.builder("T").dedupKey(dedupKey);
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, builder::build);
         assertEquals("dedupKey is required", ex.getMessage());
     }
 
@@ -121,9 +123,10 @@ class MessageActionTest {
 
     @Test
     void attributesAreImmutable() {
-        MessageAction action = MessageAction.builder("T").dedupKey("D").attribute("k", "v").build();
+        Map<String, Object> attributes =
+                MessageAction.builder("T").dedupKey("D").attribute("k", "v").build().attributes();
 
-        assertThrows(UnsupportedOperationException.class, () -> action.attributes().put("x", "y"));
+        assertThrows(UnsupportedOperationException.class, () -> attributes.put("x", "y"));
     }
 
     @Test
@@ -157,8 +160,8 @@ class MessageActionTest {
         assertNotEquals(reference, sample().dedupKey("D2").build());
         assertNotEquals(reference, sample().channelOverride(ChannelType.IN_APP).build());
         assertNotEquals(reference, sample().attribute("k", "other").build());
-        assertFalse(reference.equals("not an action"));
-        assertFalse(reference.equals(null));
+        assertNotEquals(reference, "not an action");
+        assertNotEquals(reference, null);
     }
 
     @Test

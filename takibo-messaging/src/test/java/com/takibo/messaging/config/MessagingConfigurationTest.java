@@ -36,9 +36,11 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -147,7 +149,7 @@ class MessagingConfigurationTest {
             assertEquals(1, context.getBeansOfType(MessagingMetricsBinder.class).size());
             assertEquals(1, context.getBeansOfType(PropertyRecipientResolver.class).size());
             assertEquals(1, context.getBeansOfType(TemplateEngine.class).size());
-            assertTrue(context.getBean(MeterRegistry.class).find("takibo_messaging_dead_count").gauge() != null);
+            assertNotNull(context.getBean(MeterRegistry.class).find("takibo_messaging_dead_count").gauge());
         }
 
         @Test
@@ -237,11 +239,12 @@ class MessagingConfigurationTest {
             context.getEnvironment().getPropertySources().addFirst(new MapPropertySource("test", source));
             context.registerBean(MessageDeliveryRepository.class, fakeRepository::repository);
             context.registerBean(Clock.class, () -> Clock.fixed(NOW, ZoneOffset.UTC));
-            context.registerBean(ObjectMapper.class, () -> new ObjectMapper());
-            context.registerBean(PlatformTransactionManager.class, () -> new RecordingTransactionManager());
-            context.registerBean(MeterRegistry.class, () -> new SimpleMeterRegistry());
+            context.registerBean(ObjectMapper.class);
+            Supplier<PlatformTransactionManager> transactions = RecordingTransactionManager::new;
+            context.registerBean(PlatformTransactionManager.class, transactions);
+            context.registerBean(MeterRegistry.class, SimpleMeterRegistry::new);
             if (withMailSender) {
-                context.registerBean(JavaMailSender.class, () -> new JavaMailSenderImpl());
+                context.registerBean(JavaMailSender.class, JavaMailSenderImpl::new);
             }
             context.register(MessagingConfiguration.class);
             context.refresh();

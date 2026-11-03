@@ -63,8 +63,9 @@ class MessagingDispatcherTest {
     void rejectsNullActionOrContext() {
         MessagingDispatcher dispatcher = dispatcher(List.of(fixedResolver()));
         MessageAction action = action().build();
+        MessagingContext none = MessagingContext.none();
 
-        assertThrows(NullPointerException.class, () -> dispatcher.dispatch(null, MessagingContext.none()));
+        assertThrows(NullPointerException.class, () -> dispatcher.dispatch(null, none));
         assertThrows(NullPointerException.class, () -> dispatcher.dispatch(action, null));
     }
 
@@ -120,20 +121,32 @@ class MessagingDispatcherTest {
 
     // --- Construction de la livraison ---
 
-    @Test
-    void persistsOnePendingDeliveryPerRecipientWithRenderedContent() {
-        UUID outboxId = UUID.randomUUID();
-        MessagingContext context = MessagingContext.builder().correlationOutboxId(outboxId).traceId("trace-1").build();
+    private static final UUID OUTBOX_ID = UUID.fromString("0b0b0b0b-0000-0000-0000-000000000001");
 
-        MessagingDispatcher.DispatchResult result = dispatcher(List.of(resolver(true, List.of(alice(), bob()))))
-                .dispatch(action().build(), context);
+    private MessagingDispatcher.DispatchResult dispatchToAliceAndBob() {
+        MessagingContext context = MessagingContext.builder().correlationOutboxId(OUTBOX_ID).traceId("trace-1").build();
+        return dispatcher(List.of(resolver(true, List.of(alice(), bob())))).dispatch(action().build(), context);
+    }
+
+    @Test
+    void persistsOnePendingDeliveryPerRecipient() {
+        MessagingDispatcher.DispatchResult result = dispatchToAliceAndBob();
 
         assertEquals(new MessagingDispatcher.DispatchResult(2, 0), result);
         assertEquals(2, fakeRepository.saved.size());
         assertEquals(2, fakeRepository.flushCount, "chaque livraison est flushee pour detecter le doublon immediatement");
+        MessageDeliveryEntity first = fakeRepository.saved.get(0);
+        MessageDeliveryEntity second = fakeRepository.saved.get(1);
+        assertEquals("MSG:WELCOME_SPACE:1:email:a@takibo.test", first.getDedupKey());
+        assertEquals("MSG:WELCOME_SPACE:1:email:b@takibo.test", second.getDedupKey());
+        assertNotEquals(first.getId(), second.getId());
+    }
+
+    @Test
+    void buildsEachDeliveryFromTheTemplateAndItsRecipient() {
+        dispatchToAliceAndBob();
 
         MessageDeliveryEntity first = fakeRepository.saved.get(0);
-        assertNotNull(first.getId());
         assertEquals(ORG, first.getOrgId());
         assertEquals(SPACE, first.getSpaceId());
         assertEquals("WELCOME_SPACE", first.getMessageType());
@@ -145,21 +158,24 @@ class MessagingDispatcherTest {
         assertEquals("Welcome Alice", first.getSubject());
         assertEquals("Hello Alice, join Ops", first.getBody());
         assertEquals("{\"name\":\"Alice\",\"space\":\"Ops\"}", first.getPayloadJson());
+    }
+
+    @Test
+    void startsEachDeliveryPendingWithItsTraceability() {
+        dispatchToAliceAndBob();
+
+        MessageDeliveryEntity first = fakeRepository.saved.get(0);
+        assertNotNull(first.getId());
         assertEquals(DeliveryStatus.PENDING, first.getStatus());
         assertEquals(0, first.getAttempts());
         assertEquals(NOW, first.getNextRunAt());
         assertNull(first.getLastError());
         assertNull(first.getLockedAt());
         assertNull(first.getLockedBy());
-        assertEquals("MSG:WELCOME_SPACE:1:email:a@takibo.test", first.getDedupKey());
-        assertEquals(outboxId, first.getCorrelationOutboxId());
+        assertEquals(OUTBOX_ID, first.getCorrelationOutboxId());
         assertEquals("trace-1", first.getTraceId());
         assertEquals(NOW, first.getCreatedAt());
         assertEquals(NOW, first.getUpdatedAt());
-
-        MessageDeliveryEntity second = fakeRepository.saved.get(1);
-        assertEquals("MSG:WELCOME_SPACE:1:email:b@takibo.test", second.getDedupKey());
-        assertNotEquals(first.getId(), second.getId());
     }
 
     @Test
