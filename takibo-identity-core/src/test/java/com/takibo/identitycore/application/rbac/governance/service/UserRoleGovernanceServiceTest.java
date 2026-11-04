@@ -412,6 +412,22 @@ class UserRoleGovernanceServiceTest {
     }
 
     @Test
+    void remove_nonAssignableOrganizationOwner_isRefused_evenWithOrgAuthority() {
+        stubActor();
+        stubTargetUser();
+        when(assignments.findAssignedTechnicalRoleCodes(ORG_ID, SPACE_ID, ACTOR_ACCOUNT_ID))
+                .thenReturn(List.of("R_ORG_ADMIN"));
+        RemoveUserRoleCommand command = new RemoveUserRoleCommand(USER_ID, "R_ORG_OWNER", null);
+
+        assertThatThrownBy(() -> service.removeRole(KEY, command))
+                .isInstanceOf(RoleTypeNotAllowedException.class)
+                .hasMessageContaining("R_ORG_OWNER");
+
+        verify(assignments, never()).deleteOrgLevelAssignment(any(), any(), any());
+        verify(assignments, never()).deleteAssignment(any(), any(), any(), any());
+    }
+
+    @Test
     void remove_orgScopedRole_withOrgAuthority_deletesOrgLevelAssignment() {
         stubActor();
         stubTargetUser();
