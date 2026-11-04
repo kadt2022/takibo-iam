@@ -50,8 +50,8 @@ import java.util.UUID;
  * Gardes, dans l'ordre : frontière du space, acteur humain situé, user du space
  * (404 anti-énumération), catalogue visible (SYSTEM/USER n'existent pas -> 404,
  * BUSINESS interdit -> 403), non-escalade verticale (un pouvoir ORGANIZATION ne se
- * délègue ni ne se retire sans autorité ORGANIZATION), self-demotion et dernier
- * chemin admin du space (409).
+ * délègue ni ne se retire sans autorité ORGANIZATION), rôle non délégable jamais
+ * retiré (403), self-demotion et dernier chemin admin du space (409).
  */
 @Service
 @RequiredArgsConstructor
@@ -129,6 +129,12 @@ public class UserRoleGovernanceService implements UserRoleGovernanceCase {
         User user = requireUserInSpace(key, command.userId());
         ResolvedRole role = resolveGovernableRole(key, command.roleCode());
         assertNoScopeEscalation(key, actorAccountId, role);
+        // Ce qui ne se délègue pas ne se retire pas non plus : R_ORG_OWNER ne quitte jamais
+        // l'organisation par cette surface, qui ne peut donc pas lui retirer son propriétaire.
+        if (!role.assignable()) {
+            throw new RoleTypeNotAllowedException(
+                    "Role " + role.code() + " is not removable on the governance surface");
+        }
 
         UUID targetAccountId = user.getAccountId().getValue();
         if (!assignments.existsAssignment(key.orgId(), key.spaceId(), targetAccountId, role.code())) {
