@@ -1,5 +1,6 @@
 package com.takibo.authorizationserver.infrastructure.springauthserver.config;
 
+import com.takibo.authorizationserver.infrastructure.springauthserver.client.JwksFetchClients;
 import com.takibo.authorizationserver.infrastructure.springauthserver.client.TakiboJwtClientAssertionDecoderFactory;
 import com.takibo.authorizationserver.infrastructure.springauthserver.properties.TasAuthorizationServerProperties;
 import org.junit.jupiter.api.Test;
@@ -30,7 +31,7 @@ class TakiboAuthorizationServerConfigurationTest {
                 mock(JwtClientAssertionAuthenticationProvider.class);
         AuthenticationProvider otherProvider = mock(AuthenticationProvider.class);
         TakiboJwtClientAssertionDecoderFactory decoderFactory =
-                new TakiboJwtClientAssertionDecoderFactory();
+                new TakiboJwtClientAssertionDecoderFactory(JwksFetchClients.defaults());
 
         TakiboAuthorizationServerConfiguration.configureJwtDecoderFactory(
                 List.of(otherProvider, assertionProvider), decoderFactory);
@@ -44,7 +45,7 @@ class TakiboAuthorizationServerConfigurationTest {
         HttpSecurity http = mock(HttpSecurity.class);
         DefaultSecurityFilterChain filterChain = mock(DefaultSecurityFilterChain.class);
         TakiboJwtClientAssertionDecoderFactory decoderFactory =
-                new TakiboJwtClientAssertionDecoderFactory();
+                new TakiboJwtClientAssertionDecoderFactory(JwksFetchClients.defaults());
         CorsConfigurationSource corsConfigurationSource = request -> null;
         CorsConfigurer<HttpSecurity> corsConfigurer = mock(CorsConfigurer.class);
         when(http.securityMatcher(any(RequestMatcher.class))).thenReturn(http);

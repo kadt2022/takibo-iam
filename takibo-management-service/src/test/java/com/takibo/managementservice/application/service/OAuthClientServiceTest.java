@@ -1,6 +1,7 @@
 package com.takibo.managementservice.application.service;
 
 import com.takibo.managementservice.application.command.RegisterClientCommand;
+import com.takibo.managementservice.application.port.JwksUriAdmissionPort;
 import com.takibo.managementservice.domain.exception.InvalidClientConfigurationException;
 import com.takibo.managementservice.domain.exception.OAuthClientSecretRotationConflictException;
 import com.takibo.managementservice.domain.model.ClientType;
@@ -22,6 +23,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.net.URI;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.Set;
@@ -45,6 +47,9 @@ class OAuthClientServiceTest {
     @Mock
     private OAuthClientConfigurationValidator configurationValidator;
 
+    @Mock
+    private JwksUriAdmissionPort jwksUriAdmission;
+
     private OAuthClientService service;
 
     @Captor
@@ -58,7 +63,8 @@ class OAuthClientServiceTest {
                 new OAuthClientRegistrationDomainService(configurationValidator),
                 new OAuthClientSecretRotationDomainService(
                         configurationValidator
-                )
+                ),
+                jwksUriAdmission
         );
     }
 
@@ -142,6 +148,53 @@ class OAuthClientServiceTest {
         assertThat(clientCaptor.getValue().getClientSecretHash()).isNull();
         assertThat(result.oneTimePlainSecret()).isNull();
         verifyNoInteractions(passwordEncoder);
+    }
+
+    @Test
+    void register_withJwksUri_asksTheDestinationPolicyBeforePersisting() {
+        RegisterClientCommand cmd = privateKeyJwtCommand("https://keys.example/jwks.json");
+        when(repository.existsByClientId(cmd.clientId())).thenReturn(false);
+        when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.register(UUID.randomUUID(), SpaceId.of(UUID.randomUUID()), cmd);
+
+        verify(jwksUriAdmission).requireAllowed(URI.create("https://keys.example/jwks.json"));
+        verify(repository).save(any());
+    }
+
+    @Test
+    void register_withRefusedJwksUri_persistsNothing() {
+        RegisterClientCommand cmd = privateKeyJwtCommand("http://127.0.0.1/jwks.json");
+        doThrow(new InvalidClientConfigurationException("jwksUri is not an allowed destination: HTTPS required"))
+                .when(jwksUriAdmission).requireAllowed(URI.create("http://127.0.0.1/jwks.json"));
+
+        UUID orgId = UUID.randomUUID();
+        SpaceId spaceId = SpaceId.of(UUID.randomUUID());
+
+        assertThatThrownBy(() -> service.register(orgId, spaceId, cmd))
+                .isInstanceOf(InvalidClientConfigurationException.class)
+                .hasMessageContaining("jwksUri");
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void register_withoutJwksUri_doesNotConsultTheDestinationPolicy() {
+        RegisterClientCommand cmd = baseCommand().build();
+        when(repository.existsByClientId(cmd.clientId())).thenReturn(false);
+        when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.register(UUID.randomUUID(), SpaceId.of(UUID.randomUUID()), cmd);
+
+        verifyNoInteractions(jwksUriAdmission);
+    }
+
+    private static RegisterClientCommand privateKeyJwtCommand(String jwksUri) {
+        return baseCommand()
+                .withClientType(ClientType.CONFIDENTIAL)
+                .withTokenEndpointAuthMethod(TokenEndpointAuthMethod.private_key_jwt)
+                .withRequireClientSecret(false)
+                .withJwksUri(jwksUri)
+                .build();
     }
 
     @Test
@@ -250,6 +303,7 @@ class OAuthClientServiceTest {
         private TokenEndpointAuthMethod tokenEndpointAuthMethod = TokenEndpointAuthMethod.none;
         private Boolean requirePkce = true;
         private Boolean requireConsent = false;
+        private String jwksUri;
         private Set<String> scopes = Set.of("api:read");
         private Set<String> grantTypes = Set.of("authorization_code");
         private Set<String> redirectUris = Set.of("http://localhost/callback");
@@ -296,6 +350,11 @@ class OAuthClientServiceTest {
             return this;
         }
 
+        RegisterClientCommandBuilder withJwksUri(String value) {
+            this.jwksUri = value;
+            return this;
+        }
+
         RegisterClientCommandBuilder withCorsOrigins(Set<String> value) {
             this.corsOrigins = value;
             return this;
@@ -310,7 +369,7 @@ class OAuthClientServiceTest {
                     tokenEndpointAuthMethod,
                     requirePkce,
                     requireConsent,
-                    null,
+                    jwksUri,
                     null,
                     "RS256",
                     900,

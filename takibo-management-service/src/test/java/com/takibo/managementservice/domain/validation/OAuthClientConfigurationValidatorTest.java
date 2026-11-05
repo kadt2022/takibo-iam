@@ -184,13 +184,18 @@ class OAuthClientConfigurationValidatorTest {
 
     @Test
     void validates_remote_jwks_endpoint() {
-        assertInvalid(command().withJwksUri("http://keys.example/jwks.json").build(), "absolute HTTPS");
-        assertInvalid(command().withJwksUri("https://user@keys.example/jwks.json").build(), "absolute HTTPS");
-        assertInvalid(command().withJwksUri("https://keys.example/jwks.json#key").build(), "absolute HTTPS");
+        assertInvalid(command().withJwksUri("https://user@keys.example/jwks.json").build(), "absolute HTTP(S)");
+        assertInvalid(command().withJwksUri("https://keys.example/jwks.json#key").build(), "absolute HTTP(S)");
         assertInvalid(command().withJwksUri("https://keys.example/" + "x".repeat(240)).build(), "exceeds 255");
 
         assertThatCode(() -> validator.validateRegistration(
                 command().withJwksUri("https://keys.example/jwks.json").build()
+        )).doesNotThrowAnyException();
+        // Le transport n'est plus jugé ici : HTTP est refusé par défaut par la politique de
+        // destination (JwksUriAdmissionPort), prouvé de bout en bout par
+        // JwksUriSsrfPostgresIntegrationTest.
+        assertThatCode(() -> validator.validateRegistration(
+                command().withJwksUri("http://keys.example/jwks.json").build()
         )).doesNotThrowAnyException();
     }
 
