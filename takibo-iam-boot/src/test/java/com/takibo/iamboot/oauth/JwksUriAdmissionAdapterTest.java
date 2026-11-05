@@ -23,11 +23,14 @@ class JwksUriAdmissionAdapterTest {
 
     @Test
     void a_refusal_becomes_a_client_configuration_error_naming_the_field() {
-        assertThatThrownBy(() -> defaults.requireAllowed(URI.create("https://169.254.169.254/latest/meta-data/")))
+        URI metadata = URI.create("https://169.254.169.254/latest/meta-data/");
+        URI plainHttp = URI.create("http://keys.example.com/jwks.json");
+
+        assertThatThrownBy(() -> defaults.requireAllowed(metadata))
                 .isInstanceOf(InvalidClientConfigurationException.class)
                 .hasMessageStartingWith("jwksUri is not an allowed destination")
                 .hasMessageContaining("169.254.169.254");
-        assertThatThrownBy(() -> defaults.requireAllowed(URI.create("http://keys.example.com/jwks.json")))
+        assertThatThrownBy(() -> defaults.requireAllowed(plainHttp))
                 .isInstanceOf(InvalidClientConfigurationException.class)
                 .hasMessageContaining("HTTPS");
     }

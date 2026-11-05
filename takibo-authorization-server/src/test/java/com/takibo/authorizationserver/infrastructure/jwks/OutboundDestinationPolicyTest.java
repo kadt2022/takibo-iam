@@ -1,5 +1,6 @@
 package com.takibo.authorizationserver.infrastructure.jwks;
 
+import org.assertj.core.api.ThrowableAssert;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -44,7 +45,7 @@ class OutboundDestinationPolicyTest {
             "https://keys.example.com/jwks#frag"
     })
     void refuses_by_default(String uri) {
-        assertThatThrownBy(() -> DEFAULTS.checkUri(URI.create(uri)))
+        assertThatThrownBy(checking(DEFAULTS, uri))
                 .isInstanceOf(DestinationRefusedException.class);
     }
 
@@ -65,13 +66,13 @@ class OutboundDestinationPolicyTest {
         OutboundDestinationPolicy httpOff = new OutboundDestinationPolicy(List.of("localhost"), List.of(), false);
         OutboundDestinationPolicy httpOn = new OutboundDestinationPolicy(List.of("localhost"), List.of(), true);
 
-        assertThatThrownBy(() -> httpOff.checkUri(URI.create("http://localhost:8080/certs")))
+        assertThatThrownBy(checking(httpOff, "http://localhost:8080/certs"))
                 .hasMessageContaining("HTTPS");
         assertThatCode(() -> httpOn.checkUri(URI.create("http://localhost:8080/certs")))
                 .doesNotThrowAnyException();
-        assertThatThrownBy(() -> httpOn.checkUri(URI.create("http://keys.example.com/jwks")))
+        assertThatThrownBy(checking(httpOn, "http://keys.example.com/jwks"))
                 .hasMessageContaining("HTTPS");
-        assertThatThrownBy(() -> httpOn.checkUri(URI.create("http://127.0.0.1:8080/certs")))
+        assertThatThrownBy(checking(httpOn, "http://127.0.0.1:8080/certs"))
                 .hasMessageContaining("HTTPS");
     }
 
@@ -80,9 +81,9 @@ class OutboundDestinationPolicyTest {
         OutboundDestinationPolicy policy = new OutboundDestinationPolicy(List.of("localhost"), List.of(), false);
 
         assertThatCode(() -> policy.checkUri(URI.create("https://localhost:8443/certs"))).doesNotThrowAnyException();
-        assertThatThrownBy(() -> policy.checkUri(URI.create("https://api.localhost/certs")))
+        assertThatThrownBy(checking(policy, "https://api.localhost/certs"))
                 .isInstanceOf(DestinationRefusedException.class);
-        assertThatThrownBy(() -> policy.checkUri(URI.create("https://127.0.0.1:8443/certs")))
+        assertThatThrownBy(checking(policy, "https://127.0.0.1:8443/certs"))
                 .isInstanceOf(DestinationRefusedException.class);
     }
 
@@ -91,7 +92,7 @@ class OutboundDestinationPolicyTest {
         OutboundDestinationPolicy policy = new OutboundDestinationPolicy(List.of(), List.of("10.20.30.0/24"), false);
 
         assertThatCode(() -> policy.checkUri(URI.create("https://10.20.30.40/jwks"))).doesNotThrowAnyException();
-        assertThatThrownBy(() -> policy.checkUri(URI.create("https://10.20.31.40/jwks")))
+        assertThatThrownBy(checking(policy, "https://10.20.31.40/jwks"))
                 .isInstanceOf(DestinationRefusedException.class);
     }
 
@@ -141,8 +142,8 @@ class OutboundDestinationPolicyTest {
 
         assertThat(policy.filterResolved("svc.internal", new InetAddress[]{InetAddress.getByName("172.18.0.5")}))
                 .hasSize(1);
-        assertThatThrownBy(() -> policy.filterResolved("svc.internal",
-                new InetAddress[]{InetAddress.getByName("172.19.0.5")}))
+        InetAddress[] outsideTheRange = {InetAddress.getByName("172.19.0.5")};
+        assertThatThrownBy(() -> policy.filterResolved("svc.internal", outsideTheRange))
                 .isInstanceOf(DestinationRefusedException.class);
     }
 
@@ -151,14 +152,18 @@ class OutboundDestinationPolicyTest {
     @ParameterizedTest
     @ValueSource(strings = {"", "*.example.com", "keycloak.", "127.0.0.1", "[::1]", "::1", "2130706433", "a/b"})
     void trusted_hosts_accept_exact_names_only(String host) {
-        assertThatThrownBy(() -> new OutboundDestinationPolicy(List.of(host), List.of(), false))
+        List<String> hosts = List.of(host);
+        List<String> noCidr = List.of();
+        assertThatThrownBy(() -> new OutboundDestinationPolicy(hosts, noCidr, false))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @ParameterizedTest
     @ValueSource(strings = {"169.254.0.0/16", "169.0.0.0/8", "0.0.0.0/0", "::/0", "fe80::/64", "224.0.0.0/8"})
     void trusted_cidrs_never_overlap_forbidden_ranges(String cidr) {
-        assertThatThrownBy(() -> new OutboundDestinationPolicy(List.of(), List.of(cidr), false))
+        List<String> noHost = List.of();
+        List<String> cidrs = List.of(cidr);
+        assertThatThrownBy(() -> new OutboundDestinationPolicy(noHost, cidrs, false))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("always-forbidden");
     }
@@ -170,5 +175,11 @@ class OutboundDestinationPolicyTest {
 
         assertThat(policy.broadTrustedCidrs()).extracting(Cidr::toString)
                 .containsExactlyInAnyOrder("10.0.0.0/8", "fd00:0:0:0:0:0:0:0/48");
+    }
+
+    /** Le contrôle seul, l'URI étant préparée hors de la lambda observée. */
+    private static ThrowableAssert.ThrowingCallable checking(OutboundDestinationPolicy policy, String uri) {
+        URI parsed = URI.create(uri);
+        return () -> policy.checkUri(parsed);
     }
 }

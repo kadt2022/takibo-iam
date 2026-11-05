@@ -79,6 +79,10 @@ public final class TakiboJwtClientAssertionDecoderFactory implements JwtDecoderF
                 () -> buildEmbeddedDecoder(registeredClient, jwkSetJson, signatureAlgorithm));
     }
 
+    // java:S2139 : le refus est journalisé ici ET relancé à dessein. Spring Authorization Server
+    // ne trace l'échec d'authentification du client qu'en debug et ne renvoie qu'une description
+    // générique : ce journal est le seul signal d'exploitation (client et destination refusée).
+    @SuppressWarnings("java:S2139")
     private JwtDecoder remoteOrDelegatedDecoder(RegisteredClient registeredClient) {
         String jwkSetUrl = registeredClient.getClientSettings().getJwkSetUrl();
         JwsAlgorithm configuredAlgorithm = registeredClient.getClientSettings()

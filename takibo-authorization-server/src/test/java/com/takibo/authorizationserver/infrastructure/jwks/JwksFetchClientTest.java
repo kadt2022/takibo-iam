@@ -4,9 +4,11 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import com.sun.net.httpserver.HttpsServer;
 import org.apache.hc.core5.ssl.SSLContexts;
+import org.assertj.core.api.ThrowableAssert;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestOperations;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLException;
@@ -44,7 +46,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class JwksFetchClientTest {
 
     private static final String JWKS = "{\"keys\":[]}";
+    /** Limites de production : aucun test qui ne mesure pas un délai ne dépend de la charge. */
     private static final JwksFetchClient.Limits LIMITS = new JwksFetchClient.Limits(
+            Duration.ofSeconds(2), Duration.ofSeconds(3), Duration.ofSeconds(5), 50 * 1024);
+    /** Limites serrées, réservées aux tests qui mesurent précisément chaque délai. */
+    private static final JwksFetchClient.Limits TIMING_LIMITS = new JwksFetchClient.Limits(
             Duration.ofMillis(500), Duration.ofMillis(300), Duration.ofMillis(800), 50 * 1024);
 
     private static TestTls jwksTestCertificate;
@@ -92,7 +98,7 @@ class JwksFetchClientTest {
                     jwksTestCertificate.context());
 
             assertThat(client.restOperations().getForObject(url(server, "/jwks"), String.class)).isEqualTo(JWKS);
-            assertThatThrownBy(() -> client.restOperations().getForObject(url(server, "/jwks"), String.class))
+            assertThatThrownBy(fetching(client, url(server, "/jwks")))
                     .isInstanceOf(RestClientException.class)
                     .hasRootCauseInstanceOf(DestinationRefusedException.class);
 
@@ -118,7 +124,7 @@ class JwksFetchClientTest {
                     new OutboundDestinationPolicy(List.of(), List.of("127.0.0.1/32"), false),
                     jwksTestCertificate.context());
 
-            assertThatThrownBy(() -> client.restOperations().getForObject(url(server, "/jwks"), String.class))
+            assertThatThrownBy(fetching(client, url(server, "/jwks")))
                     .hasRootCauseInstanceOf(DestinationRefusedException.class)
                     .hasStackTraceContaining("10.0.0.5");
             assertThat(requests).hasValue(0);
@@ -132,7 +138,7 @@ class JwksFetchClientTest {
         dns.answer("jwks.test", "169.254.169.254");
         JwksFetchClient client = client(trusting("jwks.test"), jwksTestCertificate.context());
 
-        assertThatThrownBy(() -> client.restOperations().getForObject(URI.create("https://jwks.test/jwks"), String.class))
+        assertThatThrownBy(fetching(client, URI.create("https://jwks.test/jwks")))
                 .hasRootCauseInstanceOf(DestinationRefusedException.class)
                 .hasStackTraceContaining("forbidden");
     }
@@ -151,7 +157,7 @@ class JwksFetchClientTest {
                 dns.answer("jwks.test", "127.0.0.1");
                 JwksFetchClient client = client(trusting("jwks.test"), jwksTestCertificate.context());
 
-                assertThatThrownBy(() -> client.restOperations().getForObject(url(server, "/jwks"), String.class))
+                assertThatThrownBy(fetching(client, url(server, "/jwks")))
                         .isInstanceOf(RestClientException.class)
                         .hasMessageContaining("302");
                 assertThat(target.acceptedConnections()).as("connexions vers la cible de la redirection").isZero();
@@ -171,7 +177,7 @@ class JwksFetchClientTest {
             // Le client fait confiance à ce certificat : seul le nom peut le faire refuser.
             JwksFetchClient client = client(trusting("jwks.test"), otherNameCertificate.context());
 
-            assertThatThrownBy(() -> client.restOperations().getForObject(url(server, "/jwks"), String.class))
+            assertThatThrownBy(fetching(client, url(server, "/jwks")))
                     .satisfies(JwksFetchClientTest::failedDuringTls);
         } finally {
             server.stop(0);
@@ -185,7 +191,7 @@ class JwksFetchClientTest {
             dns.answer("jwks.test", "127.0.0.1");
             JwksFetchClient client = client(trusting("jwks.test"), SSLContexts.createSystemDefault());
 
-            assertThatThrownBy(() -> client.restOperations().getForObject(url(server, "/jwks"), String.class))
+            assertThatThrownBy(fetching(client, url(server, "/jwks")))
                     .satisfies(JwksFetchClientTest::failedDuringTls);
         } finally {
             server.stop(0);
@@ -316,10 +322,10 @@ class JwksFetchClientTest {
         HttpsServer server = jwksTestCertificate.server("127.0.0.1", exchange -> sleep(5_000));
         try {
             dns.answer("jwks.test", "127.0.0.1");
-            JwksFetchClient client = client(trusting("jwks.test"), jwksTestCertificate.context());
+            JwksFetchClient client = timedClient(trusting("jwks.test"), jwksTestCertificate.context());
 
             long start = System.nanoTime();
-            assertThatThrownBy(() -> client.restOperations().getForObject(url(server, "/jwks"), String.class))
+            assertThatThrownBy(fetching(client, url(server, "/jwks")))
                     .hasRootCauseInstanceOf(SocketTimeoutException.class);
             assertThat(Duration.ofNanos(System.nanoTime() - start)).isLessThan(Duration.ofMillis(2_000));
         } finally {
@@ -344,12 +350,12 @@ class JwksFetchClientTest {
         });
         try {
             dns.answer("jwks.test", "127.0.0.1");
-            JwksFetchClient client = client(trusting("jwks.test"), jwksTestCertificate.context());
+            JwksFetchClient client = timedClient(trusting("jwks.test"), jwksTestCertificate.context());
 
             long start = System.nanoTime();
             // L'annulation de la requête à l'échéance agit la première ; le contrôle d'échéance
             // à chaque lecture du corps reste une seconde barrière.
-            assertThatThrownBy(() -> client.restOperations().getForObject(url(server, "/jwks"), String.class))
+            assertThatThrownBy(fetching(client, url(server, "/jwks")))
                     .isInstanceOf(RestClientException.class);
             Duration elapsed = Duration.ofNanos(System.nanoTime() - start);
             // Échéance (800 ms), avec une marge de planification.
@@ -383,11 +389,10 @@ class JwksFetchClientTest {
             trickler.setDaemon(true);
             trickler.start();
             dns.answer("jwks.test", "127.0.0.1");
-            JwksFetchClient client = client(trusting("jwks.test"), jwksTestCertificate.context());
+            JwksFetchClient client = timedClient(trusting("jwks.test"), jwksTestCertificate.context());
 
             long start = System.nanoTime();
-            assertThatThrownBy(() -> client.restOperations()
-                    .getForObject(URI.create("https://jwks.test:" + server.getLocalPort() + "/jwks"), String.class))
+            assertThatThrownBy(fetching(client, URI.create("https://jwks.test:" + server.getLocalPort() + "/jwks")))
                     .isInstanceOf(RestClientException.class);
             assertThat(Duration.ofNanos(System.nanoTime() - start))
                     .isGreaterThanOrEqualTo(Duration.ofMillis(800))
@@ -404,11 +409,11 @@ class JwksFetchClientTest {
             try (Fillers fillers = new Fillers()) {
                 fillers.saturate(saturated.getLocalSocketAddress());
                 dns.answer("jwks.test", "127.0.0.1");
-                JwksFetchClient client = client(trusting("jwks.test"), jwksTestCertificate.context());
+                JwksFetchClient client = timedClient(trusting("jwks.test"), jwksTestCertificate.context());
                 URI uri = URI.create("https://jwks.test:" + saturated.getLocalPort() + "/jwks");
 
                 long start = System.nanoTime();
-                assertThatThrownBy(() -> client.restOperations().getForObject(uri, String.class))
+                assertThatThrownBy(fetching(client, uri))
                         .hasRootCauseInstanceOf(SocketTimeoutException.class);
                 assertThat(Duration.ofNanos(System.nanoTime() - start))
                         .isGreaterThanOrEqualTo(Duration.ofMillis(500))
@@ -421,6 +426,16 @@ class JwksFetchClientTest {
 
     private JwksFetchClient client(OutboundDestinationPolicy policy, SSLContext sslContext) {
         return new JwksFetchClient(policy, LIMITS, sslContext, dns, Clock.systemUTC());
+    }
+
+    private JwksFetchClient timedClient(OutboundDestinationPolicy policy, SSLContext sslContext) {
+        return new JwksFetchClient(policy, TIMING_LIMITS, sslContext, dns, Clock.systemUTC());
+    }
+
+    /** La récupération seule, sans aucune préparation dans la lambda observée. */
+    private static ThrowableAssert.ThrowingCallable fetching(JwksFetchClient client, URI uri) {
+        RestOperations rest = client.restOperations();
+        return () -> rest.getForObject(uri, String.class);
     }
 
     private static OutboundDestinationPolicy trusting(String host) {
@@ -444,6 +459,8 @@ class JwksFetchClientTest {
         }
     }
 
+    // Les serveurs de test doivent être réellement lents : c'est ce que les délais mesurent.
+    @SuppressWarnings("java:S2925")
     private static void sleep(long millis) {
         try {
             Thread.sleep(millis);

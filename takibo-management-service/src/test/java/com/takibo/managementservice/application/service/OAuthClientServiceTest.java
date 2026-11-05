@@ -168,7 +168,10 @@ class OAuthClientServiceTest {
         doThrow(new InvalidClientConfigurationException("jwksUri is not an allowed destination: HTTPS required"))
                 .when(jwksUriAdmission).requireAllowed(URI.create("http://127.0.0.1/jwks.json"));
 
-        assertThatThrownBy(() -> service.register(UUID.randomUUID(), SpaceId.of(UUID.randomUUID()), cmd))
+        UUID orgId = UUID.randomUUID();
+        SpaceId spaceId = SpaceId.of(UUID.randomUUID());
+
+        assertThatThrownBy(() -> service.register(orgId, spaceId, cmd))
                 .isInstanceOf(InvalidClientConfigurationException.class)
                 .hasMessageContaining("jwksUri");
         verify(repository, never()).save(any());

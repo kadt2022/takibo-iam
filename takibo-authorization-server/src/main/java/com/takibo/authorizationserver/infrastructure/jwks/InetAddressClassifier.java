@@ -14,6 +14,9 @@ import java.util.stream.Stream;
  * Les plages sont donc explicites, et l'IPv4 portée par une adresse IPv6 est classée selon
  * les règles IPv4 ; la classe la plus restrictive l'emporte.
  */
+// java:S1313 vise les adresses de destination codées en dur. Ici, les littéraux sont la table
+// des plages que Takibo refuse de joindre : c'est la protection elle-même, pas une destination.
+@SuppressWarnings("java:S1313")
 final class InetAddressClassifier {
 
     enum AddressClass {

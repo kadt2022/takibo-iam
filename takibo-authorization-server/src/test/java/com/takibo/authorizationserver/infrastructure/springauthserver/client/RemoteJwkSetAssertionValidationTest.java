@@ -120,7 +120,10 @@ class RemoteJwkSetAssertionValidationTest {
 
     @Test
     void a_valid_assertion_is_accepted() throws Exception {
-        assertThatCode(() -> decoder().decode(rsaSigned(claims -> claims))).doesNotThrowAnyException();
+        JwtDecoder decoder = decoder();
+        String assertion = rsaSigned(claims -> claims);
+
+        assertThatCode(() -> decoder.decode(assertion)).doesNotThrowAnyException();
     }
 
     @Test
@@ -230,7 +233,8 @@ class RemoteJwkSetAssertionValidationTest {
     }
 
     private void assertRefused(String assertion) {
-        assertThatThrownBy(() -> decoder().decode(assertion)).isInstanceOf(JwtException.class);
+        JwtDecoder decoder = decoder();
+        assertThatThrownBy(() -> decoder.decode(assertion)).isInstanceOf(JwtException.class);
     }
 
     private static RegisteredClient client(String jwkSetUrl) {

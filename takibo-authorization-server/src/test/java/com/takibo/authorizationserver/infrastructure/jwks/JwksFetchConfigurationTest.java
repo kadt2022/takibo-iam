@@ -1,5 +1,6 @@
 package com.takibo.authorizationserver.infrastructure.jwks;
 
+import org.assertj.core.api.ThrowableAssert;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
@@ -24,9 +25,9 @@ class JwksFetchConfigurationTest {
         runner.run(context -> {
             assertThat(context).hasNotFailed();
             JwksFetchClient client = context.getBean(JwksFetchClient.class);
-            assertThatThrownBy(() -> client.checkUri(URI.create("http://keys.example.com/jwks")))
+            assertThatThrownBy(checking(client, "http://keys.example.com/jwks"))
                     .isInstanceOf(DestinationRefusedException.class);
-            assertThatThrownBy(() -> client.checkUri(URI.create("https://localhost/jwks")))
+            assertThatThrownBy(checking(client, "https://localhost/jwks"))
                     .isInstanceOf(DestinationRefusedException.class);
         });
     }
@@ -55,7 +56,7 @@ class JwksFetchConfigurationTest {
                     assertThatCode(() -> client.checkUri(URI.create(
                             "http://keycloak:8080/realms/takibo/protocol/openid-connect/certs")))
                             .doesNotThrowAnyException();
-                    assertThatThrownBy(() -> client.checkUri(URI.create("http://keys.example.com/jwks")))
+                    assertThatThrownBy(checking(client, "http://keys.example.com/jwks"))
                             .isInstanceOf(DestinationRefusedException.class);
                 });
     }
@@ -81,5 +82,11 @@ class JwksFetchConfigurationTest {
         runner.withPropertyValues(PREFIX + "max-response-size=0B")
                 .run(context -> assertThat(context).hasFailed()
                         .getFailure().rootCause().hasMessageContaining("max-response-size"));
+    }
+
+    /** Le contrôle seul, l'URI étant préparée hors de la lambda observée. */
+    private static ThrowableAssert.ThrowingCallable checking(JwksFetchClient client, String uri) {
+        URI parsed = URI.create(uri);
+        return () -> client.checkUri(parsed);
     }
 }
