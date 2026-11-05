@@ -168,9 +168,6 @@ class OAuthClientJwkSetValidatorTest {
 
     @ParameterizedTest
     @ValueSource(strings = {
-            "http://keys.example/jwks.json",
-            "http://localhost:8080/jwks.json",
-            "http://127.0.0.1/jwks.json",
             "ftp://keys.example/jwks.json",
             "/jwks.json",
             "keys.example/jwks.json",
@@ -179,11 +176,26 @@ class OAuthClientJwkSetValidatorTest {
             "https://keys.example/jwks.json#main",
             "https://keys example/jwks.json"
     })
-    void rejects_a_jwks_uri_that_is_not_an_absolute_https_endpoint(String uri) {
+    void rejects_a_jwks_uri_that_is_not_an_absolute_http_url(String uri) {
         assertRejected(
                 privateKeyJwt().jwksUri(uri),
-                "jwksUri must be an absolute HTTPS URL without user-info or fragment"
+                "jwksUri must be an absolute HTTP(S) URL without user-info or fragment"
         );
+    }
+
+    /**
+     * Le domaine ne juge que la forme : HTTP n'y est plus refusé, car seule la politique de
+     * destination sait si l'installation l'autorise (profil dev, nom de confiance). Le refus
+     * par défaut de HTTP est prouvé par OAuthClientServiceTest et, de bout en bout, par
+     * JwksUriSsrfPostgresIntegrationTest.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "http://keys.example/jwks.json",
+            "http://localhost:8080/realms/takibo/protocol/openid-connect/certs"
+    })
+    void leaves_the_transport_decision_to_the_destination_policy(String uri) {
+        assertAccepted(privateKeyJwt().jwksUri(uri));
     }
 
     // ---------------------------------------------------------------

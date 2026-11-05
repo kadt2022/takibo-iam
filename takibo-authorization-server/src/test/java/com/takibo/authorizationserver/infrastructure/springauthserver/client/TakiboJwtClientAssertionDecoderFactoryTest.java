@@ -63,7 +63,7 @@ class TakiboJwtClientAssertionDecoderFactoryTest {
                         .build());
         assertion.sign(new RSASSASigner((RSAPrivateKey) keyPair.getPrivate()));
 
-        TakiboJwtClientAssertionDecoderFactory factory = new TakiboJwtClientAssertionDecoderFactory();
+        TakiboJwtClientAssertionDecoderFactory factory = new TakiboJwtClientAssertionDecoderFactory(JwksFetchClients.defaults());
         var decoder = factory.createDecoder(client);
         Jwt decoded = decoder.decode(assertion.serialize());
 
@@ -75,7 +75,7 @@ class TakiboJwtClientAssertionDecoderFactoryTest {
     @Test
     void rejects_malformed_embedded_jwk_set_as_invalid_client() {
         RegisteredClient client = registeredClient("not-json");
-        TakiboJwtClientAssertionDecoderFactory factory = new TakiboJwtClientAssertionDecoderFactory();
+        TakiboJwtClientAssertionDecoderFactory factory = new TakiboJwtClientAssertionDecoderFactory(JwksFetchClients.defaults());
 
         assertThatThrownBy(() -> factory.createDecoder(client))
                 .isInstanceOf(OAuth2AuthenticationException.class)
@@ -84,7 +84,7 @@ class TakiboJwtClientAssertionDecoderFactoryTest {
     }
 
     @Test
-    void delegates_remote_jwk_set_url_to_standard_factory() {
+    void builds_remote_jwk_set_decoder_through_the_jwks_fetch_client() {
         RegisteredClient client = RegisteredClient.withId("remote-client-id")
                 .clientId("remote-client")
                 .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
@@ -94,7 +94,7 @@ class TakiboJwtClientAssertionDecoderFactoryTest {
                         .build())
                 .build();
 
-        assertThat(new TakiboJwtClientAssertionDecoderFactory().createDecoder(client)).isNotNull();
+        assertThat(new TakiboJwtClientAssertionDecoderFactory(JwksFetchClients.defaults()).createDecoder(client)).isNotNull();
     }
 
     @Test
@@ -116,7 +116,7 @@ class TakiboJwtClientAssertionDecoderFactoryTest {
                         .build())
                 .build();
         RegisteredClient emptyKeySet = registeredClient("{\"keys\":[]}");
-        TakiboJwtClientAssertionDecoderFactory factory = new TakiboJwtClientAssertionDecoderFactory();
+        TakiboJwtClientAssertionDecoderFactory factory = new TakiboJwtClientAssertionDecoderFactory(JwksFetchClients.defaults());
 
         assertThatThrownBy(() -> factory.createDecoder(bothSources))
                 .isInstanceOf(OAuth2AuthenticationException.class)

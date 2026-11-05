@@ -1,6 +1,7 @@
 package com.takibo.managementservice.application.service;
 
 import com.takibo.managementservice.application.command.RegisterClientCommand;
+import com.takibo.managementservice.application.port.JwksUriAdmissionPort;
 import com.takibo.managementservice.domain.exception.ClientAlreadyExistsException;
 import com.takibo.managementservice.domain.exception.InvalidClientConfigurationException;
 import com.takibo.managementservice.domain.exception.OAuthClientSecretRotationConflictException;
@@ -19,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.Assert;
 
+import java.net.URI;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -36,6 +38,7 @@ public class OAuthClientService {
             oauthClientRegistrationDomainService;
     private final OAuthClientSecretRotationDomainService
             oauthClientSecretRotationDomainService;
+    private final JwksUriAdmissionPort jwksUriAdmission;
 
     public RegisteredClientResult register(
             UUID orgId,
@@ -48,6 +51,10 @@ public class OAuthClientService {
                 oauthClientRegistrationDomainService.prepareRegistration(
                         toDomainRegistration(command)
                 );
+        String jwksUri = plan.registration().jwksUri();
+        if (jwksUri != null && !jwksUri.isBlank()) {
+            jwksUriAdmission.requireAllowed(URI.create(jwksUri.trim()));
+        }
 
         ensureClientIdIsFree(plan.registration().clientId());
 

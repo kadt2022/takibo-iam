@@ -12,6 +12,7 @@ import com.takibo.managementservice.domain.exception.InvalidClientConfigurationE
 import com.takibo.managementservice.domain.model.OAuthClientRegistration;
 import com.takibo.managementservice.domain.model.TokenEndpointAuthMethod;
 
+import java.net.URI;
 import java.text.ParseException;
 import java.util.List;
 import java.util.Set;
@@ -60,11 +61,17 @@ public final class OAuthClientJwkSetValidator {
         if (rawUri.length() > 255) {
             fail("jwksUri exceeds 255 characters");
         }
+        // Forme seulement. Le transport (HTTPS, ou HTTP vers une destination de confiance en
+        // développement) et la destination sont jugés par JwksUriAdmissionPort, la politique
+        // qui s'applique aussi à la récupération des clés.
         try {
-            UriValidation.requireHttpsEndpoint(rawUri);
+            URI parsed = UriValidation.requireHttpHttpsUrl(rawUri);
+            if (parsed.getUserInfo() != null || parsed.getFragment() != null) {
+                throw new IllegalArgumentException("user-info or fragment");
+            }
         } catch (RuntimeException exception) {
             fail(
-                    "jwksUri must be an absolute HTTPS URL "
+                    "jwksUri must be an absolute HTTP(S) URL "
                             + "without user-info or fragment"
             );
         }

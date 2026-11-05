@@ -25,6 +25,17 @@ takibo:
       # Poste de developpement : cle jetable, chaque redemarrage deconnecte tout le monde.
       # Acceptable ici, jamais en service.
       ephemeral: true
+  oauth:
+    jwks-fetch:
+      # Poste de developpement : un Keycloak ou un serveur de cles local reste joignable.
+      # localhost : Takibo lance sur la machine (bootRun). keycloak : meme reseau Compose.
+      # host.docker.internal : Takibo en conteneur, cles servies par la machine hote.
+      # HTTP n'est accepte que vers ces noms, et seulement dans ce profil (Keycloak start-dev).
+      trusted-hosts:
+        - localhost
+        - keycloak
+        - host.docker.internal
+      allow-http-for-trusted-hosts: true
   cors:
     # Seul profil autorise a declarer un motif. Loopback plutot que le joker : un site visite
     # depuis le poste de developpement ne doit pas pouvoir appeler le Takibo local.
