@@ -44,7 +44,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String rawToken = authorizationHeader.substring(7).trim();
 
         try {
-            Map<String, Object> claims = tokenValidatorAdapter.validate(rawToken);
+            // Rôles et permissions n'entrent dans TSM qu'après validation contre le niveau du token.
+            Map<String, Object> claims = TokenPermissionFilter.sanitize(
+                    TokenRoleFilter.sanitize(tokenValidatorAdapter.validate(rawToken)));
 
             TakiboSecurityContext takiboSecurityContext = TakiboSecurityContextFactory.from(claims, request, trustedProxies);
 

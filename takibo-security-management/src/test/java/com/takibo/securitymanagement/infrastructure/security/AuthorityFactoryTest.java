@@ -40,4 +40,14 @@ class AuthorityFactoryTest {
         List<String> authorities = authorities(claims);
         assertThat(authorities).contains("ROLE_SPACE_ADMIN", "MANAGE_CLIENTS");
     }
+
+    @Test
+    void a_role_already_prefixed_in_the_token_never_becomes_the_prefixed_authority() {
+        Map<String, Object> claims = Map.of("roles", List.of("ROLE_R_TAKIBO_PLATFORM_ADMIN", "ROLE_R_ORG_ADMIN"));
+
+        List<String> authorities = authorities(claims);
+
+        assertThat(authorities).doesNotContain("ROLE_R_TAKIBO_PLATFORM_ADMIN", "ROLE_R_ORG_ADMIN")
+                .contains("ROLE_ROLE_R_TAKIBO_PLATFORM_ADMIN", "ROLE_ROLE_R_ORG_ADMIN");
+    }
 }

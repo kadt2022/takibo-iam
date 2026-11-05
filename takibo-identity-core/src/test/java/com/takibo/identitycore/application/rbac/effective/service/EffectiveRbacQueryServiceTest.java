@@ -259,6 +259,72 @@ class EffectiveRbacQueryServiceTest {
                 "P_SPACE_AUDIT_EXPORT", "P_SPACE_AUDIT_READ", "P_SPACE_POLICY_READ");
     }
 
+    // ---------- Refus par défaut des codes TECHNICAL absents du catalogue ----------
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "ROLE_R_TAKIBO_PLATFORM_ADMIN", "ROLE_R_ORG_ADMIN", "ROLE_R_ORG_OWNER", "ROLE_R_SPACE_ADMIN",
+            "r_space_admin", "R_Space_Admin", " R_SPACE_ADMIN", "R_SPACE_ADMIN ", "LEGACY_CUSTOM"
+    })
+    void unknownTechnicalRole_neverEntersSpaceClaims(String code) {
+        givenDirectRoles(directRole(code, RoleSource.TECHNICAL));
+        givenMemberships();
+
+        EffectiveRbac rbac = effective();
+
+        assertThat(rbac.roles()).isEmpty();
+        assertThat(rbac.permissions()).isEmpty();
+    }
+
+    @Test
+    void unknownTechnicalRole_doesNotAlterTheClaimsOfAKnownOne() {
+        givenDirectRoles(directRole("R_SPACE_ADMIN", RoleSource.TECHNICAL));
+        givenMemberships();
+        EffectiveRbac alone = effective();
+
+        givenDirectRoles(
+                directRole("R_SPACE_ADMIN", RoleSource.TECHNICAL),
+                directRole("ROLE_R_TAKIBO_PLATFORM_ADMIN", RoleSource.TECHNICAL));
+        EffectiveRbac withUnknown = effective();
+
+        assertThat(withUnknown.roles()).containsExactly("R_SPACE_ADMIN");
+        assertThat(withUnknown.permissions()).isEqualTo(alone.permissions()).isNotEmpty();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"ROLE_G_ORG_ADMINS", "g_space_admins", "G_SPACE_ADMINS ", "LEGACY_GROUP"})
+    void unknownTechnicalGroup_neverEntersSpaceClaims(String code) {
+        givenDirectRoles();
+        givenMemberships(membership(code, GroupSource.TECHNICAL));
+
+        EffectiveRbac rbac = effective();
+
+        assertThat(rbac.groups()).isEmpty();
+        assertThat(rbac.roles()).isEmpty();
+        assertThat(rbac.permissions()).isEmpty();
+    }
+
+    @Test
+    void governanceGroup_withATenantCode_staysInSpaceClaims() {
+        givenDirectRoles();
+        givenMemberships(membership("finance-team", GroupSource.GOVERNANCE));
+
+        EffectiveRbac rbac = effective();
+
+        assertThat(rbac.groups()).containsExactly("finance-team");
+    }
+
+    @Test
+    void orgScope_unknownTechnicalRoleInAPrivilegedForm_isIgnored() {
+        givenOrgLevelRoles(orgLevelRole("ROLE_R_ORG_ADMIN"), orgLevelRole("R_ORG_ADMIN"));
+        givenOrgLevelMemberships(orgLevelMembership("ROLE_G_ORG_ADMINS"));
+
+        EffectiveRbac rbac = service.effectiveOrgFor(ORG_ID, ACCOUNT_ID);
+
+        assertThat(rbac.roles()).containsExactly("R_ORG_ADMIN");
+        assertThat(rbac.groups()).isEmpty();
+    }
+
     @Test
     void changingSpace_reloadsAssignmentsAndRecalculatesPermissions() {
         RoleAssignment orgUserAdmin = orgLevelRole("R_ORG_USER_ADMIN");

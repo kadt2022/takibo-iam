@@ -20,6 +20,7 @@ import com.takibo.identitycore.domain.rbac.repository.GovernanceGroupAssignmentR
 import com.takibo.identitycore.domain.rbac.repository.GovernanceRoleAssignmentRepository;
 import com.takibo.identitycore.domain.repository.GroupRoleRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -47,12 +48,15 @@ import java.util.stream.Collectors;
  * seedée en base ne les fait pas entrer dans un token tenant.
  * Un code du catalogue technique n'est accepté que si l'assignation est elle-même
  * de source TECHNICAL. Les collisions historiques de source GOVERNANCE sont filtrées.
+ * Réciproquement, une assignation TECHNICAL (rôle ou groupe) dont le code est absent du
+ * catalogue n'entre dans aucun token : refus par défaut, comme pour le token ORG.
  * <p>
  * Frontière stricte : tout est lu pour (org, space, account) — les assignments
  * org-level du même org (space NULL) sont inclus, rien d'un autre org/space.
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 @Transactional(readOnly = true)
 public class EffectiveRbacQueryService implements EffectiveRbacQueryCase {
 
@@ -86,8 +90,8 @@ public class EffectiveRbacQueryService implements EffectiveRbacQueryCase {
         List<GroupAssignment> memberships =
                 groupMemberships.findDirectMemberships(orgId, spaceId, accountId);
         memberships.stream()
+                .filter(this::isTenantVisibleGroupMembership)
                 .map(GroupAssignment::groupCode)
-                .filter(this::isTenantVisibleGroupCode)
                 .forEach(groups::add);
 
         // 3) Héritage des groupes techniques : les liens vivent dans le code.
@@ -254,20 +258,36 @@ public class EffectiveRbacQueryService implements EffectiveRbacQueryCase {
         return code != null && !TenantRoleCodePolicy.isReserved(code);
     }
 
+    /** Un code TECHNICAL absent du catalogue n'est jamais raconté : refus par défaut. */
     private boolean isTenantVisibleRoleCode(String code) {
         if (code == null) {
             return false;
         }
-        return TechnicalRole.fromCode(code)
-                .map(role -> !role.selfService() && TENANT_VISIBLE_PLANS.contains(role.plan()))
-                .orElse(true);
-    }
-
-    private boolean isTenantVisibleGroupCode(String code) {
-        if (code == null) {
+        Optional<TechnicalRole> role = TechnicalRole.fromCode(code);
+        if (role.isEmpty()) {
+            log.warn("RBAC : attribution TECHNICAL au code inconnu {} ignorée", code);
             return false;
         }
-        return TechnicalGroup.fromCode(code)
+        return !role.get().selfService() && TENANT_VISIBLE_PLANS.contains(role.get().plan());
+    }
+
+    /**
+     * TECHNICAL : seul un groupe du catalogue, de scope visible tenant, est raconté.
+     * GOVERNANCE : code choisi par le tenant, comportement inchangé.
+     */
+    private boolean isTenantVisibleGroupMembership(GroupAssignment membership) {
+        if (membership == null || membership.groupCode() == null) {
+            return false;
+        }
+        if (membership.groupSource() == GroupSource.TECHNICAL) {
+            Optional<TechnicalGroup> group = TechnicalGroup.fromCode(membership.groupCode());
+            if (group.isEmpty()) {
+                log.warn("RBAC : appartenance TECHNICAL au groupe inconnu {} ignorée", membership.groupCode());
+                return false;
+            }
+            return TENANT_VISIBLE_PLANS.contains(group.get().plan());
+        }
+        return TechnicalGroup.fromCode(membership.groupCode())
                 .map(group -> TENANT_VISIBLE_PLANS.contains(group.plan()))
                 .orElse(true);
     }
