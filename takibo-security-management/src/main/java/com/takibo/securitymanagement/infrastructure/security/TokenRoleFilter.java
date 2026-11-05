@@ -46,8 +46,7 @@ public final class TokenRoleFilter {
         TokenLevel level = TokenLevel.of(claims);
         List<String> kept = new ArrayList<>();
         List<String> dropped = new ArrayList<>();
-        for (Object value : claimValues(claims.get(ROLES))) {
-            String code = value == null ? null : value.toString();
+        for (String code : claimValues(claims.get(ROLES))) {
             if (isAdmitted(code, level)) {
                 kept.add(code);
             } else {
@@ -77,11 +76,14 @@ public final class TokenRoleFilter {
         return level == TokenLevel.SPACE && !TenantRoleCodePolicy.isReserved(code);
     }
 
-    /** Un claim liste ou valeur unique, toujours lu comme une collection. */
-    static Collection<?> claimValues(Object raw) {
+    /** Un claim liste ou valeur unique, toujours lu comme une liste de chaînes (null conservé). */
+    static List<String> claimValues(Object raw) {
+        List<String> values = new ArrayList<>();
         if (raw instanceof Collection<?> collection) {
-            return collection;
+            collection.forEach(value -> values.add(value == null ? null : value.toString()));
+        } else if (raw != null) {
+            values.add(raw.toString());
         }
-        return raw == null ? List.of() : List.of(raw);
+        return values;
     }
 }

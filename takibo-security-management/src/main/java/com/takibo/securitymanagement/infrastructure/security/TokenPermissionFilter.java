@@ -46,21 +46,7 @@ public final class TokenPermissionFilter {
             log.warn("Token : claim {} hors contrat retiré pour le sujet {}", AUTHORITIES, claims.get("sub"));
         }
         if (claims.containsKey(PERMISSIONS)) {
-            TokenLevel level = TokenLevel.of(claims);
-            List<String> kept = new ArrayList<>();
-            List<String> dropped = new ArrayList<>();
-            for (Object value : TokenRoleFilter.claimValues(claims.get(PERMISSIONS))) {
-                String code = value == null ? null : value.toString();
-                if (isAdmitted(code, level)) {
-                    kept.add(code);
-                } else {
-                    dropped.add(String.valueOf(code));
-                }
-            }
-            if (!dropped.isEmpty()) {
-                log.warn("Token : permissions écartées pour le sujet {} (niveau {}) : {}",
-                        claims.get("sub"), level, dropped);
-            }
+            List<String> kept = admittedPermissions(claims);
             if (kept.isEmpty()) {
                 sanitized.remove(PERMISSIONS);
             } else {
@@ -68,6 +54,24 @@ public final class TokenPermissionFilter {
             }
         }
         return Map.copyOf(sanitized);
+    }
+
+    private static List<String> admittedPermissions(Map<String, Object> claims) {
+        TokenLevel level = TokenLevel.of(claims);
+        List<String> kept = new ArrayList<>();
+        List<String> dropped = new ArrayList<>();
+        for (String code : TokenRoleFilter.claimValues(claims.get(PERMISSIONS))) {
+            if (isAdmitted(code, level)) {
+                kept.add(code);
+            } else {
+                dropped.add(String.valueOf(code));
+            }
+        }
+        if (!dropped.isEmpty()) {
+            log.warn("Token : permissions écartées pour le sujet {} (niveau {}) : {}",
+                    claims.get("sub"), level, dropped);
+        }
+        return kept;
     }
 
     static boolean isAdmitted(String code, TokenLevel level) {

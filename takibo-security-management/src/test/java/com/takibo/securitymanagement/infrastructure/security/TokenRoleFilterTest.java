@@ -19,15 +19,14 @@ class TokenRoleFilterTest {
     void a_space_token_keeps_its_catalog_and_tenant_roles() {
         Map<String, Object> claims = spaceToken(List.of("R_SPACE_ADMIN", "R_ORG_ADMIN", "GOV_LOCAL", "finance-manager"));
 
-        assertThat(TokenRoleFilter.sanitize(claims).get("roles"))
-                .isEqualTo(List.of("R_SPACE_ADMIN", "R_ORG_ADMIN", "GOV_LOCAL", "finance-manager"));
+        assertThat(TokenRoleFilter.sanitize(claims)).containsEntry("roles", List.of("R_SPACE_ADMIN", "R_ORG_ADMIN", "GOV_LOCAL", "finance-manager"));
     }
 
     @Test
     void an_organization_token_keeps_only_organization_catalog_roles() {
         Map<String, Object> claims = orgToken(List.of("R_ORG_OWNER", "R_ORG_ADMIN", "R_SPACE_ADMIN", "GOV_LOCAL"));
 
-        assertThat(TokenRoleFilter.sanitize(claims).get("roles")).isEqualTo(List.of("R_ORG_OWNER", "R_ORG_ADMIN"));
+        assertThat(TokenRoleFilter.sanitize(claims)).containsEntry("roles", List.of("R_ORG_OWNER", "R_ORG_ADMIN"));
     }
 
     @ParameterizedTest
@@ -41,7 +40,7 @@ class TokenRoleFilterTest {
     void forged_privileged_or_malformed_roles_are_dropped_from_a_space_token(String role) {
         Map<String, Object> sanitized = TokenRoleFilter.sanitize(spaceToken(List.of("R_SPACE_VIEWER", role)));
 
-        assertThat(sanitized.get("roles")).isEqualTo(List.of("R_SPACE_VIEWER"));
+        assertThat(sanitized).containsEntry("roles", List.of("R_SPACE_VIEWER"));
     }
 
     @Test
@@ -56,8 +55,7 @@ class TokenRoleFilterTest {
                 "R_TAKIBO_PLATFORM_ADMIN", "R_TAKIBO_PLATFORM_AUDITOR", "R_ORG_ADMIN", "R_SPACE_ADMIN",
                 "GOV_LOCAL", "ROLE_R_TAKIBO_PLATFORM_ADMIN", "PLATFORM_ADMIN"));
 
-        assertThat(TokenRoleFilter.sanitize(claims).get("roles"))
-                .isEqualTo(List.of("R_TAKIBO_PLATFORM_ADMIN", "R_TAKIBO_PLATFORM_AUDITOR"));
+        assertThat(TokenRoleFilter.sanitize(claims)).containsEntry("roles", List.of("R_TAKIBO_PLATFORM_ADMIN", "R_TAKIBO_PLATFORM_AUDITOR"));
     }
 
     @Test
