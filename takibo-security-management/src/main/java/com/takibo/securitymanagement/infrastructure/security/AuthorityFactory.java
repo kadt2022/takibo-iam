@@ -54,7 +54,7 @@ public final class AuthorityFactory {
 
         for (String r : ctx.subject().declaredRoles()) {
             if (r == null || r.isBlank()) continue;
-            out.add(r.startsWith("ROLE_") ? r : "ROLE_" + r);
+            out.add(roleAuthority(r));
         }
     }
 
@@ -67,16 +67,25 @@ public final class AuthorityFactory {
             for (Object o : c) {
                 String s = (o == null) ? null : o.toString();
                 if (s == null || s.isBlank()) continue;
-                out.add(rolePrefix ? (s.startsWith("ROLE_") ? s : "ROLE_" + s) : s);
+                out.add(rolePrefix ? roleAuthority(s) : s);
             }
             return;
         }
 
         if (v instanceof String s) {
             if (!s.isBlank()) {
-                out.add(rolePrefix ? (s.startsWith("ROLE_") ? s : "ROLE_" + s) : s);
+                out.add(rolePrefix ? roleAuthority(s) : s);
             }
         }
+    }
+
+    /**
+     * Toujours préfixé : un préfixe {@code ROLE_} déjà présent dans le token n'est jamais
+     * considéré comme une autorité acquise ({@code ROLE_X} devient {@code ROLE_ROLE_X}, sans
+     * effet). Les rôles admis sont filtrés en amont par {@link TokenRoleFilter}.
+     */
+    private static String roleAuthority(String role) {
+        return "ROLE_" + role;
     }
 
     private static void addScopesFromClaim(Map<String, Object> claims, Set<String> out) {
