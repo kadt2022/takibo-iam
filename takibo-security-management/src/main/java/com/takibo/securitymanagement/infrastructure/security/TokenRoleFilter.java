@@ -1,6 +1,5 @@
 package com.takibo.securitymanagement.infrastructure.security;
 
-import com.takibo.identitycore.domain.catalogrbac.AuthorityPlan;
 import com.takibo.identitycore.domain.catalogrbac.TechnicalRole;
 import com.takibo.identitycore.domain.catalogrbac.TenantRoleCodePolicy;
 import org.slf4j.Logger;
@@ -8,12 +7,10 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 
 /**
  * Seule porte d'entrée des rôles d'un token dans TSM : le contexte de sécurité, les autorités
@@ -49,7 +46,7 @@ public final class TokenRoleFilter {
         TokenLevel level = TokenLevel.of(claims);
         List<String> kept = new ArrayList<>();
         List<String> dropped = new ArrayList<>();
-        for (Object value : values(claims.get(ROLES))) {
+        for (Object value : claimValues(claims.get(ROLES))) {
             String code = value == null ? null : value.toString();
             if (isAdmitted(code, level)) {
                 kept.add(code);
@@ -80,49 +77,11 @@ public final class TokenRoleFilter {
         return level == TokenLevel.SPACE && !TenantRoleCodePolicy.isReserved(code);
     }
 
-    private static Collection<?> values(Object raw) {
+    /** Un claim liste ou valeur unique, toujours lu comme une collection. */
+    static Collection<?> claimValues(Object raw) {
         if (raw instanceof Collection<?> collection) {
             return collection;
         }
         return raw == null ? List.of() : List.of(raw);
-    }
-
-    /** Niveau d'un token, établi à partir des seuls claims signés et concordants. */
-    enum TokenLevel {
-        SPACE(EnumSet.of(AuthorityPlan.ORGANIZATION, AuthorityPlan.SPACE)),
-        ORGANIZATION(EnumSet.of(AuthorityPlan.ORGANIZATION)),
-        PLATFORM(EnumSet.of(AuthorityPlan.PLATFORM)),
-        /** Niveau absent ou incohérent avec les identifiants du token : aucun rôle n'est admis. */
-        NONE(EnumSet.noneOf(AuthorityPlan.class));
-
-        private final Set<AuthorityPlan> admittedPlans;
-
-        TokenLevel(Set<AuthorityPlan> admittedPlans) {
-            this.admittedPlans = admittedPlans;
-        }
-
-        boolean admits(AuthorityPlan plan) {
-            return admittedPlans.contains(plan);
-        }
-
-        static TokenLevel of(Map<String, Object> claims) {
-            Object scopeLevel = claims.get("scopeLevel");
-            boolean org = isPresent(claims.get("orgId"));
-            boolean space = isPresent(claims.get("spaceId"));
-            if ("SPACE".equals(scopeLevel) && org && space) {
-                return SPACE;
-            }
-            if ("ORGANIZATION".equals(scopeLevel) && org && !space) {
-                return ORGANIZATION;
-            }
-            if ("PLATFORM".equals(scopeLevel) && !org && !space) {
-                return PLATFORM;
-            }
-            return NONE;
-        }
-
-        private static boolean isPresent(Object value) {
-            return value != null && !value.toString().isBlank();
-        }
     }
 }
