@@ -347,13 +347,51 @@ class JwksFetchClientTest {
             JwksFetchClient client = client(trusting("jwks.test"), jwksTestCertificate.context());
 
             long start = System.nanoTime();
+            // L'annulation de la requête à l'échéance agit la première ; le contrôle d'échéance
+            // à chaque lecture du corps reste une seconde barrière.
             assertThatThrownBy(() -> client.restOperations().getForObject(url(server, "/jwks"), String.class))
-                    .hasStackTraceContaining("total timeout");
+                    .isInstanceOf(RestClientException.class);
             Duration elapsed = Duration.ofNanos(System.nanoTime() - start);
-            // Échéance (800 ms) plus au plus un délai de lecture (300 ms), avec une marge de planification.
+            // Échéance (800 ms), avec une marge de planification.
             assertThat(elapsed).isGreaterThanOrEqualTo(Duration.ofMillis(800)).isLessThan(Duration.ofMillis(2_000));
         } finally {
             server.stop(0);
+        }
+    }
+
+    @Test
+    void a_server_trickling_its_response_headers_is_cut_by_the_total_timeout() throws Exception {
+        // L'en-tête lui-même arrive octet par octet, jamais muet plus de 100 ms : ni le délai
+        // de lecture (300 ms) ni la lecture du corps ne peuvent l'arrêter. Seule l'échéance
+        // totale (800 ms) appliquée à tout l'échange le peut ; sans elle, ~20 s ici.
+        byte[] head = ("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nX-Pad: " + "a".repeat(150)
+                + "\r\n\r\n").getBytes(StandardCharsets.US_ASCII);
+        try (ServerSocket server = jwksTestCertificate.context().getServerSocketFactory()
+                .createServerSocket(0, 50, InetAddress.getByName("127.0.0.1"))) {
+            Thread trickler = new Thread(() -> {
+                try (Socket socket = server.accept(); OutputStream out = socket.getOutputStream()) {
+                    socket.getInputStream().read(new byte[4096]);
+                    for (byte b : head) {
+                        out.write(b);
+                        out.flush();
+                        sleep(100);
+                    }
+                } catch (IOException clientWentAway) {
+                    // Attendu : le client abandonne à l'échéance.
+                }
+            }, "header-trickler");
+            trickler.setDaemon(true);
+            trickler.start();
+            dns.answer("jwks.test", "127.0.0.1");
+            JwksFetchClient client = client(trusting("jwks.test"), jwksTestCertificate.context());
+
+            long start = System.nanoTime();
+            assertThatThrownBy(() -> client.restOperations()
+                    .getForObject(URI.create("https://jwks.test:" + server.getLocalPort() + "/jwks"), String.class))
+                    .isInstanceOf(RestClientException.class);
+            assertThat(Duration.ofNanos(System.nanoTime() - start))
+                    .isGreaterThanOrEqualTo(Duration.ofMillis(800))
+                    .isLessThan(Duration.ofMillis(2_000));
         }
     }
 
@@ -363,18 +401,8 @@ class JwksFetchClientTest {
         // connexion reste en suspens jusqu'au délai de connexion (500 ms).
         try (ServerSocket saturated = new ServerSocket()) {
             saturated.bind(new InetSocketAddress(InetAddress.getByName("127.0.0.1"), 0), 1);
-            List<Socket> fillers = new ArrayList<>();
-            try {
-                for (int i = 0; i < 8; i++) {
-                    Socket filler = new Socket();
-                    try {
-                        filler.connect(saturated.getLocalSocketAddress(), 200);
-                        fillers.add(filler);
-                    } catch (SocketTimeoutException queueFull) {
-                        filler.close();
-                        break;
-                    }
-                }
+            try (Fillers fillers = new Fillers()) {
+                fillers.saturate(saturated.getLocalSocketAddress());
                 dns.answer("jwks.test", "127.0.0.1");
                 JwksFetchClient client = client(trusting("jwks.test"), jwksTestCertificate.context());
                 URI uri = URI.create("https://jwks.test:" + saturated.getLocalPort() + "/jwks");
@@ -385,10 +413,6 @@ class JwksFetchClientTest {
                 assertThat(Duration.ofNanos(System.nanoTime() - start))
                         .isGreaterThanOrEqualTo(Duration.ofMillis(500))
                         .isLessThan(Duration.ofMillis(2_000));
-            } finally {
-                for (Socket filler : fillers) {
-                    filler.close();
-                }
             }
         }
     }
@@ -441,6 +465,31 @@ class JwksFetchClientTest {
             System.clearProperty(key);
         } else {
             System.setProperty(key, value);
+        }
+    }
+
+    /** Connexions qui remplissent la file d'attente d'une socket jamais servie ; toutes fermées à la fin. */
+    private static final class Fillers implements AutoCloseable {
+
+        private final List<Socket> sockets = new ArrayList<>();
+
+        void saturate(SocketAddress target) throws IOException {
+            for (int i = 0; i < 8; i++) {
+                Socket filler = new Socket();
+                sockets.add(filler);
+                try {
+                    filler.connect(target, 200);
+                } catch (SocketTimeoutException queueFull) {
+                    return;
+                }
+            }
+        }
+
+        @Override
+        public void close() throws IOException {
+            for (Socket socket : sockets) {
+                socket.close();
+            }
         }
     }
 

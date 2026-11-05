@@ -19,7 +19,8 @@ final class IpLiterals {
     private static final Pattern CANONICAL_IPV4 =
             Pattern.compile("(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)(\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)){3}");
     private static final Pattern IPV6_CHARACTERS = Pattern.compile("[0-9A-Fa-f:.]+");
-    private static final Pattern NUMERIC_LOOKING = Pattern.compile("(0[xX][0-9A-Fa-f]*|\\d+)(\\.(0[xX][0-9A-Fa-f]*|\\d+))*\\.?");
+    private static final Pattern DECIMAL_LABEL = Pattern.compile("\\d+");
+    private static final Pattern HEX_LABEL = Pattern.compile("0[xX][0-9A-Fa-f]*");
 
     private IpLiterals() {
     }
@@ -47,6 +48,20 @@ final class IpLiterals {
 
     /** Vrai pour toute écriture numérique qui n'est pas une IPv4 canonique. */
     static boolean isNonCanonicalNumeric(String host) {
-        return NUMERIC_LOOKING.matcher(host).matches() && !CANONICAL_IPV4.matcher(host).matches();
+        return isNumericLooking(host) && !CANONICAL_IPV4.matcher(host).matches();
+    }
+
+    /** Chaque label est décimal ou hexadécimal ({@code 0x…}) ; un point final est toléré. */
+    private static boolean isNumericLooking(String host) {
+        String labels = host.endsWith(".") ? host.substring(0, host.length() - 1) : host;
+        if (labels.isEmpty()) {
+            return false;
+        }
+        for (String label : labels.split("\\.", -1)) {
+            if (!DECIMAL_LABEL.matcher(label).matches() && !HEX_LABEL.matcher(label).matches()) {
+                return false;
+            }
+        }
+        return true;
     }
 }
