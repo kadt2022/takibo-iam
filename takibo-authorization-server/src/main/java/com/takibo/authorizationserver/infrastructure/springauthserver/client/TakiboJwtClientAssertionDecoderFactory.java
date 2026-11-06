@@ -3,6 +3,7 @@ package com.takibo.authorizationserver.infrastructure.springauthserver.client;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.proc.SecurityContext;
+import com.nimbusds.jwt.proc.ConfigurableJWTProcessor;
 import com.takibo.authorizationserver.infrastructure.jwks.DestinationRefusedException;
 import com.takibo.authorizationserver.infrastructure.jwks.JwksFetchClient;
 import org.slf4j.Logger;
@@ -37,6 +38,9 @@ import java.util.function.Supplier;
  *       client HTTP diffère.</li>
  *   <li>Tout le reste (HMAC, configuration incomplète) : délégué à Spring Authorization Server.</li>
  * </ul>
+ * Dans les deux premiers cas, une clé RSA de moins de 2048 bits n'est jamais retenue pour la
+ * vérification ({@link MinimumRsaKeySizeSelector}).
+ * <p>
  * Chaque décodeur est mis en cache avec l'empreinte de sa configuration : une URL ou un
  * algorithme modifié produit un nouveau décodeur.
  */
@@ -102,6 +106,7 @@ public final class TakiboJwtClientAssertionDecoderFactory implements JwtDecoderF
             NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(jwkSetUrl)
                     .jwsAlgorithm(signatureAlgorithm)
                     .restOperations(jwksFetchClient.restOperations())
+                    .jwtProcessorCustomizer(TakiboJwtClientAssertionDecoderFactory::requireMinimumKeySize)
                     .build();
             decoder.setJwtValidator(
                     JwtClientAssertionDecoderFactory.DEFAULT_JWT_VALIDATOR_FACTORY.apply(registeredClient));
@@ -130,6 +135,7 @@ public final class TakiboJwtClientAssertionDecoderFactory implements JwtDecoderF
             NimbusJwtDecoder decoder = NimbusJwtDecoder
                     .withJwkSource(new ImmutableJWKSet<SecurityContext>(jwkSet))
                     .jwsAlgorithm(signatureAlgorithm)
+                    .jwtProcessorCustomizer(TakiboJwtClientAssertionDecoderFactory::requireMinimumKeySize)
                     .build();
             decoder.setJwtValidator(
                     JwtClientAssertionDecoderFactory.DEFAULT_JWT_VALIDATOR_FACTORY.apply(registeredClient));
@@ -137,6 +143,10 @@ public final class TakiboJwtClientAssertionDecoderFactory implements JwtDecoderF
         } catch (ParseException | IllegalArgumentException ex) {
             throw invalidClient("The embedded JWK Set is invalid", ex);
         }
+    }
+
+    private static void requireMinimumKeySize(ConfigurableJWTProcessor<SecurityContext> processor) {
+        processor.setJWSKeySelector(new MinimumRsaKeySizeSelector(processor.getJWSKeySelector()));
     }
 
     private static OAuth2AuthenticationException invalidClient(String description, Throwable cause) {

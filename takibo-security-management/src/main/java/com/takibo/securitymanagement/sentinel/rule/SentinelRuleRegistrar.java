@@ -36,6 +36,8 @@ public final class SentinelRuleRegistrar {
         registry.register(IllegalArgumentException.class, SentinelRuleHandlers::ruleIllegalArgument);
         registry.tryRegister("com.takibo.managementservice.domain.exception.InvalidClientConfigurationException",
                 SentinelRuleHandlers::ruleClientProfileInvalid);
+        registry.tryRegister("com.takibo.managementservice.domain.exception.InvalidScopeException",
+                SentinelRuleHandlers::ruleClientProfileInvalid);
         registry.tryRegister("com.takibo.managementservice.domain.exception.ClientAlreadyExistsException",
                 SentinelRuleHandlers::ruleClientAlreadyExists);
         registry.tryRegister("com.takibo.managementservice.domain.exception.OAuthClientSecretRotationConflictException",

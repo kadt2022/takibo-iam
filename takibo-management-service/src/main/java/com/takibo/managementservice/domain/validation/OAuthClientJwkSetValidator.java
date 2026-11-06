@@ -129,6 +129,12 @@ public final class OAuthClientJwkSetValidator {
                 && !key.getKeyOperations().contains(KeyOperation.VERIFY)) {
             fail("jwksJson keys must allow signature verification");
         }
+        // L'alg propre de la clé doit être un algorithme de signature qu'elle peut vérifier,
+        // indépendamment de celui du client : un jeu mixte reste admis.
+        if (key.getAlgorithm() != null
+                && !canVerify(key, key.getAlgorithm().getName())) {
+            fail("jwksJson key algorithm does not match its key");
+        }
         if (key instanceof RSAKey rsaKey) {
             rsaKey.toRSAPublicKey();
             if (rsaKey.size() < 2048) {
@@ -159,7 +165,11 @@ public final class OAuthClientJwkSetValidator {
                 )) {
             return false;
         }
-        return switch (configuredAlgorithm) {
+        return canVerify(key, configuredAlgorithm);
+    }
+
+    private static boolean canVerify(JWK key, String algorithm) {
+        return switch (algorithm) {
             case "RS256", "RS384", "RS512",
                  "PS256", "PS384", "PS512" -> key instanceof RSAKey;
             case "ES256" -> key instanceof ECKey ecKey

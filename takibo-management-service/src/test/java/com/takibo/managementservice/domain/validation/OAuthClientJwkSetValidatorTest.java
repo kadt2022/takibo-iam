@@ -473,10 +473,56 @@ class OAuthClientJwkSetValidatorTest {
 
     @Test
     void a_key_pinned_to_an_encryption_algorithm_is_not_compatible() {
+        // Refusée dès la cohérence de la clé : RSA-OAEP-256 n'est pas un algorithme de signature.
         assertRejected(
                 privateKeyJwt().idTokenSignedAlg("RS256")
                         .jwksJson(set(rsa().algorithm(JWEAlgorithm.RSA_OAEP_256).build())),
-                "jwksJson does not contain a key compatible with idTokenSignedAlg"
+                "jwksJson key algorithm does not match its key"
+        );
+    }
+
+    // ---------------------------------------------------------------
+    // jwksJson : chaque clé est cohérente avec son propre alg
+    // ---------------------------------------------------------------
+
+    @ParameterizedTest
+    @MethodSource("keysPinnedToAnAlgorithmTheyCannotVerify")
+    void a_key_pinned_to_an_algorithm_it_cannot_verify_is_refused_even_beside_a_compatible_key(JWK incoherent) {
+        assertRejected(
+                privateKeyJwt().idTokenSignedAlg("RS256")
+                        .jwksJson(set(rsa().keyID("good").build(), incoherent)),
+                "jwksJson key algorithm does not match its key"
+        );
+    }
+
+    @ParameterizedTest
+    @MethodSource("keysPinnedToAnAlgorithmTheyCannotVerify")
+    void a_key_pinned_to_an_algorithm_it_cannot_verify_is_refused_without_a_configured_algorithm(JWK incoherent) {
+        assertRejected(
+                secretClient().idTokenSignedAlg(null).jwksJson(set(incoherent)),
+                "jwksJson key algorithm does not match its key"
+        );
+    }
+
+    static Stream<Arguments> keysPinnedToAnAlgorithmTheyCannotVerify() {
+        return Stream.of(
+                Arguments.of(rsa().keyID("hmac").algorithm(JWSAlgorithm.HS256).build()),
+                Arguments.of(rsa().keyID("ec-alg").algorithm(JWSAlgorithm.ES256).build()),
+                Arguments.of(rsa().keyID("none").algorithm(com.nimbusds.jose.Algorithm.NONE).build()),
+                Arguments.of(ec(Curve.P_256).keyID("other-curve").algorithm(JWSAlgorithm.ES384).build()),
+                Arguments.of(ec(Curve.P_384).keyID("rsa-alg").algorithm(JWSAlgorithm.RS256).build())
+        );
+    }
+
+    @Test
+    void a_mixed_key_set_whose_keys_are_each_coherent_is_still_accepted() {
+        assertAccepted(
+                privateKeyJwt().idTokenSignedAlg("RS256")
+                        .jwksJson(set(
+                                rsa().keyID("rsa").algorithm(JWSAlgorithm.RS256).build(),
+                                rsa().keyID("rotation").algorithm(JWSAlgorithm.PS256).build(),
+                                ec(Curve.P_384).keyID("ec").algorithm(JWSAlgorithm.ES384).build()
+                        ))
         );
     }
 
