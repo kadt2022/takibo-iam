@@ -13,6 +13,7 @@ import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtException;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 import org.springframework.security.oauth2.server.authorization.context.AuthorizationServerContext;
@@ -87,11 +88,11 @@ class TakiboJwtClientAssertionDecoderFactoryTest {
         RegisteredClient client = registeredClient(new JWKSet(weakPublicJwk).toString());
         setAuthorizationServerContext();
         String assertion = signedAssertion(client, "weak-key", new RSASSASigner((RSAPrivateKey) weak.getPrivate(), true));
-        TakiboJwtClientAssertionDecoderFactory factory = new TakiboJwtClientAssertionDecoderFactory(JwksFetchClients.defaults());
+        JwtDecoder decoder = new TakiboJwtClientAssertionDecoderFactory(JwksFetchClients.defaults()).createDecoder(client);
 
-        assertThatThrownBy(() -> factory.createDecoder(client).decode(assertion))
+        assertThatThrownBy(() -> decoder.decode(assertion))
                 .as("une clé RSA de 1024 bits ne doit authentifier aucun client")
-                .isInstanceOfAny(OAuth2AuthenticationException.class, JwtException.class);
+                .isInstanceOf(JwtException.class);
     }
 
     @Test
