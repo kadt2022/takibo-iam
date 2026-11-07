@@ -13,6 +13,7 @@ import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtException;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 import org.springframework.security.oauth2.server.authorization.context.AuthorizationServerContext;
 import org.springframework.security.oauth2.server.authorization.context.AuthorizationServerContextHolder;
@@ -70,6 +71,27 @@ class TakiboJwtClientAssertionDecoderFactoryTest {
         assertThat(decoded.getSubject()).isEqualTo(client.getClientId());
         assertThat(decoded.getAudience()).contains(ISSUER + "/oauth2/token");
         assertThat(factory.createDecoder(client)).isSameAs(decoder);
+    }
+
+    /**
+     * Un JWK intégré enregistré avant la règle « RSA ≥ 2048 bits » reste en base : la
+     * vérification doit l'écarter au moment de l'authentification, pas seulement à
+     * l'enregistrement.
+     */
+    @Test
+    void an_embedded_rsa_key_shorter_than_2048_bits_never_verifies_an_assertion() throws Exception {
+        KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
+        generator.initialize(1024);
+        KeyPair weak = generator.generateKeyPair();
+        RSAKey weakPublicJwk = new RSAKey.Builder((RSAPublicKey) weak.getPublic()).keyID("weak-key").build();
+        RegisteredClient client = registeredClient(new JWKSet(weakPublicJwk).toString());
+        setAuthorizationServerContext();
+        String assertion = signedAssertion(client, "weak-key", new RSASSASigner((RSAPrivateKey) weak.getPrivate(), true));
+        TakiboJwtClientAssertionDecoderFactory factory = new TakiboJwtClientAssertionDecoderFactory(JwksFetchClients.defaults());
+
+        assertThatThrownBy(() -> factory.createDecoder(client).decode(assertion))
+                .as("une clé RSA de 1024 bits ne doit authentifier aucun client")
+                .isInstanceOfAny(OAuth2AuthenticationException.class, JwtException.class);
     }
 
     @Test
@@ -138,6 +160,22 @@ class TakiboJwtClientAssertionDecoderFactoryTest {
                         .setting(TakiboJwtClientAssertionDecoderFactory.JWK_SET_JSON_SETTING, jwkSetJson)
                         .build())
                 .build();
+    }
+
+    private static String signedAssertion(RegisteredClient client, String keyId, RSASSASigner signer) throws Exception {
+        Instant now = Instant.now();
+        SignedJWT assertion = new SignedJWT(
+                new JWSHeader.Builder(JWSAlgorithm.RS256).keyID(keyId).build(),
+                new JWTClaimsSet.Builder()
+                        .issuer(client.getClientId())
+                        .subject(client.getClientId())
+                        .audience(ISSUER + "/oauth2/token")
+                        .issueTime(Date.from(now))
+                        .expirationTime(Date.from(now.plusSeconds(60)))
+                        .jwtID("assertion-" + keyId)
+                        .build());
+        assertion.sign(signer);
+        return assertion.serialize();
     }
 
     private static void setAuthorizationServerContext() {
