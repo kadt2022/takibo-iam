@@ -94,8 +94,6 @@ public interface JpaUserRepository extends JpaRepository<UserEntity, UUID>, JpaS
         long getActiveUsersTotal();
     }
 
-    boolean existsBySpaceIdAndUsernameIgnoreCase(UUID spaceId, String username);
-
     boolean existsBySpaceIdAndUsernameIgnoreCaseAndIdNot(UUID spaceId, String username, UUID excludeUserId);
 
     Optional<UserEntity> findBySpaceIdAndUsername(UUID spaceId, String username);
@@ -126,12 +124,4 @@ public interface JpaUserRepository extends JpaRepository<UserEntity, UUID>, JpaS
     Optional<UserEntity> findBySpaceIdAndAccountId(UUID spaceId, UUID accountId);
 
     Page<UserEntity> findAllBySpaceId(UUID spaceId, Pageable pageable);
-
-    @Modifying
-    @Query(value = "DELETE FROM user_group_memberships WHERE user_id = :userId", nativeQuery = true)
-    void deleteUserGroups(@Param("userId") UUID userId);
-
-    @Modifying
-    @Query(value = "DELETE FROM user_roles WHERE user_id = :userId", nativeQuery = true)
-    void deleteUserRoles(@Param("userId") UUID userId);
 }

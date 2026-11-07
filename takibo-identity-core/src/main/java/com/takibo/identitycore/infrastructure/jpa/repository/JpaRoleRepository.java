@@ -33,8 +33,6 @@ public interface JpaRoleRepository extends JpaRepository<RoleEntity, UUID> {
 
     List<RoleEntity> findBySpaceIdAndCodeIn(UUID spaceId, Collection<String> codes);
 
-    List<RoleEntity> findByOrgIdAndSpaceIdAndCodeIn(UUID orgId, UUID spaceId, Collection<String> codes);
-
     @Query("select r from RoleEntity r where r.orgId = :orgId and r.spaceId = :spaceId and r.code in :codes and r.roleNature = :nature")
     List<RoleEntity> findByOrgIdAndSpaceIdAndCodeInAndRoleNature(
             @Param("orgId") UUID orgId,

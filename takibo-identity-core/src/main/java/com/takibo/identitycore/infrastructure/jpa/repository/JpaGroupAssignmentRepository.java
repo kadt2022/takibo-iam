@@ -1,6 +1,5 @@
 package com.takibo.identitycore.infrastructure.jpa.repository;
 
-import com.takibo.identitycore.domain.model.IdentityType;
 import com.takibo.identitycore.infrastructure.entity.GroupAssignmentEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -11,12 +10,6 @@ import java.util.List;
 import java.util.UUID;
 
 public interface JpaGroupAssignmentRepository extends JpaRepository<GroupAssignmentEntity, UUID> {
-
-    List<GroupAssignmentEntity> findByOrgIdAndIdentityTypeAndIdentityId(
-            UUID orgId, IdentityType identityType, UUID identityId);
-
-    List<GroupAssignmentEntity> findByOrgIdAndSpaceIdAndIdentityTypeAndIdentityId(
-            UUID orgId, UUID spaceId, IdentityType identityType, UUID identityId);
 
     /** Memberships par code (TECHNICAL/GOVERNANCE) d'un account, visibles sur le space. */
     @Query("""

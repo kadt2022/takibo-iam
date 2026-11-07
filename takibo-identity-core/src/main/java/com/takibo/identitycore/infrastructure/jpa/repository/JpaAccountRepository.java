@@ -12,7 +12,6 @@ import java.util.UUID;
 public interface JpaAccountRepository extends JpaRepository<AccountEntity, UUID> {
     Optional<AccountEntity> findByEmailIgnoreCase(String email);
 
-    boolean existsByEmailIgnoreCase(String email);
 
     Optional<AccountEntity> findByOrgIdAndEmailIgnoreCase(UUID orgId, String email);
 
