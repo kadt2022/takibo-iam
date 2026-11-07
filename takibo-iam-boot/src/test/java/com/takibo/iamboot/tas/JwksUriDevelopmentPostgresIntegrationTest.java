@@ -67,6 +67,7 @@ class JwksUriDevelopmentPostgresIntegrationTest extends TasPostgresBaseline {
 
     private TasHttpFixture fixture;
     private RSAKey clientKey;
+    private RSAKey weakClientKey;
     private HttpServer keycloakCerts;
     private final AtomicInteger certsRequests = new AtomicInteger();
 
@@ -88,6 +89,17 @@ class JwksUriDevelopmentPostgresIntegrationTest extends TasPostgresBaseline {
                 out.write(jwks);
             }
         });
+        // Clé de 1024 bits servie par la même source : la vérification doit l'écarter.
+        weakClientKey = new RSAKeyGenerator(1024, true).keyID("weak-key").generate();
+        byte[] weakJwks = new JWKSet(weakClientKey.toPublicJWK()).toString().getBytes(StandardCharsets.UTF_8);
+        keycloakCerts.createContext("/realms/weak/protocol/openid-connect/certs", exchange -> {
+            certsRequests.incrementAndGet();
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, weakJwks.length);
+            try (OutputStream out = exchange.getResponseBody()) {
+                out.write(weakJwks);
+            }
+        });
         keycloakCerts.start();
     }
 
@@ -102,10 +114,22 @@ class JwksUriDevelopmentPostgresIntegrationTest extends TasPostgresBaseline {
         insertPrivateKeyJwtClient("http://localhost:" + keycloakCerts.getAddress().getPort()
                 + "/realms/takibo/protocol/openid-connect/certs");
 
-        HttpResponse<String> response = requestTokenWithAssertion();
+        HttpResponse<String> response = requestTokenWithAssertion(clientKey);
 
         assertThat(response.statusCode()).as("réponse brute : %s", response.body()).isEqualTo(200);
         assertThat(TasHttpFixture.body(response).path("access_token").asText()).isNotBlank();
+        assertThat(certsRequests).as("clés réellement récupérées").hasValue(1);
+    }
+
+    @Test
+    void given_keys_served_by_the_jwks_uri_when_the_rsa_key_is_shorter_than_2048_bits_then_the_assertion_is_refused()
+            throws Exception {
+        insertPrivateKeyJwtClient("http://localhost:" + keycloakCerts.getAddress().getPort()
+                + "/realms/weak/protocol/openid-connect/certs");
+
+        HttpResponse<String> response = requestTokenWithAssertion(weakClientKey);
+
+        assertThat(response.statusCode()).as("réponse brute : %s", response.body()).isEqualTo(401);
         assertThat(certsRequests).as("clés réellement récupérées").hasValue(1);
     }
 
@@ -125,10 +149,10 @@ class JwksUriDevelopmentPostgresIntegrationTest extends TasPostgresBaseline {
                 """, UUID.randomUUID(), id);
     }
 
-    private HttpResponse<String> requestTokenWithAssertion() throws Exception {
+    private HttpResponse<String> requestTokenWithAssertion(RSAKey key) throws Exception {
         Instant now = Instant.now();
         SignedJWT assertion = new SignedJWT(
-                new JWSHeader.Builder(JWSAlgorithm.RS256).keyID(clientKey.getKeyID()).build(),
+                new JWSHeader.Builder(JWSAlgorithm.RS256).keyID(key.getKeyID()).build(),
                 new JWTClaimsSet.Builder()
                         .issuer(CLIENT_ID)
                         .subject(CLIENT_ID)
@@ -137,7 +161,7 @@ class JwksUriDevelopmentPostgresIntegrationTest extends TasPostgresBaseline {
                         .expirationTime(Date.from(now.plusSeconds(60)))
                         .jwtID(UUID.randomUUID().toString())
                         .build());
-        assertion.sign(new RSASSASigner(clientKey));
+        assertion.sign(new RSASSASigner(key.toRSAPrivateKey(), true));
         String form = "grant_type=client_credentials"
                 + "&client_id=" + CLIENT_ID
                 + "&client_assertion_type="
