@@ -2,13 +2,15 @@ package com.takibo.identitycore.application.auth.service;
 
 import com.takibo.identitycore.application.auth.command.LoginCommand;
 import com.takibo.identitycore.application.auth.mapper.AuthMapper;
+import com.takibo.identitycore.application.auth.model.HumanCredentials;
 import com.takibo.identitycore.application.auth.model.HumanTokenRequest;
 import com.takibo.identitycore.application.auth.model.LoginToken;
+import com.takibo.identitycore.application.auth.model.TrustedOrganizationContext;
+import com.takibo.identitycore.application.auth.model.VerifiedHuman;
 import com.takibo.identitycore.application.auth.port.HumanAccessTokenIssuer;
+import com.takibo.identitycore.application.auth.port.HumanAuthenticationCase;
 import com.takibo.identitycore.application.auth.port.HumanLoginCase;
-import com.takibo.identitycore.domain.exception.AccountLockedException;
 import com.takibo.identitycore.domain.exception.AuthenticationFailedException;
-import com.takibo.identitycore.domain.exception.InvalidCredentialsException;
 import com.takibo.identitycore.domain.exception.OrganizationNotActiveException;
 import com.takibo.identitycore.domain.exception.OrganizationNotFoundException;
 import com.takibo.identitycore.domain.exception.SpaceDisabledException;
@@ -19,33 +21,24 @@ import com.takibo.identitycore.domain.exception.UserNotActiveException;
 import com.takibo.identitycore.domain.exception.UserNotMemberOfSpaceException;
 import com.takibo.identitycore.application.rbac.effective.model.EffectiveRbac;
 import com.takibo.identitycore.application.rbac.effective.port.in.EffectiveRbacQueryCase;
-import com.takibo.identitycore.domain.model.Account;
-import com.takibo.identitycore.domain.model.AccountCredentials;
-import com.takibo.identitycore.domain.model.EmailAddress;
 import com.takibo.identitycore.domain.model.User;
-import com.takibo.identitycore.domain.repository.AccountCredentialsRepository;
-import com.takibo.identitycore.domain.repository.AccountRepository;
 import com.takibo.identitycore.domain.repository.UserRepository;
-import com.takibo.identitycore.domain.security.port.PasswordHasherCase;
 import com.takibo.identitycore.domain.status.UserStatus;
-import com.takibo.identitycore.domain.vo.OrganizationId;
+import com.takibo.identitycore.domain.vo.AccountId;
 import com.takibo.identitycore.domain.vo.SpaceId;
 import com.takibo.identitycore.integration.space.SpaceContextVerifier;
 import com.takibo.identitycore.integration.space.port.ResolvedOrgKey;
 import com.takibo.identitycore.integration.space.port.ResolvedSpaceKey;
 import com.takibo.identitycore.integration.space.port.SpaceKeyResolutionCase;
 import com.takibo.identitycore.interfaces.rest.response.LoginResponse;
-import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.Assert;
 
-import java.util.UUID;
-
 /**
- * Login humain : vérifie l'identité, puis demande la preuve au port
+ * Login humain : résout l'Organization, fait vérifier l'identité par le cœur unique
+ * {@link HumanAuthenticationCase} (TAS-GRANTS-03-A), puis demande la preuve au port
  * {@link HumanAccessTokenIssuer}. TIS-CORE ne signe rien.
  * <p>
  * Deux portées (IAM 31) :
@@ -61,10 +54,6 @@ import java.util.UUID;
  * inactive, space inaccessible, compte inconnu, mauvais mot de passe, compte verrouillé,
  * user non actif — toutes les causes convergent vers {@link AuthenticationFailedException}
  * (401 uniforme). La cause réelle vit dans les logs/audit, jamais dans la réponse.
- * <p>
- * Volontairement PAS de {@code @Transactional} de classe : l'incrément de
- * {@code failedAttempts} est persisté dans la transaction du repository et doit survivre
- * à l'exception d'authentification levée juste après.
  */
 @Service
 @RequiredArgsConstructor
@@ -73,36 +62,11 @@ public class HumanLoginService implements HumanLoginCase {
 
     private final SpaceKeyResolutionCase spaceKeyResolution;
     private final SpaceContextVerifier spaceContextVerifier;
-    private final AccountRepository accountRepository;
-    private final AccountCredentialsRepository accountCredentialsRepository;
-    private final PasswordHasherCase passwordHasher;
+    private final HumanAuthenticationCase authentication;
     private final UserRepository userRepository;
     private final EffectiveRbacQueryCase effectiveRbacQuery;
     private final HumanAccessTokenIssuer tokenIssuer;
     private final AuthMapper authMapper;
-
-    @Value("${takibo.auth.login.max-failed-attempts:5}")
-    private int maxFailedAttempts;
-
-    @Value("${takibo.auth.login.lock-seconds:900}")
-    private long lockSeconds;
-
-    /**
-     * Hash factice pour l'égalisation temporelle (revue du sage, P1) : lorsqu'aucun
-     * hash réel n'est disponible (organisation inconnue/inactive, space inaccessible,
-     * compte ou credentials absents), un matches() est quand même exécuté pour que
-     * le temps de réponse ne trahisse pas la cause. Configurable ; sinon généré UNE
-     * fois au démarrage — jamais par requête.
-     */
-    @Value("${takibo.auth.login.dummy-password-hash:}")
-    private String dummyPasswordHash;
-
-    @PostConstruct
-    void initDummyPasswordHash() {
-        if (dummyPasswordHash == null || dummyPasswordHash.isBlank()) {
-            dummyPasswordHash = passwordHasher.hash("takibo-dummy-" + UUID.randomUUID());
-        }
-    }
 
     @Override
     public LoginResponse login(LoginCommand command) {
@@ -115,19 +79,18 @@ public class HumanLoginService implements HumanLoginCase {
                  | SpaceGuardException ex) {
             // Échec de résolution AVANT toute lecture de credentials : le coût du
             // hash n'a pas été payé — on l'égalise pour fermer l'oracle temporel.
-            performDummyPasswordCheck(command.password());
+            authentication.equalizeFailedAttempt(credentialsOf(command));
             log.warn("Login refused cause={} detail={}", ex.getClass().getSimpleName(), ex.getMessage());
             throw new AuthenticationFailedException();
-        } catch (InvalidCredentialsException | AccountLockedException
-                 | UserNotMemberOfSpaceException | UserNotActiveException ex) {
+        } catch (UserNotMemberOfSpaceException | UserNotActiveException ex) {
             // Réponse externe unique ; la cause réelle reste côté serveur (logs + audit).
             log.warn("Login refused cause={} detail={}", ex.getClass().getSimpleName(), ex.getMessage());
             throw new AuthenticationFailedException();
         }
     }
 
-    private void performDummyPasswordCheck(String rawPassword) {
-        passwordHasher.matches(rawPassword, dummyPasswordHash);
+    private static HumanCredentials credentialsOf(LoginCommand command) {
+        return new HumanCredentials(command.email(), command.password());
     }
 
     private boolean hasSpaceCode(LoginCommand command) {
@@ -138,14 +101,13 @@ public class HumanLoginService implements HumanLoginCase {
     private LoginResponse loginOrganizationScoped(LoginCommand command) {
         ResolvedOrgKey key = spaceKeyResolution.resolveActiveOrganization(command.orgCode());
 
-        Account account = verifyAccountCredentials(key.orgId(), command.email(), command.password());
+        VerifiedHuman human = authentication.authenticate(TrustedOrganizationContext.from(key), credentialsOf(command));
 
-        EffectiveRbac effective = effectiveRbacQuery.effectiveOrgFor(
-                key.orgId(), account.getId().getValue());
+        EffectiveRbac effective = effectiveRbacQuery.effectiveOrgFor(key.orgId(), human.accountId());
 
         HumanTokenRequest tokenRequest = HumanTokenRequest.organizationScoped(
                 key.orgId(),
-                account.getId().getValue(),
+                human.accountId(),
                 effective.roles(),
                 effective.groups(),
                 effective.permissions()
@@ -154,7 +116,7 @@ public class HumanLoginService implements HumanLoginCase {
         LoginToken token = tokenIssuer.issue(tokenRequest);
 
         log.info("Human login succeeded scope=ORGANIZATION orgId={} accountId={}",
-                key.orgId(), account.getId());
+                key.orgId(), human.accountId());
 
         return authMapper.toLoginResponse(token, tokenRequest);
     }
@@ -165,11 +127,12 @@ public class HumanLoginService implements HumanLoginCase {
         ResolvedSpaceKey key = spaceKeyResolution.resolve(command.orgCode(), command.spaceCode());
         spaceContextVerifier.validateSpaceContext(key.spaceId());
 
-        // 2) Identité : account org-scoped, credentials, verrouillage, mot de passe.
-        Account account = verifyAccountCredentials(key.orgId(), command.email(), command.password());
+        // 2) Identité : cœur unique, dans l'Organization du space résolu.
+        VerifiedHuman human = authentication.authenticate(TrustedOrganizationContext.from(key), credentialsOf(command));
+        AccountId accountId = new AccountId(human.accountId());
 
         // 3) Situation : pas de token SPACE sans user local dans le space demandé.
-        User user = userRepository.findBySpaceAndAccount(new SpaceId(key.spaceId()), account.getId())
+        User user = userRepository.findBySpaceAndAccount(new SpaceId(key.spaceId()), accountId)
                 .orElseThrow(() -> new UserNotMemberOfSpaceException(key.spaceId()));
 
         // 3b) Le statut du user est une frontière d'accès : seul ACTIVE reçoit une preuve.
@@ -181,12 +144,12 @@ public class HumanLoginService implements HumanLoginCase {
 
         // 4) Snapshot borné du pouvoir effectif au moment de l'authentification.
         EffectiveRbac effective = effectiveRbacQuery.effectiveFor(
-                key.orgId(), key.spaceId(), account.getId().getValue());
+                key.orgId(), key.spaceId(), human.accountId());
 
         HumanTokenRequest tokenRequest = HumanTokenRequest.spaceScoped(
                 key.orgId(),
                 key.spaceId(),
-                account.getId().getValue(),
+                human.accountId(),
                 user.getId().value(),
                 effective.roles(),
                 effective.groups(),
@@ -196,48 +159,8 @@ public class HumanLoginService implements HumanLoginCase {
         LoginToken token = tokenIssuer.issue(tokenRequest);
 
         log.info("Human login succeeded scope=SPACE orgId={} spaceId={} accountId={} userId={}",
-                key.orgId(), key.spaceId(), account.getId(), user.getId().value());
+                key.orgId(), key.spaceId(), human.accountId(), user.getId().value());
 
         return authMapper.toLoginResponse(token, tokenRequest);
-    }
-
-    /**
-     * Vérification d'identité commune aux deux portées : account org-scoped,
-     * credentials présents, verrouillage, mot de passe, compteur d'échecs.
-     * Toutes les causes credentials lèvent la même {@link InvalidCredentialsException}.
-     */
-    private Account verifyAccountCredentials(UUID orgId, String rawEmail, String rawPassword) {
-        EmailAddress email = new EmailAddress(rawEmail);
-        Account account = accountRepository.findByEmail(new OrganizationId(orgId), email)
-                .orElseThrow(() -> {
-                    performDummyPasswordCheck(rawPassword);
-                    return new InvalidCredentialsException();
-                });
-
-        AccountCredentials credentials = accountCredentialsRepository
-                .find(new OrganizationId(orgId), account.getId())
-                .orElseThrow(() -> {
-                    performDummyPasswordCheck(rawPassword);
-                    return new InvalidCredentialsException();
-                });
-
-        if (credentials.isLocked()) {
-            log.warn("Login refused: account locked accountId={} orgId={}", account.getId(), orgId);
-            throw new AccountLockedException();
-        }
-
-        if (!passwordHasher.matches(rawPassword, credentials.getPasswordHash().getHash())) {
-            accountCredentialsRepository.save(
-                    credentials.registerFailure(maxFailedAttempts, lockSeconds), orgId);
-            log.warn("Login failed: bad password accountId={} orgId={} attempts={}",
-                    account.getId(), orgId, credentials.getFailedAttempts() + 1);
-            throw new InvalidCredentialsException();
-        }
-
-        if (credentials.getFailedAttempts() > 0 || credentials.getLockedUntil() != null) {
-            accountCredentialsRepository.save(credentials.registerSuccess(), orgId);
-        }
-
-        return account;
     }
 }

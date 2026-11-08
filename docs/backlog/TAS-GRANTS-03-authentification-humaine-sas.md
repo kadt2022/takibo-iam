@@ -1,10 +1,43 @@
 # TAS-GRANTS-03 — Authentification humaine SAS et session navigateur
 
-**Statut :** À faire  
-**Branche :** `feat/tas-human-authentication-03`  
+**Statut :** EN COURS — 03-A en cours, 03-B à faire  
+**Branches :** `feat/tas-human-authentication-03a` (03-A), `feat/tas-human-authentication-03b` (03-B)  
 **Dépendances :** TAS-GRANTS-02, résolution client/tenant de TAS-GRANTS-01, TIS-Core stable — notamment IAM-31  
 **Précède :** TAS-GRANTS-04 — Authorization Code + PKCE  
 **Doctrine révisée :** Organization = frontière d'identité forte ; aucun Principal global ni lookup cross-Organization.
+
+---
+
+## Découpage et décisions du Capitaine (novembre 2026)
+
+Le récit est livré en deux sous-récits, chacun avec sa PR ; 03-B dépend de 03-A.
+
+| Sous-récit | Périmètre | Nouvelles dépendances / schéma |
+|---|---|---|
+| **03-A** | Cœur TIS-Core `HumanAuthenticationCase` (§7), réutilisé par `POST /api/v1/auth/login` sans changement de contrat | aucune (ArchUnit en test seulement) ; aucune migration |
+| **03-B** | Session navigateur (§8–§13), page `/signin`, sources de contexte, thème, logout, observabilité | Thymeleaf, Spring Session JDBC, migration Flyway des tables de session |
+
+Décisions approuvées, qui précisent les sections concernées :
+
+- **Trois vérifications distinctes.** Résoudre l'Organization, autoriser le client OAuth dans
+  cette Organization et authentifier l'Account sont trois contrôles indépendants ; réussir
+  l'un ne prouve jamais un autre.
+- **Sources du contexte Organization (§6.1), en 03-B.** *S1 — lié au client* : client de plan
+  ORGANIZATION ou SPACE, `orgId` lu dans le registre TMS. *S2 — identifié par l'utilisateur* :
+  l'utilisateur saisit l'identifiant de son Organization, TAKIBO le résout côté serveur et le
+  conserve en session avant d'afficher le formulaire de credentials. Une Organization inconnue
+  ou inactive ne se révèle pas : l'échec final est uniforme, au même coût de hash. S2 résout
+  une valeur saisie ; elle n'*authentifie* pas l'Organization (§6.2).
+- **Clients PLATFORM.** Refusés pour l'authentification humaine de ce récit (échec sécurisé,
+  erreur de protocole). Leur signification ne change pas.
+- **Routes.** `/signin` et `/signout` : `/login` appartient à l'interface React.
+- **Session.** 30 minutes d'inactivité, 8 heures au maximum, configurables. Une session porte
+  un seul Account situé dans une Organization ; changer d'Organization impose une nouvelle
+  authentification, et la session d'ORG-A ne prouve rien pour ORG-B.
+- **Après un login réussi.** Une page minimale de confirmation, avant l'intégration OAuth (04).
+- **Époque de sécurité (§21).** Étudiée et décidée dans TAS-GRANTS-04 ; 03 n'en crée aucune.
+- **Client multi-organisation.** Question ouverte pour 04 et la migration de TAKIBO UI : ni
+  nouveau plan, ni réutilisation de PLATFORM pour les utilisateurs de toutes les Organizations.
 
 ---
 
