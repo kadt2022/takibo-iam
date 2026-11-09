@@ -32,11 +32,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -76,7 +76,7 @@ class HumanLoginServiceTest {
     @Mock private HumanAccessTokenIssuer tokenIssuer;
     @Mock private AuthMapper authMapper;
 
-    @InjectMocks
+    private HumanAuthenticationService authentication;
     private HumanLoginService service;
 
     private Account account;
@@ -86,9 +86,15 @@ class HumanLoginServiceTest {
 
     @BeforeEach
     void setUp() {
-        ReflectionTestUtils.setField(service, "maxFailedAttempts", 5);
-        ReflectionTestUtils.setField(service, "lockSeconds", 900L);
-        ReflectionTestUtils.setField(service, "dummyPasswordHash", DUMMY_HASH);
+        // TAS-GRANTS-03-A : le login REST passe par le cœur réel d'authentification, câblé sur
+        // les mêmes mocks ; ses assertions inchangées prouvent que son contrat n'a pas bougé.
+        authentication = new HumanAuthenticationService(accountRepository, accountCredentialsRepository,
+                passwordHasher, Clock.systemUTC());
+        ReflectionTestUtils.setField(authentication, "maxFailedAttempts", 5);
+        ReflectionTestUtils.setField(authentication, "lockSeconds", 900L);
+        ReflectionTestUtils.setField(authentication, "dummyPasswordHash", DUMMY_HASH);
+        service = new HumanLoginService(spaceKeyResolution, spaceContextVerifier, authentication,
+                userRepository, effectiveRbacQuery, tokenIssuer, authMapper);
 
         account = Account.create(new EmailAddress(EMAIL), null, null, Map.of()).withOrgId(ORG_ID);
         credentials = AccountCredentials.create(account.getId(), PasswordHash.of("$2a$hash", "bcrypt", 1));
@@ -415,17 +421,5 @@ class HumanLoginServiceTest {
 
         verify(passwordHasher).matches(PASSWORD, DUMMY_HASH);
         verify(tokenIssuer, never()).issue(any());
-    }
-
-    @Test
-    void dummyHash_isGeneratedOnceAtStartup_whenNotConfigured() {
-        ReflectionTestUtils.setField(service, "dummyPasswordHash", "");
-        when(passwordHasher.hash(any())).thenReturn("$2a$generated-once");
-
-        service.initDummyPasswordHash();
-
-        assertThat(ReflectionTestUtils.getField(service, "dummyPasswordHash"))
-                .isEqualTo("$2a$generated-once");
-        verify(passwordHasher).hash(any());
     }
 }
