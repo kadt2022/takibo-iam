@@ -9,8 +9,11 @@ import com.takibo.identitycore.domain.exception.AuthenticationFailedException;
 import com.takibo.identitycore.domain.model.Account;
 import com.takibo.identitycore.domain.model.AccountCredentials;
 import com.takibo.identitycore.domain.model.EmailAddress;
+import com.takibo.identitycore.domain.model.IdentityStatus;
+import com.takibo.identitycore.domain.model.TakiboIdentity;
 import com.takibo.identitycore.domain.repository.AccountCredentialsRepository;
 import com.takibo.identitycore.domain.repository.AccountRepository;
+import com.takibo.identitycore.domain.repository.TakiboIdentityRepository;
 import com.takibo.identitycore.domain.security.port.PasswordHasherCase;
 import com.takibo.identitycore.domain.vo.OrganizationId;
 import jakarta.annotation.PostConstruct;
@@ -27,9 +30,10 @@ import java.util.UUID;
 /**
  * Vérification des credentials humains dans une Organization déjà résolue (TAS-GRANTS-03-A).
  * <p>
- * L'Account et ses credentials ne sont cherchés que dans l'Organization du contexte : un même
- * email dans une autre Organization n'entre jamais dans la décision. Toutes les causes d'échec
- * lèvent la même {@link AuthenticationFailedException} ; la cause réelle ne vit que dans les
+ * L'Account, ses credentials et son identité ne sont cherchés que dans l'Organization du
+ * contexte : un même email dans une autre Organization n'entre jamais dans la décision. Une
+ * identité absente, suspendue ou désactivée n'obtient aucune preuve (IAM-REVOKE-01).
+ * Toutes les causes d'échec lèvent la même {@link AuthenticationFailedException} ; la cause réelle ne vit que dans les
  * journaux, et un hash factice égalise le temps de réponse quand aucun hash réel n'existe.
  * <p>
  * Volontairement PAS de {@code @Transactional} : l'incrément de {@code failedAttempts} est
@@ -43,6 +47,7 @@ public class HumanAuthenticationService implements HumanAuthenticationCase {
     private final AccountRepository accountRepository;
     private final AccountCredentialsRepository accountCredentialsRepository;
     private final PasswordHasherCase passwordHasher;
+    private final TakiboIdentityRepository takiboIdentityRepository;
     private final Clock clock;
 
     @Value("${takibo.auth.login.max-failed-attempts:5}")
@@ -93,11 +98,20 @@ public class HumanAuthenticationService implements HumanAuthenticationCase {
                     account.get().getId(), orgId, current.getFailedAttempts() + 1);
             throw new AuthenticationFailedException();
         }
+        // IAM-REVOKE-01 : une identité absente ou non ACTIVE n'obtient aucune preuve. Contrôle
+        // placé après le mot de passe : le coût du hash est déjà payé, aucun oracle temporel ; le
+        // refus ne touche pas au compteur d'échecs.
+        UUID accountId = account.get().getId().getValue();
+        Optional<TakiboIdentity> identity = takiboIdentityRepository.findByOrgIdAndAccountId(orgId, accountId);
+        if (identity.isEmpty() || identity.get().getIdentityStatus() != IdentityStatus.ACTIVE) {
+            log.warn("Human authentication refused cause=identity not active status={} accountId={} orgId={}",
+                    identity.map(TakiboIdentity::getIdentityStatus).map(Enum::name).orElse("ABSENT"), accountId, orgId);
+            throw new AuthenticationFailedException();
+        }
         if (current.getFailedAttempts() > 0 || current.getLockedUntil() != null) {
             accountCredentialsRepository.save(current.registerSuccess(), orgId);
         }
-        return new VerifiedHuman(orgId, account.get().getId().getValue(), AuthenticationMethod.PASSWORD,
-                clock.instant());
+        return new VerifiedHuman(orgId, accountId, AuthenticationMethod.PASSWORD, clock.instant());
     }
 
     @Override

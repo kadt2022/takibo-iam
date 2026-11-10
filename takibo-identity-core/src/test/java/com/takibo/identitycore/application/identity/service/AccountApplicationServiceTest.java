@@ -4,8 +4,12 @@ import com.takibo.identitycore.domain.exception.PasswordPolicyViolationException
 import com.takibo.identitycore.domain.model.Account;
 import com.takibo.identitycore.domain.model.AccountCredentials;
 import com.takibo.identitycore.domain.model.EmailAddress;
+import com.takibo.identitycore.domain.model.IdentityStatus;
+import com.takibo.identitycore.domain.model.IdentityType;
+import com.takibo.identitycore.domain.model.TakiboIdentity;
 import com.takibo.identitycore.domain.repository.AccountCredentialsRepository;
 import com.takibo.identitycore.domain.repository.AccountRepository;
+import com.takibo.identitycore.domain.repository.TakiboIdentityRepository;
 import com.takibo.identitycore.domain.security.policy.password.PasswordPolicy;
 import com.takibo.identitycore.domain.security.port.PasswordHasherCase;
 import com.takibo.identitycore.domain.vo.AccountId;
@@ -41,6 +45,7 @@ class AccountApplicationServiceTest {
     @Mock private AccountCredentialsRepository accountCredentialsRepository;
     @Mock private PasswordPolicy passwordPolicy;
     @Mock private PasswordHasherCase passwordHasherCase;
+    @Mock private TakiboIdentityRepository takiboIdentityRepository;
 
     @InjectMocks
     private AccountApplicationService service;
@@ -98,5 +103,60 @@ class AccountApplicationServiceTest {
 
         assertThat(response.id()).isEqualTo(account.getValue().getId().getValue());
         assertThat(response.email()).isEqualTo("jane@example.com");
+    }
+
+    // ---------- IAM-REVOKE-01 : tout Account humain a son identité, par construction ----------
+
+    @Test
+    void a_new_account_receives_exactly_one_active_human_identity_in_the_same_operation() {
+        when(passwordPolicy.isValid(RAW_PASSWORD)).thenReturn(true);
+        when(accountRepository.findByEmail(any(OrganizationId.class), any(EmailAddress.class)))
+                .thenReturn(Optional.empty());
+        when(accountRepository.save(any(Account.class))).thenAnswer(i -> i.getArgument(0));
+        when(passwordHasherCase.hash(RAW_PASSWORD)).thenReturn("$2a$10$hash");
+
+        AccountResponse response = service.createAccountInOrg(ORG_UUID, "jane@example.com", RAW_PASSWORD);
+
+        ArgumentCaptor<TakiboIdentity> identity = ArgumentCaptor.forClass(TakiboIdentity.class);
+        verify(takiboIdentityRepository).save(identity.capture());
+        assertThat(identity.getValue().getOrgId()).isEqualTo(OrganizationId.of(ORG_UUID));
+        assertThat(identity.getValue().getAccountId().getValue()).isEqualTo(response.id());
+        assertThat(identity.getValue().getId().getValue()).isEqualTo(response.id());
+        assertThat(identity.getValue().getIdentityType()).isEqualTo(IdentityType.HUMAN);
+        assertThat(identity.getValue().getIdentityStatus()).isEqualTo(IdentityStatus.ACTIVE);
+    }
+
+    @Test
+    void an_existing_account_without_identity_has_it_repaired() {
+        when(passwordPolicy.isValid(RAW_PASSWORD)).thenReturn(true);
+        when(accountRepository.findByEmail(OrganizationId.of(ORG_UUID), new EmailAddress("jane@example.com")))
+                .thenReturn(Optional.of(existingAccount()));
+        when(takiboIdentityRepository.existsByOrgIdAndAccountId(ORG_UUID, ACCOUNT_UUID)).thenReturn(false);
+
+        service.createAccountInOrg(ORG_UUID, "jane@example.com", RAW_PASSWORD);
+
+        ArgumentCaptor<TakiboIdentity> identity = ArgumentCaptor.forClass(TakiboIdentity.class);
+        verify(takiboIdentityRepository).save(identity.capture());
+        assertThat(identity.getValue().getAccountId().getValue()).isEqualTo(ACCOUNT_UUID);
+        assertThat(identity.getValue().getIdentityStatus()).isEqualTo(IdentityStatus.ACTIVE);
+    }
+
+    @Test
+    void an_existing_identity_is_never_duplicated_nor_reactivated() {
+        when(passwordPolicy.isValid(RAW_PASSWORD)).thenReturn(true);
+        when(accountRepository.findByEmail(OrganizationId.of(ORG_UUID), new EmailAddress("jane@example.com")))
+                .thenReturn(Optional.of(existingAccount()));
+        when(takiboIdentityRepository.existsByOrgIdAndAccountId(ORG_UUID, ACCOUNT_UUID)).thenReturn(true);
+
+        service.createAccountInOrg(ORG_UUID, "jane@example.com", RAW_PASSWORD);
+
+        verify(takiboIdentityRepository, never()).save(any());
+    }
+
+    private static Account existingAccount() {
+        return Account.builder()
+                .id(AccountId.of(ACCOUNT_UUID)).orgId(ORG_UUID)
+                .email(new EmailAddress("jane@example.com"))
+                .build();
     }
 }

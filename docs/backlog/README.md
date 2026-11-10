@@ -131,7 +131,7 @@ Comment une organisation entre dans TAKIBO, et comment son premier compte s'auth
 | [ORG-REG-01](RECIT-ORG-REG-01-demande-inscription-FINAL-v3.md) | Créer une demande publique d'inscription d'organisation | à faire |
 | [ORG-REG-02](RECIT-ORG-REG-02-verification-provisioning-FINAL-sans-userId.md) | Vérifier le courriel et provisionner l'organisation fondatrice | à faire |
 | [ORG-SPACE-01](RECIT-ORG-SPACE-01-onboarding-premier-space-FINAL-userId.md) | Onboarding sans Space, puis création volontaire du premier Space | à faire |
-| [IAM-REVOKE-01](IAM-REVOKE-01-identite-revoquee-sans-preuve.md) | Une identité révoquée n'obtient plus de preuve d'authentification | à faire |
+| [IAM-REVOKE-01](IAM-REVOKE-01-identite-revoquee-sans-preuve.md) | Une identité révoquée n'obtient plus de preuve d'authentification | en cours |
 
 Contrat de référence des trois récits d'inscription :
 [TAKIBO-REST-Organization-Registration-Contract.md](TAKIBO-REST-Organization-Registration-Contract.md).

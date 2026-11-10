@@ -57,8 +57,11 @@ class ScopedForeignKeySetNullIntegrationTest extends TasPostgresBaseline {
             UUID.fromString("bbbbbbbb-0000-0000-0000-0000000000d3");
     private static final UUID CREDENTIAL_ACCOUNT_ID =
             UUID.fromString("cccccccc-0000-0000-0000-0000000000d4");
-    private static final UUID IDENTITY_ID =
-            UUID.fromString("eeeeeeee-0000-0000-0000-0000000000d5");
+    /**
+     * IAM-REVOKE-01 : le socle donne à son Account son identité ACTIVE (identity_id = account_id) ;
+     * les tests s'appuient sur elle au lieu d'en insérer une seconde pour le même Account.
+     */
+    private static final UUID IDENTITY_ID = TasBaselineDataset.ACCOUNT_ID;
     private static final UUID UNKNOWN_SPACE_ID =
             UUID.fromString("ffffffff-0000-0000-0000-0000000000d6");
 
@@ -160,7 +163,6 @@ class ScopedForeignKeySetNullIntegrationTest extends TasPostgresBaseline {
 
     @Test
     void given_an_observation_on_an_identity_when_the_identity_is_deleted_then_the_observation_survives_without_it() {
-        insertIdentity(IDENTITY_ID, TasBaselineDataset.ORG_ID, TasBaselineDataset.ACCOUNT_ID);
         UUID observationId = insertObservation(
                 TasBaselineDataset.ORG_ID, null, TasBaselineDataset.ACCOUNT_ID);
 
@@ -195,7 +197,6 @@ class ScopedForeignKeySetNullIntegrationTest extends TasPostgresBaseline {
 
     @Test
     void given_an_identity_key_when_its_credential_account_is_deleted_then_the_key_survives_without_it() {
-        insertIdentity(IDENTITY_ID, TasBaselineDataset.ORG_ID, TasBaselineDataset.ACCOUNT_ID);
         insertAccount(CREDENTIAL_ACCOUNT_ID, TasBaselineDataset.ORG_ID, "credential@takibo.test");
         UUID keyId = insertIdentityKey(
                 TasBaselineDataset.ORG_ID, TasBaselineDataset.ACCOUNT_ID, CREDENTIAL_ACCOUNT_ID);
@@ -239,14 +240,6 @@ class ScopedForeignKeySetNullIntegrationTest extends TasPostgresBaseline {
                 INSERT INTO accounts (id, org_id, email, display_name)
                 VALUES (?, ?, ?, ?)
                 """, accountId, orgId, email, email);
-    }
-
-    private void insertIdentity(UUID identityId, UUID orgId, UUID accountId) {
-        jdbc.update("""
-                INSERT INTO takibo_identities (
-                    identity_id, org_id, account_id, identity_type, identity_status)
-                VALUES (?, ?, ?, 'HUMAN', 'ACTIVE')
-                """, identityId, orgId, accountId);
     }
 
     private UUID insertIdentityKey(UUID orgId, UUID accountId, UUID credentialAccountId) {
