@@ -57,6 +57,7 @@ final class TasBaselineDataset {
         clear();
         insertOrganization();
         insertAccount();
+        insertIdentity();
         insertSpace();
         insertAccountCredentials();
         insertSpaceClient();
@@ -113,6 +114,14 @@ final class TasBaselineDataset {
                 INSERT INTO accounts (id, org_id, email, display_name)
                 VALUES (?, ?, ?, ?)
                 """, ACCOUNT_ID, ORG_ID, ACCOUNT_EMAIL, "Baseline Account");
+    }
+
+    /** IAM-REVOKE-01 : un Account humain authentifiable a toujours son identité ACTIVE. */
+    private void insertIdentity() {
+        jdbc.update("""
+                INSERT INTO takibo_identities (identity_id, org_id, account_id, identity_type, identity_status)
+                VALUES (?, ?, ?, 'HUMAN', 'ACTIVE')
+                """, ACCOUNT_ID, ORG_ID, ACCOUNT_ID);
     }
 
     private void insertSpace() {

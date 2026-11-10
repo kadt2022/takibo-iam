@@ -8,11 +8,14 @@ import com.takibo.identitycore.domain.exception.AuthenticationFailedException;
 import com.takibo.identitycore.domain.model.Account;
 import com.takibo.identitycore.domain.model.AccountCredentials;
 import com.takibo.identitycore.domain.model.EmailAddress;
+import com.takibo.identitycore.domain.model.TakiboIdentity;
 import com.takibo.identitycore.domain.repository.AccountCredentialsRepository;
 import com.takibo.identitycore.domain.repository.AccountRepository;
+import com.takibo.identitycore.domain.repository.TakiboIdentityRepository;
 import com.takibo.identitycore.domain.security.port.PasswordHasherCase;
 import com.takibo.identitycore.domain.vo.OrganizationId;
 import com.takibo.identitycore.domain.vo.PasswordHash;
+import com.takibo.identitycore.domain.vo.TakiboIdentityId;
 import com.takibo.identitycore.integration.space.port.ResolvedOrgKey;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -59,6 +62,7 @@ class HumanAuthenticationServiceTest {
     @Mock private AccountRepository accountRepository;
     @Mock private AccountCredentialsRepository accountCredentialsRepository;
     @Mock private PasswordHasherCase passwordHasher;
+    @Mock private TakiboIdentityRepository takiboIdentityRepository;
 
     private HumanAuthenticationService service;
     private Account accountA;
@@ -67,7 +71,7 @@ class HumanAuthenticationServiceTest {
     @BeforeEach
     void setUp() {
         service = new HumanAuthenticationService(accountRepository, accountCredentialsRepository, passwordHasher,
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                takiboIdentityRepository, Clock.fixed(NOW, ZoneOffset.UTC));
         ReflectionTestUtils.setField(service, "maxFailedAttempts", 5);
         ReflectionTestUtils.setField(service, "lockSeconds", 900L);
         ReflectionTestUtils.setField(service, "dummyPasswordHash", DUMMY_HASH);
@@ -81,6 +85,7 @@ class HumanAuthenticationServiceTest {
     @Test
     void valid_credentials_in_the_trusted_organization_yield_a_verified_human_situated_in_it() {
         givenAccount(ORG_A, accountA, credentials(accountA, HASH_A));
+        givenIdentity(ORG_A, accountA, active(ORG_A, accountA));
         when(passwordHasher.matches(PASSWORD_A, HASH_A)).thenReturn(true);
 
         VerifiedHuman verified = service.authenticate(contextOf(ORG_A), new HumanCredentials(EMAIL, PASSWORD_A));
@@ -95,6 +100,7 @@ class HumanAuthenticationServiceTest {
     @Test
     void a_success_after_previous_failures_resets_the_failure_counter_of_this_organization() {
         givenAccount(ORG_A, accountA, credentials(accountA, HASH_A).toBuilder().failedAttempts(2).build());
+        givenIdentity(ORG_A, accountA, active(ORG_A, accountA));
         when(passwordHasher.matches(PASSWORD_A, HASH_A)).thenReturn(true);
 
         service.authenticate(contextOf(ORG_A), new HumanCredentials(EMAIL, PASSWORD_A));
@@ -164,6 +170,7 @@ class HumanAuthenticationServiceTest {
     @Test
     void the_account_is_only_ever_searched_in_the_trusted_organization() {
         givenAccount(ORG_A, accountA, credentials(accountA, HASH_A));
+        givenIdentity(ORG_A, accountA, active(ORG_A, accountA));
         when(passwordHasher.matches(PASSWORD_A, HASH_A)).thenReturn(true);
 
         service.authenticate(contextOf(ORG_A), new HumanCredentials(EMAIL, PASSWORD_A));
@@ -189,6 +196,8 @@ class HumanAuthenticationServiceTest {
     void the_same_email_authenticates_each_account_only_in_its_own_organization() {
         givenAccount(ORG_A, accountA, credentials(accountA, HASH_A));
         givenAccount(ORG_B, accountB, credentials(accountB, HASH_B));
+        givenIdentity(ORG_A, accountA, active(ORG_A, accountA));
+        givenIdentity(ORG_B, accountB, active(ORG_B, accountB));
         when(passwordHasher.matches(PASSWORD_A, HASH_A)).thenReturn(true);
         when(passwordHasher.matches("Passw0rd!OfB", HASH_B)).thenReturn(true);
 
@@ -200,6 +209,70 @@ class HumanAuthenticationServiceTest {
         assertThat(inB.orgId()).isEqualTo(ORG_B);
         assertThat(inB.accountId()).isEqualTo(accountB.getId().getValue());
         assertThat(inA.accountId()).isNotEqualTo(inB.accountId());
+    }
+
+    // ---------- IAM-REVOKE-01 : identité révoquée ou absente ----------
+
+    @Test
+    void a_suspended_identity_with_the_right_password_fails_uniformly_and_leaves_the_counter_untouched() {
+        givenAccount(ORG_A, accountA, credentials(accountA, HASH_A).toBuilder().failedAttempts(2).build());
+        givenIdentity(ORG_A, accountA, active(ORG_A, accountA).suspend());
+        when(passwordHasher.matches(PASSWORD_A, HASH_A)).thenReturn(true);
+
+        assertUniformFailure(() -> service.authenticate(contextOf(ORG_A), new HumanCredentials(EMAIL, PASSWORD_A)));
+
+        verify(passwordHasher).matches(PASSWORD_A, HASH_A);
+        verify(accountCredentialsRepository, never()).save(any(), any());
+    }
+
+    @Test
+    void a_disabled_identity_with_the_right_password_fails_uniformly() {
+        givenAccount(ORG_A, accountA, credentials(accountA, HASH_A));
+        givenIdentity(ORG_A, accountA, active(ORG_A, accountA).disable());
+        when(passwordHasher.matches(PASSWORD_A, HASH_A)).thenReturn(true);
+
+        assertUniformFailure(() -> service.authenticate(contextOf(ORG_A), new HumanCredentials(EMAIL, PASSWORD_A)));
+
+        verify(passwordHasher).matches(PASSWORD_A, HASH_A);
+        verify(accountCredentialsRepository, never()).save(any(), any());
+    }
+
+    @Test
+    void an_absent_identity_with_the_right_password_fails_uniformly() {
+        givenAccount(ORG_A, accountA, credentials(accountA, HASH_A));
+        when(takiboIdentityRepository.findByOrgIdAndAccountId(ORG_A, accountA.getId().getValue()))
+                .thenReturn(Optional.empty());
+        when(passwordHasher.matches(PASSWORD_A, HASH_A)).thenReturn(true);
+
+        assertUniformFailure(() -> service.authenticate(contextOf(ORG_A), new HumanCredentials(EMAIL, PASSWORD_A)));
+
+        verify(passwordHasher).matches(PASSWORD_A, HASH_A);
+        verify(accountCredentialsRepository, never()).save(any(), any());
+    }
+
+    @Test
+    void a_wrong_password_is_still_counted_whatever_the_identity_status() {
+        givenAccount(ORG_A, accountA, credentials(accountA, HASH_A));
+        lenientIdentity(ORG_A, accountA, active(ORG_A, accountA).disable());
+        when(passwordHasher.matches("wrong", HASH_A)).thenReturn(false);
+
+        assertUniformFailure(() -> service.authenticate(contextOf(ORG_A), new HumanCredentials(EMAIL, "wrong")));
+
+        ArgumentCaptor<AccountCredentials> saved = ArgumentCaptor.forClass(AccountCredentials.class);
+        verify(accountCredentialsRepository).save(saved.capture(), eq(ORG_A));
+        assertThat(saved.getValue().getFailedAttempts()).isEqualTo(1);
+    }
+
+    @Test
+    void the_identity_is_only_read_in_the_trusted_organization() {
+        givenAccount(ORG_A, accountA, credentials(accountA, HASH_A));
+        givenIdentity(ORG_A, accountA, active(ORG_A, accountA));
+        when(passwordHasher.matches(PASSWORD_A, HASH_A)).thenReturn(true);
+
+        service.authenticate(contextOf(ORG_A), new HumanCredentials(EMAIL, PASSWORD_A));
+
+        verify(takiboIdentityRepository).findByOrgIdAndAccountId(ORG_A, accountA.getId().getValue());
+        verifyNoMoreInteractions(takiboIdentityRepository);
     }
 
     // ---------- Contrat des valeurs ----------
@@ -232,6 +305,22 @@ class HumanAuthenticationServiceTest {
 
     private static AccountCredentials credentials(Account account, String hash) {
         return AccountCredentials.create(account.getId(), PasswordHash.of(hash, "bcrypt", 1));
+    }
+
+    private static TakiboIdentity active(UUID orgId, Account account) {
+        return TakiboIdentity.createHuman(TakiboIdentityId.of(account.getId().getValue()),
+                new OrganizationId(orgId), account.getId());
+    }
+
+    private void givenIdentity(UUID orgId, Account account, TakiboIdentity identity) {
+        when(takiboIdentityRepository.findByOrgIdAndAccountId(orgId, account.getId().getValue()))
+                .thenReturn(Optional.of(identity));
+    }
+
+    /** Identité présente, mais que le parcours testé n'a pas besoin de lire. */
+    private void lenientIdentity(UUID orgId, Account account, TakiboIdentity identity) {
+        org.mockito.Mockito.lenient().when(takiboIdentityRepository.findByOrgIdAndAccountId(orgId, account.getId().getValue()))
+                .thenReturn(Optional.of(identity));
     }
 
     private void givenAccount(UUID orgId, Account account, AccountCredentials credentials) {

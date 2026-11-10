@@ -15,13 +15,17 @@ import com.takibo.identitycore.domain.exception.SpaceNotFoundException;
 import com.takibo.identitycore.domain.model.Account;
 import com.takibo.identitycore.domain.model.AccountCredentials;
 import com.takibo.identitycore.domain.model.EmailAddress;
+import com.takibo.identitycore.domain.model.TakiboIdentity;
 import com.takibo.identitycore.domain.model.User;
 import com.takibo.identitycore.domain.repository.AccountCredentialsRepository;
 import com.takibo.identitycore.domain.repository.AccountRepository;
+import com.takibo.identitycore.domain.repository.TakiboIdentityRepository;
 import com.takibo.identitycore.domain.repository.UserRepository;
 import com.takibo.identitycore.domain.security.port.PasswordHasherCase;
 import com.takibo.identitycore.domain.status.UserStatus;
+import com.takibo.identitycore.domain.vo.OrganizationId;
 import com.takibo.identitycore.domain.vo.PasswordHash;
+import com.takibo.identitycore.domain.vo.TakiboIdentityId;
 import com.takibo.identitycore.domain.vo.UserId;
 import com.takibo.identitycore.integration.space.SpaceContextVerifier;
 import com.takibo.identitycore.integration.space.port.ResolvedOrgKey;
@@ -75,6 +79,7 @@ class HumanLoginServiceTest {
     @Mock private EffectiveRbacQueryCase effectiveRbacQuery;
     @Mock private HumanAccessTokenIssuer tokenIssuer;
     @Mock private AuthMapper authMapper;
+    @Mock private TakiboIdentityRepository takiboIdentityRepository;
 
     private HumanAuthenticationService authentication;
     private HumanLoginService service;
@@ -89,7 +94,7 @@ class HumanLoginServiceTest {
         // TAS-GRANTS-03-A : le login REST passe par le cœur réel d'authentification, câblé sur
         // les mêmes mocks ; ses assertions inchangées prouvent que son contrat n'a pas bougé.
         authentication = new HumanAuthenticationService(accountRepository, accountCredentialsRepository,
-                passwordHasher, Clock.systemUTC());
+                passwordHasher, takiboIdentityRepository, Clock.systemUTC());
         ReflectionTestUtils.setField(authentication, "maxFailedAttempts", 5);
         ReflectionTestUtils.setField(authentication, "lockSeconds", 900L);
         ReflectionTestUtils.setField(authentication, "dummyPasswordHash", DUMMY_HASH);
@@ -98,6 +103,11 @@ class HumanLoginServiceTest {
 
         account = Account.create(new EmailAddress(EMAIL), null, null, Map.of()).withOrgId(ORG_ID);
         credentials = AccountCredentials.create(account.getId(), PasswordHash.of("$2a$hash", "bcrypt", 1));
+        // IAM-REVOKE-01 : l'humain de ces scénarios a une identité ACTIVE ; les refus liés au
+        // statut d'identité sont prouvés dans HumanAuthenticationServiceTest.
+        lenient().when(takiboIdentityRepository.findByOrgIdAndAccountId(any(), any()))
+                .thenReturn(Optional.of(TakiboIdentity.createHuman(
+                        TakiboIdentityId.of(account.getId().getValue()), OrganizationId.of(ORG_ID), account.getId())));
     }
 
     private LoginCommand command() {

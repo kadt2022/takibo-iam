@@ -1,6 +1,6 @@
 # IAM-REVOKE-01 — Une identité révoquée n'obtient plus de preuve d'authentification
 
-**Statut** : À FAIRE — documentation des preuves, invariants et tests ; implémentation non autorisée  
+**Statut** : EN COURS — lots 1 et 2 implémentés sur `fix/iam-revoke-01`  
 **Lot** : Identité et cohérence des jetons  
 **Risque** : élevé — authentification humaine, tous parcours  
 **Doctrine** : PHILOSOPHY.md (« une identité n'est pas son autorité ») ; ADR 0001 ; TAS-GRANTS-03-A  

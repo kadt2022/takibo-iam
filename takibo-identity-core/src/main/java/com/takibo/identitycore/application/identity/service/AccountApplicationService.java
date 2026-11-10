@@ -5,12 +5,15 @@ import com.takibo.identitycore.domain.security.port.PasswordHasherCase;
 import com.takibo.identitycore.domain.model.Account;
 import com.takibo.identitycore.domain.model.AccountCredentials;
 import com.takibo.identitycore.domain.model.EmailAddress;
+import com.takibo.identitycore.domain.model.TakiboIdentity;
 import com.takibo.identitycore.domain.vo.OrganizationId;
 import com.takibo.identitycore.domain.vo.PasswordHash;
+import com.takibo.identitycore.domain.vo.TakiboIdentityId;
 import com.takibo.identitycore.domain.security.policy.password.PasswordPolicy;
 import com.takibo.identitycore.domain.exception.PasswordPolicyViolationException;
 import com.takibo.identitycore.domain.repository.AccountCredentialsRepository;
 import com.takibo.identitycore.domain.repository.AccountRepository;
+import com.takibo.identitycore.domain.repository.TakiboIdentityRepository;
 import com.takibo.identitycore.interfaces.rest.response.AccountResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -28,6 +31,7 @@ public class AccountApplicationService implements AccountApplicationCase {
     private final AccountCredentialsRepository accountCredentialsRepository;
     private final PasswordPolicy passwordPolicy;
     private final PasswordHasherCase passwordHasherCase;
+    private final TakiboIdentityRepository takiboIdentityRepository;
 
     @Override
     @Transactional
@@ -41,6 +45,7 @@ public class AccountApplicationService implements AccountApplicationCase {
         Optional<Account> optionalAccount = accountRepository.findByEmail(new OrganizationId(orgId), email);
         if (optionalAccount.isPresent()) {
             Account account = optionalAccount.get();
+            ensureIdentity(account);
             return new AccountResponse(account.getId().getValue(), account.getEmail().value());
         }
 
@@ -52,7 +57,21 @@ public class AccountApplicationService implements AccountApplicationCase {
         PasswordHash pwd = PasswordHash.of(passwordHasherCase.hash(rawPassword), "bcrypt", 1);
         AccountCredentials accountCredentials = AccountCredentials.createNew(accountCreated.getId(), pwd);
         accountCredentialsRepository.save(accountCredentials, accountCreated.getOrgId());
+        ensureIdentity(accountCreated);
 
         return new AccountResponse(accountCreated.getId().getValue(), accountCreated.getEmail().value());
+    }
+
+    /**
+     * IAM-REVOKE-01 : tout Account humain authentifiable a son identité, créée dans la même
+     * transaction. Une identité existante n'est jamais dupliquée ni réactivée.
+     */
+    private void ensureIdentity(Account account) {
+        if (!takiboIdentityRepository.existsByOrgIdAndAccountId(account.getOrgId(), account.getId().getValue())) {
+            takiboIdentityRepository.save(TakiboIdentity.createHuman(
+                    TakiboIdentityId.of(account.getId().getValue()),
+                    OrganizationId.of(account.getOrgId()),
+                    account.getId()));
+        }
     }
 }
