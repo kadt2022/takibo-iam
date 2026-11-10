@@ -92,12 +92,16 @@ class SentinelHttpTranslationPostgresIntegrationTest extends TasPostgresBaseline
     }
 
     @Test
-    void given_an_unknown_api_route_when_an_authenticated_caller_requests_it_then_404() {
+    void given_an_unknown_api_route_when_an_authenticated_caller_requests_it_then_a_deterministic_403() {
         HttpResponse<String> response = fixture.send("GET", "/api/v1/route-inexistante", token, Map.of(), null);
 
-        // NotFoundAdvice (iam-boot) répond 404 sans corps à toute ressource inexistante, UI comme API.
-        assertThat(response.statusCode()).as("réponse brute : %s", response.body()).isEqualTo(404);
-        assertThat(response.body()).doesNotContain("Exception").doesNotContain("org.springframework");
+        // SEC-TMS-07 (D3) : aucune politique ne gouverne cette route. Elle est refusée par le socle
+        // (POL_DEFAULT_DENY) avant Spring MVC, au lieu d'être autorisée puis de répondre 404 : la
+        // réponse ne révèle plus quelles routes existent. Le format reste Sentinel, sans détail interne.
+        assertThat(response.statusCode()).as("réponse brute : %s", response.body()).isEqualTo(403);
+        assertThat(TasHttpFixture.body(response).path("code").asText()).isEqualTo("ACCESS_DENIED");
+        assertThat(response.body()).doesNotContain("Exception").doesNotContain("org.springframework")
+                .doesNotContain("POL_");
     }
 
     @Test

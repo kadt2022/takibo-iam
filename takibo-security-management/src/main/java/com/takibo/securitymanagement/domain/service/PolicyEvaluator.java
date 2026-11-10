@@ -25,8 +25,11 @@ import java.util.Optional;
  * <ol>
  *   <li>Isolation tenant : garde évaluée en premier, elle ne peut que refuser.</li>
  *   <li>Règles de surface, dans un ordre fixe : la première qui décide l'emporte.</li>
- *   <li>Aucune règle ne décide : PERMIT par défaut (POL_DEFAULT_ALLOW).</li>
+ *   <li>Aucune règle ne décide : refus déterministe (POL_DEFAULT_DENY, SEC-TMS-07).</li>
  * </ol>
+ * TAKIBO sécurise par lui-même : l'absence de politique n'est jamais une autorisation, et un
+ * refus du socle est définitif. L'ADP n'est consulté qu'après un PERMIT explicite ; il peut
+ * alors restreindre, jamais accorder un droit absent.
  */
 @Service
 public class PolicyEvaluator {
@@ -52,14 +55,14 @@ public class PolicyEvaluator {
                                    Environment env) {
         return TENANT_ISOLATION.evaluate(subject, resource, action)
                 .or(() -> firstDecision(subject, resource, action))
-                .orElseGet(PolicyEvaluator::defaultAllow);
+                .orElseGet(PolicyEvaluator::defaultDeny);
     }
 
-    private static PolicyDecision defaultAllow() {
+    private static PolicyDecision defaultDeny() {
         return PolicyDecision.builder()
-                .effect(Effect.PERMIT)
-                .policyId("POL_DEFAULT_ALLOW")
-                .reason("No denying policy matched")
+                .effect(Effect.DENY)
+                .policyId("POL_DEFAULT_DENY")
+                .reason("No explicit policy governs this route - denied by default")
                 .build();
     }
 

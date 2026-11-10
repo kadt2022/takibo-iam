@@ -1,5 +1,6 @@
 package com.takibo.securitymanagement.domain.service;
 
+import com.takibo.identitycore.domain.catalogrbac.TechnicalPermission;
 import com.takibo.securitymanagement.domain.model.Action;
 import com.takibo.securitymanagement.domain.model.Environment;
 import com.takibo.securitymanagement.domain.model.PolicyDecision;
@@ -9,7 +10,9 @@ import com.takibo.securitymanagement.support.TokenPermissions;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -524,12 +527,48 @@ class PolicyEvaluatorTest {
     @Test
     void tmsSpaceRules_ignoreReadableCodeRoutes() {
         // Doctrine d'identification : TMS = UUID, TIS-CORE = codes lisibles.
-        // Une route en codes ne doit jamais tomber dans les règles spaces TMS.
+        // Une route en codes ne doit jamais tomber dans les règles spaces TMS : aucune règle TMS
+        // ne décide, et c'est le refus déterministe générique qui s'applique (SEC-TMS-07), jamais
+        // une décision POL_TMS_* ou POL_SPACE_*.
         PolicyDecision decision = evaluateTmsRoute(subject(Set.of("R_SPACE_ADMIN")),
                 "/api/v1/orgs/takibo-iam/spaces", Action.READ);
 
-        assertThat(decision.isPermit()).isTrue();
-        assertThat(decision.getPolicyId()).isEqualTo("POL_DEFAULT_ALLOW");
+        assertThat(decision.isDeny()).isTrue();
+        assertThat(decision.getPolicyId()).isEqualTo("POL_DEFAULT_DENY");
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // SEC-TMS-07 : l'absence de politique n'est jamais une autorisation
+    // ─────────────────────────────────────────────────────────────
+
+    @Test
+    void a_route_that_no_policy_governs_is_denied_deterministically_for_every_action() {
+        // Le sujet le plus puissant possible : si lui est refusé, personne n'est autorisé par défaut.
+        Subject owner = token("actor", Set.of("R_ORG_OWNER", "R_SPACE_ADMIN"),
+                Arrays.stream(TechnicalPermission.values()).map(TechnicalPermission::code).collect(Collectors.toSet()),
+                ORG, SPACE, "HUMAN", "SPACE", ACCOUNT);
+
+        for (String path : new String[]{
+                "/api/v1/future-surface",
+                "/api/v1/orgs/takibo-iam/spaces/finance/audit",
+                "/api/v1/orgs/takibo-iam/members",
+                "/debug/unknown"}) {
+            for (Action action : Action.values()) {
+                PolicyDecision decision = evaluateTmsRoute(owner, path, action);
+
+                assertDeniedBy(decision, "POL_DEFAULT_DENY", path + " " + action);
+            }
+        }
+    }
+
+    @Test
+    void no_decision_is_ever_a_default_permit() {
+        Subject owner = token("actor", Set.of("R_ORG_OWNER"), Set.of(), ORG, SPACE, "HUMAN", "SPACE", ACCOUNT);
+
+        PolicyDecision decision = evaluateTmsRoute(owner, "/api/v1/future-surface", Action.READ);
+
+        assertThat(decision.getPolicyId()).isNotEqualTo("POL_DEFAULT_ALLOW");
+        assertThat(decision.isPermit()).isFalse();
     }
 
     @Test
