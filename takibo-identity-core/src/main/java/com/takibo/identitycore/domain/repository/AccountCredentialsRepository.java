@@ -26,9 +26,13 @@ public interface AccountCredentialsRepository {
     Optional<FailedAttemptReservation> reserveFailedAttempt(OrganizationId orgId, AccountId accountId,
                                                             int maxFailedAttempts, Instant lockUntil, Instant now);
 
-    /** Annule une réservation : le compteur et le verrou reviennent à leur état antérieur. */
+    /**
+     * Annule une réservation : le compteur perd la tentative, et le verrou est levé si cette
+     * réservation l'avait posé ou si le compteur repasse sous le seuil (un échec concurrent a pu
+     * poser le verrou entre la réservation et son annulation).
+     */
     void cancelFailedAttempt(OrganizationId orgId, AccountId accountId, FailedAttemptReservation reservation,
-                             Instant now);
+                             int maxFailedAttempts, Instant now);
 
     /** Succès : remet le compteur à zéro et lève le verrou, sans conflit de version. */
     void clearFailedAttempts(OrganizationId orgId, AccountId accountId, Instant now);

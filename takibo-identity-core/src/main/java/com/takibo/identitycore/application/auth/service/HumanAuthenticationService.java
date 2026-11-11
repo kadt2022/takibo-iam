@@ -119,7 +119,7 @@ public class HumanAuthenticationService implements HumanAuthenticationCase {
         Optional<TakiboIdentity> identity = takiboIdentityRepository.findByOrgIdAndAccountId(orgId, accountId);
         if (identity.isEmpty() || identity.get().getIdentityStatus() != IdentityStatus.ACTIVE) {
             accountCredentialsRepository.cancelFailedAttempt(organization, account.get().getId(),
-                    reservation.get(), clock.instant());
+                    reservation.get(), maxFailedAttempts, clock.instant());
             log.warn("Human authentication refused cause=identity not active status={} accountId={} orgId={}",
                     identity.map(TakiboIdentity::getIdentityStatus).map(Enum::name).orElse("ABSENT"), accountId, orgId);
             throw new AuthenticationFailedException();

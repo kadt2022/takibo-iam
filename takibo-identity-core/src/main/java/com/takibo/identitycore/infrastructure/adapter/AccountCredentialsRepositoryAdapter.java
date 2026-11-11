@@ -93,7 +93,8 @@ public class AccountCredentialsRepositoryAdapter implements AccountCredentialsRe
     private static final String CANCEL = """
             UPDATE account_credentials
                SET failed_attempts = GREATEST(failed_attempts - 1, 0),
-                   locked_until = CASE WHEN :clearLock THEN NULL ELSE locked_until END,
+                   locked_until = CASE WHEN :clearLock OR failed_attempts - 1 < :maxFailedAttempts
+                                       THEN NULL ELSE locked_until END,
                    updated_at = :now,
                    version = version + 1
              WHERE org_id = :orgId AND account_id = :accountId
@@ -133,11 +134,12 @@ public class AccountCredentialsRepositoryAdapter implements AccountCredentialsRe
     @Override
     @Transactional
     public void cancelFailedAttempt(OrganizationId orgId, AccountId accountId, FailedAttemptReservation reservation,
-                                    Instant now) {
-        // Si cette réservation a posé le verrou, aucune autre n'a pu passer depuis : le lever
-        // rend exactement l'état antérieur.
+                                    int maxFailedAttempts, Instant now) {
+        // Le verrou est levé si cette réservation l'a posé, ou si le compteur repasse sous le
+        // seuil : un échec concurrent a pu le poser en comptant notre réservation.
         em.createNativeQuery(CANCEL)
                 .setParameter("clearLock", reservation.locksAccount())
+                .setParameter("maxFailedAttempts", maxFailedAttempts)
                 .setParameter("now", now)
                 .setParameter("orgId", orgId.getValue())
                 .setParameter("accountId", accountId.getValue())

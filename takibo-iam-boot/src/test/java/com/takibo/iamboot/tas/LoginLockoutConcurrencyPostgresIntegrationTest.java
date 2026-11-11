@@ -1,7 +1,11 @@
 package com.takibo.iamboot.tas;
 
 import com.takibo.identitycore.application.auth.port.HumanAccessTokenIssuer;
+import com.takibo.identitycore.domain.model.FailedAttemptReservation;
+import com.takibo.identitycore.domain.repository.AccountCredentialsRepository;
 import com.takibo.identitycore.domain.security.SpringPasswordHasherCase;
+import com.takibo.identitycore.domain.vo.AccountId;
+import com.takibo.identitycore.domain.vo.OrganizationId;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -14,6 +18,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
 import java.net.http.HttpResponse;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -69,6 +74,7 @@ class LoginLockoutConcurrencyPostgresIntegrationTest extends TasPostgresBaseline
     @Autowired private JdbcTemplate jdbc;
     @Autowired private HumanAccessTokenIssuer tokenIssuer;
     @MockitoSpyBean private SpringPasswordHasherCase passwordHasher;
+    @Autowired private AccountCredentialsRepository credentials;
 
     private TasHttpFixture fixture;
     private UUID organizationId;
@@ -187,6 +193,49 @@ class LoginLockoutConcurrencyPostgresIntegrationTest extends TasPostgresBaseline
         assertThat(login(VICTIM_EMAIL, PASSWORD).statusCode()).isEqualTo(401);
 
         assertThat(failedAttempts()).isEqualTo(2);
+        assertThat(isLocked()).isFalse();
+    }
+
+    /**
+     * Entrelacement exact relevé en revue : une tentative juste (identité révoquée) réserve le
+     * 4e échec, une tentative fausse concurrente réserve le 5e et pose le verrou, puis la première
+     * est annulée. Il reste 4 vrais échecs : le compte ne doit pas rester verrouillé.
+     */
+    @Test
+    void cancelling_a_reservation_unlocks_an_account_locked_by_a_concurrent_failure_below_the_threshold() {
+        jdbc.update("UPDATE account_credentials SET failed_attempts = 3 WHERE org_id = ? AND account_id = ?",
+                organizationId, victimAccountId);
+        Instant now = Instant.now();
+        OrganizationId org = new OrganizationId(organizationId);
+        AccountId account = AccountId.of(victimAccountId);
+
+        FailedAttemptReservation rightPassword = credentials.reserveFailedAttempt(org, account, MAX_ATTEMPTS,
+                now.plusSeconds(2), now).orElseThrow();
+        FailedAttemptReservation concurrentFailure = credentials.reserveFailedAttempt(org, account, MAX_ATTEMPTS,
+                now.plusSeconds(2), now).orElseThrow();
+        assertThat(concurrentFailure.locksAccount()).as("le 5e échec pose le verrou").isTrue();
+
+        credentials.cancelFailedAttempt(org, account, rightPassword, MAX_ATTEMPTS, now);
+
+        assertThat(failedAttempts()).isEqualTo(MAX_ATTEMPTS - 1);
+        assertThat(isLocked()).as("4 vrais échecs : aucun verrou").isFalse();
+    }
+
+    @Test
+    void cancelling_the_reservation_that_relocked_an_expired_account_lifts_that_lock() {
+        jdbc.update("UPDATE account_credentials SET failed_attempts = 5, locked_until = now() - interval '1 second'"
+                + " WHERE org_id = ? AND account_id = ?", organizationId, victimAccountId);
+        Instant now = Instant.now();
+        OrganizationId org = new OrganizationId(organizationId);
+        AccountId account = AccountId.of(victimAccountId);
+
+        FailedAttemptReservation reservation = credentials.reserveFailedAttempt(org, account, MAX_ATTEMPTS,
+                now.plusSeconds(2), now).orElseThrow();
+        assertThat(reservation.locksAccount()).isTrue();
+
+        credentials.cancelFailedAttempt(org, account, reservation, MAX_ATTEMPTS, now);
+
+        assertThat(failedAttempts()).isEqualTo(MAX_ATTEMPTS);
         assertThat(isLocked()).isFalse();
     }
 

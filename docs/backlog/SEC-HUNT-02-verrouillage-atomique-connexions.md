@@ -46,8 +46,11 @@ RETURNING failed_attempts
 - Aucune ligne rendue : le compte est verrouillé, la tentative n'est ni comptée ni vérifiée.
 - Mauvais mot de passe : la réservation **est** l'échec compté.
 - Bon mot de passe, identité ACTIVE : compteur remis à zéro et verrou levé (`clearFailedAttempts`).
-- Bon mot de passe, identité absente ou révoquée (IAM-REVOKE-01) : la réservation est **annulée**,
-  le compteur revient exactement à sa valeur antérieure (`cancelFailedAttempt`).
+- Bon mot de passe, identité absente ou révoquée (IAM-REVOKE-01) : la réservation est **annulée**
+  (`cancelFailedAttempt`) : le compteur perd cette tentative, et le verrou est levé si cette
+  réservation l'avait posé **ou** si le compteur repasse sous le seuil. Le second cas couvre
+  l'entrelacement relevé en revue : un échec concurrent a pu poser le verrou en comptant la
+  réservation annulée (3 vrais échecs + réservation + échec concurrent = 5).
 
 Sous une rafale, au plus `max-failed-attempts` comparaisons du vrai hash ont lieu avant le
 verrou. Les écritures ne passent plus par l'entité versionnée : aucun conflit de version, aucune
@@ -68,7 +71,8 @@ Hors périmètre : limitation de débit, verrouillage par adresse, CAPTCHA.
 |---|---|---|
 | Unitaire | `HumanAuthenticationServiceTest` (20) | réservation avant comparaison, annulation sur identité révoquée, remise à zéro au succès, compte verrouillé par une tentative concurrente, durée nulle |
 | Unitaire | `HumanLoginServiceTest` (14) | contrat du login REST inchangé |
-| Bout en bout PostgreSQL | `LoginLockoutConcurrencyPostgresIntegrationTest` (6) | seuil exact séquentiel ; 4 échecs concurrents tous comptés ; rafale de 40 : **exactement 5** comparaisons du vrai hash, aucun 500 ; expiration du verrou ; IAM-REVOKE-01 préservé |
+| Unitaire | `AccountCredentialsRepositoryAdapterTest` (+5) | paramètres des trois écritures atomiques |
+| Bout en bout PostgreSQL | `LoginLockoutConcurrencyPostgresIntegrationTest` (8) | seuil exact séquentiel ; 4 échecs concurrents tous comptés ; rafale de 40 : **exactement 5** comparaisons du vrai hash, aucun 500 ; expiration du verrou ; IAM-REVOKE-01 préservé ; annulation après un verrou concurrent (déterministe, rouge sur une version mutée) |
 | Bout en bout PostgreSQL | `IdentityRevocationLoginPostgresIntegrationTest`, `HumanLoginBaselineIntegrationTest` | non-régression |
 | Newman | dossier « 02 » (+5 requêtes) | verrou au 5e échec séquentiel ; bon mot de passe refusé après 30 échecs concurrents ; aucun 500 |
 

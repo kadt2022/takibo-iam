@@ -111,7 +111,7 @@ class HumanAuthenticationServiceTest {
         service.authenticate(contextOf(ORG_A), new HumanCredentials(EMAIL, PASSWORD_A));
 
         verify(accountCredentialsRepository).clearFailedAttempts(new OrganizationId(ORG_A), accountA.getId(), NOW);
-        verify(accountCredentialsRepository, never()).cancelFailedAttempt(any(), any(), any(), any());
+        verify(accountCredentialsRepository, never()).cancelFailedAttempt(any(), any(), any(), anyInt(), any());
     }
 
     // ---------- Échecs uniformes ----------
@@ -126,7 +126,7 @@ class HumanAuthenticationServiceTest {
         // SEC-HUNT-02 : la tentative a été comptée avant la comparaison, et n'est ni annulée ni soldée.
         verify(accountCredentialsRepository).reserveFailedAttempt(eq(new OrganizationId(ORG_A)), eq(accountA.getId()),
                 eq(5), eq(NOW.plusSeconds(900)), eq(NOW));
-        verify(accountCredentialsRepository, never()).cancelFailedAttempt(any(), any(), any(), any());
+        verify(accountCredentialsRepository, never()).cancelFailedAttempt(any(), any(), any(), anyInt(), any());
         verify(accountCredentialsRepository, never()).clearFailedAttempts(any(), any(), any());
         verify(accountCredentialsRepository, never()).save(any(), any());
     }
@@ -252,7 +252,7 @@ class HumanAuthenticationServiceTest {
         assertUniformFailure(() -> service.authenticate(contextOf(ORG_A), new HumanCredentials(EMAIL, PASSWORD_A)));
 
         verify(passwordHasher).matches(PASSWORD_A, HASH_A);
-        verify(accountCredentialsRepository).cancelFailedAttempt(new OrganizationId(ORG_A), accountA.getId(), RESERVED, NOW);
+        verify(accountCredentialsRepository).cancelFailedAttempt(new OrganizationId(ORG_A), accountA.getId(), RESERVED, 5, NOW);
         verify(accountCredentialsRepository, never()).clearFailedAttempts(any(), any(), any());
         verify(accountCredentialsRepository, never()).save(any(), any());
     }
@@ -266,7 +266,7 @@ class HumanAuthenticationServiceTest {
         assertUniformFailure(() -> service.authenticate(contextOf(ORG_A), new HumanCredentials(EMAIL, PASSWORD_A)));
 
         verify(passwordHasher).matches(PASSWORD_A, HASH_A);
-        verify(accountCredentialsRepository).cancelFailedAttempt(new OrganizationId(ORG_A), accountA.getId(), RESERVED, NOW);
+        verify(accountCredentialsRepository).cancelFailedAttempt(new OrganizationId(ORG_A), accountA.getId(), RESERVED, 5, NOW);
         verify(accountCredentialsRepository, never()).clearFailedAttempts(any(), any(), any());
         verify(accountCredentialsRepository, never()).save(any(), any());
     }
@@ -281,7 +281,7 @@ class HumanAuthenticationServiceTest {
         assertUniformFailure(() -> service.authenticate(contextOf(ORG_A), new HumanCredentials(EMAIL, PASSWORD_A)));
 
         verify(passwordHasher).matches(PASSWORD_A, HASH_A);
-        verify(accountCredentialsRepository).cancelFailedAttempt(new OrganizationId(ORG_A), accountA.getId(), RESERVED, NOW);
+        verify(accountCredentialsRepository).cancelFailedAttempt(new OrganizationId(ORG_A), accountA.getId(), RESERVED, 5, NOW);
         verify(accountCredentialsRepository, never()).clearFailedAttempts(any(), any(), any());
         verify(accountCredentialsRepository, never()).save(any(), any());
     }
@@ -297,7 +297,7 @@ class HumanAuthenticationServiceTest {
         // SEC-HUNT-02 : la tentative a été comptée avant la comparaison, et n'est ni annulée ni soldée.
         verify(accountCredentialsRepository).reserveFailedAttempt(eq(new OrganizationId(ORG_A)), eq(accountA.getId()),
                 eq(5), eq(NOW.plusSeconds(900)), eq(NOW));
-        verify(accountCredentialsRepository, never()).cancelFailedAttempt(any(), any(), any(), any());
+        verify(accountCredentialsRepository, never()).cancelFailedAttempt(any(), any(), any(), anyInt(), any());
         verify(accountCredentialsRepository, never()).clearFailedAttempts(any(), any(), any());
         verify(accountCredentialsRepository, never()).save(any(), any());
     }

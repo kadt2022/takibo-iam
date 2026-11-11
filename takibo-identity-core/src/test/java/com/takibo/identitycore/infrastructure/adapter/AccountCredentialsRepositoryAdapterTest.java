@@ -148,4 +148,75 @@ class AccountCredentialsRepositoryAdapterTest {
         assertThat(result).isEmpty();
         verify(mapper, never()).toDomain(any());
     }
+
+    // ---------- SEC-HUNT-02 : écritures atomiques du compteur ----------
+
+    private static final java.time.Instant NOW = java.time.Instant.parse("2026-11-11T10:00:00Z");
+
+    private jakarta.persistence.Query nativeQuery() {
+        jakarta.persistence.Query query = mock(jakarta.persistence.Query.class);
+        org.mockito.Mockito.lenient().when(query.setParameter(org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.any())).thenReturn(query);
+        when(em.createNativeQuery(org.mockito.ArgumentMatchers.anyString())).thenReturn(query);
+        return query;
+    }
+
+    @Test
+    void reserve_returnsTheNewCounterAndWhetherThisReservationLocked() {
+        jakarta.persistence.Query query = nativeQuery();
+        when(query.getResultList()).thenReturn(java.util.List.of(5));
+
+        var reservation = adapter.reserveFailedAttempt(OrganizationId.of(ORG_ID), AccountId.of(ACCOUNT_UUID), 5,
+                NOW.plusSeconds(900), NOW);
+
+        assertThat(reservation).contains(new com.takibo.identitycore.domain.model.FailedAttemptReservation(5, true));
+        verify(query).setParameter("lockEnabled", true);
+        verify(query).setParameter("lockUntil", NOW.plusSeconds(900));
+        verify(query).setParameter("orgId", ORG_ID);
+        verify(query).setParameter("accountId", ACCOUNT_UUID);
+    }
+
+    @Test
+    void reserve_isEmptyWhenTheAccountIsLocked() {
+        jakarta.persistence.Query query = nativeQuery();
+        when(query.getResultList()).thenReturn(java.util.List.of());
+
+        assertThat(adapter.reserveFailedAttempt(OrganizationId.of(ORG_ID), AccountId.of(ACCOUNT_UUID), 5,
+                NOW.plusSeconds(900), NOW)).isEmpty();
+    }
+
+    @Test
+    void reserve_withoutLockDurationNeverLocks() {
+        jakarta.persistence.Query query = nativeQuery();
+        when(query.getResultList()).thenReturn(java.util.List.of(9));
+
+        var reservation = adapter.reserveFailedAttempt(OrganizationId.of(ORG_ID), AccountId.of(ACCOUNT_UUID), 5,
+                null, NOW);
+
+        assertThat(reservation).contains(new com.takibo.identitycore.domain.model.FailedAttemptReservation(9, false));
+        verify(query).setParameter("lockEnabled", false);
+        verify(query).setParameter("lockUntil", NOW);
+    }
+
+    @Test
+    void cancel_bindsTheReservationLockAndTheThreshold() {
+        jakarta.persistence.Query query = nativeQuery();
+
+        adapter.cancelFailedAttempt(OrganizationId.of(ORG_ID), AccountId.of(ACCOUNT_UUID),
+                new com.takibo.identitycore.domain.model.FailedAttemptReservation(4, false), 5, NOW);
+
+        verify(query).setParameter("clearLock", false);
+        verify(query).setParameter("maxFailedAttempts", 5);
+        verify(query).executeUpdate();
+    }
+
+    @Test
+    void clear_resetsTheCounterInOneStatement() {
+        jakarta.persistence.Query query = nativeQuery();
+
+        adapter.clearFailedAttempts(OrganizationId.of(ORG_ID), AccountId.of(ACCOUNT_UUID), NOW);
+
+        verify(query).setParameter("orgId", ORG_ID);
+        verify(query).executeUpdate();
+    }
 }
