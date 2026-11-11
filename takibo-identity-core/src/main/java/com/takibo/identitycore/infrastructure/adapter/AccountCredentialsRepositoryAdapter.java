@@ -1,6 +1,7 @@
 package com.takibo.identitycore.infrastructure.adapter;
 
 import com.takibo.identitycore.domain.model.AccountCredentials;
+import com.takibo.identitycore.domain.model.FailedAttemptReservation;
 import com.takibo.identitycore.domain.repository.AccountCredentialsRepository;
 import com.takibo.identitycore.domain.vo.AccountId;
 import com.takibo.identitycore.domain.vo.OrganizationId;
@@ -13,6 +14,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -68,5 +71,86 @@ public class AccountCredentialsRepositoryAdapter implements AccountCredentialsRe
         AccountCredentialsEntity.AccountCredentialsId id =
                 new AccountCredentialsEntity.AccountCredentialsId(orgId.getValue(), accountId.getValue());
         return jpa.findById(id).map(mapper::toDomain);
+    }
+
+    // SEC-HUNT-02 : chaque écriture du compteur est une seule instruction SQL. PostgreSQL la
+    // sérialise par le verrou de ligne : aucune mise à jour perdue, aucun conflit de version
+    // (StaleStateException) sous des connexions concurrentes. Les expressions de SET lisent
+    // l'état antérieur de la ligne ; RETURNING rend l'état postérieur.
+
+    private static final String RESERVE = """
+            UPDATE account_credentials
+               SET failed_attempts = failed_attempts + 1,
+                   locked_until = CASE WHEN :lockEnabled AND failed_attempts + 1 >= :maxFailedAttempts
+                                       THEN :lockUntil ELSE locked_until END,
+                   updated_at = :now,
+                   version = version + 1
+             WHERE org_id = :orgId AND account_id = :accountId
+               AND (locked_until IS NULL OR locked_until <= :now)
+            RETURNING failed_attempts
+            """;
+
+    private static final String CANCEL = """
+            UPDATE account_credentials
+               SET failed_attempts = GREATEST(failed_attempts - 1, 0),
+                   locked_until = CASE WHEN :clearLock THEN NULL ELSE locked_until END,
+                   updated_at = :now,
+                   version = version + 1
+             WHERE org_id = :orgId AND account_id = :accountId
+            """;
+
+    private static final String CLEAR = """
+            UPDATE account_credentials
+               SET failed_attempts = 0,
+                   locked_until = NULL,
+                   updated_at = :now,
+                   version = version + 1
+             WHERE org_id = :orgId AND account_id = :accountId
+            """;
+
+    @Override
+    @Transactional
+    public Optional<FailedAttemptReservation> reserveFailedAttempt(OrganizationId orgId, AccountId accountId,
+                                                                   int maxFailedAttempts, Instant lockUntil,
+                                                                   Instant now) {
+        boolean lockEnabled = lockUntil != null;
+        List<?> counters = em.createNativeQuery(RESERVE)
+                .setParameter("lockEnabled", lockEnabled)
+                .setParameter("maxFailedAttempts", maxFailedAttempts)
+                .setParameter("lockUntil", lockEnabled ? lockUntil : now)
+                .setParameter("now", now)
+                .setParameter("orgId", orgId.getValue())
+                .setParameter("accountId", accountId.getValue())
+                .getResultList();
+        if (counters.isEmpty()) {
+            return Optional.empty();
+        }
+        int failedAttempts = ((Number) counters.getFirst()).intValue();
+        return Optional.of(new FailedAttemptReservation(failedAttempts,
+                lockEnabled && failedAttempts >= maxFailedAttempts));
+    }
+
+    @Override
+    @Transactional
+    public void cancelFailedAttempt(OrganizationId orgId, AccountId accountId, FailedAttemptReservation reservation,
+                                    Instant now) {
+        // Si cette réservation a posé le verrou, aucune autre n'a pu passer depuis : le lever
+        // rend exactement l'état antérieur.
+        em.createNativeQuery(CANCEL)
+                .setParameter("clearLock", reservation.locksAccount())
+                .setParameter("now", now)
+                .setParameter("orgId", orgId.getValue())
+                .setParameter("accountId", accountId.getValue())
+                .executeUpdate();
+    }
+
+    @Override
+    @Transactional
+    public void clearFailedAttempts(OrganizationId orgId, AccountId accountId, Instant now) {
+        em.createNativeQuery(CLEAR)
+                .setParameter("now", now)
+                .setParameter("orgId", orgId.getValue())
+                .setParameter("accountId", accountId.getValue())
+                .executeUpdate();
     }
 }

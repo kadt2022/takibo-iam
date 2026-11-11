@@ -15,6 +15,7 @@ import com.takibo.identitycore.domain.exception.SpaceNotFoundException;
 import com.takibo.identitycore.domain.model.Account;
 import com.takibo.identitycore.domain.model.AccountCredentials;
 import com.takibo.identitycore.domain.model.EmailAddress;
+import com.takibo.identitycore.domain.model.FailedAttemptReservation;
 import com.takibo.identitycore.domain.model.TakiboIdentity;
 import com.takibo.identitycore.domain.model.User;
 import com.takibo.identitycore.domain.repository.AccountCredentialsRepository;
@@ -50,6 +51,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -132,6 +134,9 @@ class HumanLoginServiceTest {
                 .thenReturn(Optional.of(account));
         when(accountCredentialsRepository.find(any(), eq(account.getId())))
                 .thenReturn(Optional.of(credentials));
+        // SEC-HUNT-02 : la tentative est réservée avant la vérification du mot de passe.
+        lenient().when(accountCredentialsRepository.reserveFailedAttempt(any(), eq(account.getId()), anyInt(), any(), any()))
+                .thenReturn(Optional.of(new FailedAttemptReservation(credentials.getFailedAttempts() + 1, false)));
     }
 
     private User localUser() {
@@ -228,10 +233,10 @@ class HumanLoginServiceTest {
                 .isInstanceOf(AuthenticationFailedException.class)
                 .hasMessage(UNIFORM_MESSAGE);
 
-        // L'échec est compté même si la réponse externe reste muette.
-        ArgumentCaptor<AccountCredentials> captor = ArgumentCaptor.forClass(AccountCredentials.class);
-        verify(accountCredentialsRepository).save(captor.capture(), eq(ORG_ID));
-        assertThat(captor.getValue().getFailedAttempts()).isEqualTo(1);
+        // L'échec est compté (réservé avant la comparaison) même si la réponse externe reste muette.
+        verify(accountCredentialsRepository).reserveFailedAttempt(eq(new OrganizationId(ORG_ID)), eq(account.getId()),
+                eq(5), any(), any());
+        verify(accountCredentialsRepository, never()).clearFailedAttempts(any(), any(), any());
 
         verify(tokenIssuer, never()).issue(any());
     }
@@ -269,10 +274,7 @@ class HumanLoginServiceTest {
 
         service.login(command());
 
-        ArgumentCaptor<AccountCredentials> captor = ArgumentCaptor.forClass(AccountCredentials.class);
-        verify(accountCredentialsRepository).save(captor.capture(), eq(ORG_ID));
-        assertThat(captor.getValue().getFailedAttempts()).isZero();
-        assertThat(captor.getValue().getLockedUntil()).isNull();
+        verify(accountCredentialsRepository).clearFailedAttempts(eq(new OrganizationId(ORG_ID)), eq(account.getId()), any());
     }
 
     @Test
