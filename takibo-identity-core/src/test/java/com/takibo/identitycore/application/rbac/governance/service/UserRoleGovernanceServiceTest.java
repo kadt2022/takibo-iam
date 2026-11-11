@@ -1,5 +1,7 @@
 package com.takibo.identitycore.application.rbac.governance.service;
 
+import java.util.function.BooleanSupplier;
+import com.takibo.identitycore.domain.rbac.repository.GovernanceGroupAssignmentRepository;
 import com.takibo.identitycore.application.rbac.governance.command.AssignUserRoleCommand;
 import com.takibo.identitycore.application.rbac.governance.command.RemoveUserRoleCommand;
 import com.takibo.identitycore.application.rbac.governance.mapper.UserRbacGovernanceMapper;
@@ -48,6 +50,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -71,6 +74,8 @@ class UserRoleGovernanceServiceTest {
     @Mock private UserRepository userRepository;
     @Mock private RoleRepository roleRepository;
     @Mock private GovernanceRoleAssignmentRepository assignments;
+    @Mock private GovernanceGroupAssignmentRepository groupMemberships;
+    @Mock private LastSpaceAdministratorGuard lastAdministratorGuard;
 
     @Spy private UserRbacGovernanceMapper mapper = new UserRbacGovernanceMapper();
 
@@ -371,7 +376,7 @@ class UserRoleGovernanceServiceTest {
         service.removeRole(KEY, new RemoveUserRoleCommand(USER_ID, "R_SPACE_ADMIN", null));
 
         verify(assignments, never()).deleteAssignment(any(), any(), any(), any());
-        verify(assignments, never()).countIdentitiesHoldingRole(any(), any(), any());
+        verify(lastAdministratorGuard, never()).assertSpaceKeepsAnAdministrator(any(), any(), any(), any());
     }
 
     @Test
@@ -379,7 +384,8 @@ class UserRoleGovernanceServiceTest {
         stubActor();
         stubTargetUser();
         when(assignments.existsAssignment(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID, "R_SPACE_ADMIN")).thenReturn(true);
-        when(assignments.countIdentitiesHoldingRole(ORG_ID, SPACE_ID, "R_SPACE_ADMIN")).thenReturn(1L);
+        doThrow(new LastAdminRemovalException("last")).when(lastAdministratorGuard)
+                .assertSpaceKeepsAnAdministrator(eq(KEY), any(), eq("R_SPACE_ADMIN"), any());
 
         assertThatThrownBy(() -> service.removeRole(KEY, new RemoveUserRoleCommand(USER_ID, "R_SPACE_ADMIN", null)))
                 .isInstanceOf(LastAdminRemovalException.class);
@@ -447,11 +453,15 @@ class UserRoleGovernanceServiceTest {
         stubActor();
         stubTargetUser();
         when(assignments.existsAssignment(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID, "R_SPACE_ADMIN")).thenReturn(true);
-        when(assignments.countIdentitiesHoldingRole(ORG_ID, SPACE_ID, "R_SPACE_ADMIN")).thenReturn(2L);
         when(assignments.findDirectAssignments(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID)).thenReturn(List.of());
 
         service.removeRole(KEY, new RemoveUserRoleCommand(USER_ID, "R_SPACE_ADMIN", "rotation"));
 
+        // SEC-HUNT-06 : l'autre voie de la cible est le groupe G_SPACE_ADMINS, lue sous verrou.
+        ArgumentCaptor<BooleanSupplier> keeps = ArgumentCaptor.forClass(BooleanSupplier.class);
+        verify(lastAdministratorGuard).assertSpaceKeepsAnAdministrator(eq(KEY), any(), eq("R_SPACE_ADMIN"), keeps.capture());
+        when(groupMemberships.existsMembership(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID, "G_SPACE_ADMINS")).thenReturn(true);
+        assertThat(keeps.getValue().getAsBoolean()).isTrue();
         verify(assignments).deleteAssignment(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID, "R_SPACE_ADMIN");
         verify(assignments, never()).deleteOrgLevelAssignment(any(), any(), any());
     }
@@ -482,7 +492,7 @@ class UserRoleGovernanceServiceTest {
         service.removeRole(KEY, new RemoveUserRoleCommand(USER_ID, "R_SPACE_AUDITOR", null));
 
         verify(assignments).deleteAssignment(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID, "R_SPACE_AUDITOR");
-        verify(assignments, never()).countIdentitiesHoldingRole(any(), any(), any());
+        verify(lastAdministratorGuard, never()).assertSpaceKeepsAnAdministrator(any(), any(), any(), any());
     }
 
     @Test

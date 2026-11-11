@@ -3391,6 +3391,551 @@
               }
             }
           ]
+        },
+        {
+          "name": "201 - Utilisateur - lastadmin-x cree",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"lastadmin-x@takibo.io\",\n  \"rawPassword\": \"L4stAdmin!Passw0rd\",\n  \"username\": \"lastadmin-x\",\n  \"firstName\": \"Last\",\n  \"lastName\": \"Admin\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('201 - Utilisateur - lastadmin-x cree', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.collectionVariables.set('lastadminxUserId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "201 - Utilisateur - lastadmin-y cree",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"lastadmin-y@takibo.io\",\n  \"rawPassword\": \"L4stAdmin!Passw0rd\",\n  \"username\": \"lastadmin-y\",\n  \"firstName\": \"Last\",\n  \"lastName\": \"Admin\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('201 - Utilisateur - lastadmin-y cree', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.collectionVariables.set('lastadminyUserId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Role - R_SPACE_ADMIN attribue a lastadmin-x",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{lastadminxUserId}}/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "{{lastadminxUserId}}",
+                "roles"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roleCode\": \"R_SPACE_ADMIN\",\n  \"reason\": \"SEC-HUNT-06\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Role - R_SPACE_ADMIN attribue a lastadmin-x', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Role - R_SPACE_ADMIN attribue a lastadmin-y",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{lastadminyUserId}}/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "{{lastadminyUserId}}",
+                "roles"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roleCode\": \"R_SPACE_ADMIN\",\n  \"reason\": \"SEC-HUNT-06\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Role - R_SPACE_ADMIN attribue a lastadmin-y', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Login - lastadmin-x administrateur du space",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"lastadmin-x@takibo.io\",\n  \"password\": \"L4stAdmin!Passw0rd\",\n  \"orgCode\": \"{{orgCode}}\",\n  \"spaceCode\": \"{{spaceCode}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Login - lastadmin-x administrateur du space', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.collectionVariables.set('lastadminx_token', pm.response.json().accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Login - lastadmin-y administrateur du space",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"lastadmin-y@takibo.io\",\n  \"password\": \"L4stAdmin!Passw0rd\",\n  \"orgCode\": \"{{orgCode}}\",\n  \"spaceCode\": \"{{spaceCode}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Login - lastadmin-y administrateur du space', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.collectionVariables.set('lastadminy_token', pm.response.json().accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Role - x retire le role direct du fondateur",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{lastadminx_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{founderUserId}}/roles/R_SPACE_ADMIN",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "{{founderUserId}}",
+                "roles",
+                "R_SPACE_ADMIN"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Role - x retire le role direct du fondateur', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Groupe - x retire le fondateur de G_SPACE_ADMINS, d autres administrateurs demeurent",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{lastadminx_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{founderUserId}}/groups/G_SPACE_ADMINS",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "{{founderUserId}}",
+                "groups",
+                "G_SPACE_ADMINS"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "// SEC-HUNT-06 : l invariant porte sur les administrateurs effectifs (x et y), pas sur les membres du seul groupe.",
+                  "pm.test('200 - Groupe - x retire le fondateur de G_SPACE_ADMINS, d autres administrateurs demeurent', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Role - Retraits croises concurrents : un seul reussit",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{lastadminxUserId}}/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "{{lastadminxUserId}}",
+                "roles"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var base = pm.variables.get('baseUrl');",
+                  "var users = '/api/v1/orgs/' + pm.collectionVariables.get('orgCode') + '/spaces/' + pm.collectionVariables.get('spaceCode') + '/users/';",
+                  "var codes = [];",
+                  "function remove(target, token) {",
+                  "    pm.sendRequest({ url: base + users + pm.collectionVariables.get(target) + '/roles/R_SPACE_ADMIN', method: 'DELETE',",
+                  "        header: { Authorization: 'Bearer ' + pm.collectionVariables.get(token) } }, function (err, res) {",
+                  "        codes.push(err ? 0 : res.code);",
+                  "        pm.collectionVariables.set('lastAdminRaceStatuses', JSON.stringify(codes));",
+                  "    });",
+                  "}",
+                  "remove('lastadminyUserId', 'lastadminx_token');",
+                  "remove('lastadminxUserId', 'lastadminy_token');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "// SEC-HUNT-06 : x et y, seuls administrateurs effectifs, se retirent mutuellement R_SPACE_ADMIN au meme instant.",
+                  "pm.test('200 - Role - Retraits croises concurrents : un seul reussit', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var codes = JSON.parse(pm.collectionVariables.get('lastAdminRaceStatuses')).sort();",
+                  "    pm.expect(codes, 'statuts des deux retraits').to.eql([200, 409]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Role - Le fondateur reprend R_SPACE_ADMIN",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{founderUserId}}/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "{{founderUserId}}",
+                "roles"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roleCode\": \"R_SPACE_ADMIN\",\n  \"reason\": \"Restauration apres SEC-HUNT-06\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Role - Le fondateur reprend R_SPACE_ADMIN', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Groupe - Le fondateur reprend G_SPACE_ADMINS",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{founderUserId}}/groups",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "{{founderUserId}}",
+                "groups"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"groupCode\": \"G_SPACE_ADMINS\",\n  \"reason\": \"Restauration apres SEC-HUNT-06\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Groupe - Le fondateur reprend G_SPACE_ADMINS', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
         }
       ]
     },

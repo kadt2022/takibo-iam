@@ -1,5 +1,7 @@
 package com.takibo.identitycore.application.rbac.governance.service;
 
+import static org.mockito.Mockito.doThrow;
+import java.util.function.BooleanSupplier;
 import com.takibo.identitycore.application.rbac.governance.command.AddUserToGroupCommand;
 import com.takibo.identitycore.application.rbac.governance.command.RemoveUserFromGroupCommand;
 import com.takibo.identitycore.application.rbac.governance.mapper.UserRbacGovernanceMapper;
@@ -43,6 +45,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -65,6 +68,7 @@ class UserGroupGovernanceServiceTest {
     @Mock private GroupRepository groupRepository;
     @Mock private GovernanceGroupAssignmentRepository memberships;
     @Mock private GovernanceRoleAssignmentRepository roleAssignments;
+    @Mock private LastSpaceAdministratorGuard lastAdministratorGuard;
 
     @Spy private UserRbacGovernanceMapper mapper = new UserRbacGovernanceMapper();
 
@@ -258,7 +262,8 @@ class UserGroupGovernanceServiceTest {
         stubActor();
         stubTargetUser();
         when(memberships.existsMembership(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID, "G_SPACE_ADMINS")).thenReturn(true);
-        when(memberships.countIdentitiesInGroup(ORG_ID, SPACE_ID, "G_SPACE_ADMINS")).thenReturn(1L);
+        doThrow(new LastAdminRemovalException("last")).when(lastAdministratorGuard)
+                .assertSpaceKeepsAnAdministrator(eq(KEY), any(), eq("G_SPACE_ADMINS"), any());
 
         assertThatThrownBy(() -> service.removeFromGroup(
                 KEY, new RemoveUserFromGroupCommand(USER_ID, "G_SPACE_ADMINS", null)))
@@ -298,10 +303,15 @@ class UserGroupGovernanceServiceTest {
         stubActor();
         stubTargetUser();
         when(memberships.existsMembership(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID, "G_SPACE_ADMINS")).thenReturn(true);
-        when(memberships.countIdentitiesInGroup(ORG_ID, SPACE_ID, "G_SPACE_ADMINS")).thenReturn(2L);
         when(memberships.findDirectMemberships(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID)).thenReturn(List.of());
 
         service.removeFromGroup(KEY, new RemoveUserFromGroupCommand(USER_ID, "G_SPACE_ADMINS", "rotation"));
+
+        // SEC-HUNT-06 : l'autre voie de la cible est le rôle direct R_SPACE_ADMIN, lue sous verrou.
+        ArgumentCaptor<BooleanSupplier> keeps = ArgumentCaptor.forClass(BooleanSupplier.class);
+        verify(lastAdministratorGuard).assertSpaceKeepsAnAdministrator(eq(KEY), any(), eq("G_SPACE_ADMINS"), keeps.capture());
+        when(roleAssignments.existsAssignment(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID, "R_SPACE_ADMIN")).thenReturn(false);
+        assertThat(keeps.getValue().getAsBoolean()).isFalse();
 
         verify(memberships).deleteMembership(ORG_ID, SPACE_ID, TARGET_ACCOUNT_ID, "G_SPACE_ADMINS");
         verify(memberships, never()).deleteOrgLevelMembership(any(), any(), any());

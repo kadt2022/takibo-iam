@@ -1,5 +1,7 @@
 package com.takibo.identitycore.application.rbac.governance.service;
 
+import com.takibo.identitycore.domain.rbac.repository.GovernanceGroupAssignmentRepository;
+import com.takibo.identitycore.domain.catalogrbac.TechnicalGroup;
 import com.takibo.identitycore.application.rbac.governance.command.AssignUserRoleCommand;
 import com.takibo.identitycore.application.rbac.governance.command.RemoveUserRoleCommand;
 import com.takibo.identitycore.application.rbac.governance.mapper.UserRbacGovernanceMapper;
@@ -8,7 +10,6 @@ import com.takibo.identitycore.domain.catalogrbac.AuthorityPlan;
 import com.takibo.identitycore.domain.catalogrbac.TenantRoleCodePolicy;
 import com.takibo.identitycore.domain.catalogrbac.TechnicalRole;
 import com.takibo.identitycore.domain.exception.DuplicateAssignmentException;
-import com.takibo.identitycore.domain.exception.LastAdminRemovalException;
 import com.takibo.identitycore.domain.exception.RoleNotFoundException;
 import com.takibo.identitycore.domain.exception.RoleScopeEscalationException;
 import com.takibo.identitycore.domain.exception.RoleTypeNotAllowedException;
@@ -69,6 +70,7 @@ public class UserRoleGovernanceService implements UserRoleGovernanceCase {
     private static final Set<String> ADMIN_ROLE_CODES = Set.of("R_ORG_OWNER", "R_ORG_ADMIN", "R_SPACE_ADMIN");
 
     private static final String SPACE_ADMIN_CODE = TechnicalRole.SPACE_ADMIN.code();
+    private static final String SPACE_ADMINS_GROUP_CODE = TechnicalGroup.SPACE_ADMINS.code();
 
     private final SpaceContextVerifier spaceContextVerifier;
     private final SpaceBoundaryGuard spaceBoundaryGuard;
@@ -77,6 +79,8 @@ public class UserRoleGovernanceService implements UserRoleGovernanceCase {
     private final RoleRepository roleRepository;
     private final GovernanceRoleAssignmentRepository assignments;
     private final UserRbacGovernanceMapper mapper;
+    private final GovernanceGroupAssignmentRepository groupMemberships;
+    private final LastSpaceAdministratorGuard lastAdministratorGuard;
 
     @Override
     @Transactional(readOnly = true)
@@ -145,10 +149,11 @@ public class UserRoleGovernanceService implements UserRoleGovernanceCase {
             throw new SelfDemotionException(
                     "An administrator cannot remove their own " + role.code() + " on this surface");
         }
-        if (SPACE_ADMIN_CODE.equals(role.code())
-                && assignments.countIdentitiesHoldingRole(key.orgId(), key.spaceId(), SPACE_ADMIN_CODE) <= 1) {
-            throw new LastAdminRemovalException(
-                    "Cannot remove the last " + SPACE_ADMIN_CODE + " of the space");
+        if (SPACE_ADMIN_CODE.equals(role.code())) {
+            // SEC-HUNT-06 : invariant sur les administrateurs effectifs, sous verrou du Space.
+            lastAdministratorGuard.assertSpaceKeepsAnAdministrator(key, user, SPACE_ADMIN_CODE,
+                    () -> groupMemberships.existsMembership(
+                            key.orgId(), key.spaceId(), targetAccountId, SPACE_ADMINS_GROUP_CODE));
         }
 
         // IAM 31 : le retrait cible le niveau où la ligne vit réellement.
