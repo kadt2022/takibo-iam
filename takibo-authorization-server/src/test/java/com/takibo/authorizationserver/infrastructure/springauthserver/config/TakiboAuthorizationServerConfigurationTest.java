@@ -4,6 +4,8 @@ import com.takibo.authorizationserver.infrastructure.springauthserver.client.Jwk
 import com.takibo.authorizationserver.infrastructure.springauthserver.client.TakiboJwtClientAssertionDecoderFactory;
 import com.takibo.authorizationserver.infrastructure.springauthserver.properties.TasAuthorizationServerProperties;
 import org.junit.jupiter.api.Test;
+import com.takibo.authorizationserver.infrastructure.security.error.OAuth2HttpErrorWriter;
+import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -68,7 +70,9 @@ class TakiboAuthorizationServerConfigurationTest {
         when(http.build()).thenReturn(filterChain);
 
         assertThat(new TakiboAuthorizationServerConfiguration()
-                .authorizationServerSecurityFilterChain(http, decoderFactory, corsConfigurationSource))
+                .authorizationServerSecurityFilterChain(http, decoderFactory, corsConfigurationSource,
+                        mock(RegisteredClientRepository.class),
+                        new OAuth2HttpErrorWriter(new com.fasterxml.jackson.databind.ObjectMapper())))
                 .isSameAs(filterChain);
         // SEC-TMS-05 : la chaîne TAS déclare elle-même la politique CORS commune.
         verify(corsConfigurer).configurationSource(corsConfigurationSource);

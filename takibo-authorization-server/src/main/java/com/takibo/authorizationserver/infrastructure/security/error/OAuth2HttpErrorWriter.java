@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.MDC;
+import org.springframework.security.oauth2.core.OAuth2Error;
 
 import java.io.IOException;
 import java.util.LinkedHashMap;
@@ -43,6 +44,15 @@ public class OAuth2HttpErrorWriter {
     public void writeInvalidToken(String description, HttpServletRequest request, HttpServletResponse response) throws IOException {
         String wwwAuthenticate = buildWwwAuthenticate("Bearer", "invalid_token", description);
         write(response, request, 401, "invalid_token", description, wwwAuthenticate, null);
+    }
+
+    /**
+     * Erreur d'une requête d'autorisation écrite sur place (400), quand aucune URI enregistrée ne
+     * peut la recevoir (RFC 6749 §4.1.2.1).
+     */
+    public void writeAuthorizationError(OAuth2Error error, HttpServletRequest request, HttpServletResponse response)
+            throws IOException {
+        write(response, request, 400, error.getErrorCode(), error.getDescription(), null, error.getUri());
     }
 
     public void writeServerError(String description, HttpServletRequest request, HttpServletResponse response) throws IOException {
