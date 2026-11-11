@@ -6495,6 +6495,240 @@
               }
             }
           ]
+        },
+        {
+          "name": "201 - Client - Client tenant dedie a l introspection",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/spaces/{{spaceId}}/clients",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "clients"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientId\": \"bvt-intro-{{runId}}\",\n  \"clientName\": \"BVT Introspection\",\n  \"clientType\": \"CONFIDENTIAL\",\n  \"grantTypes\": [\"client_credentials\"],\n  \"scopes\": [\"api.read\"]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('201 - Client - Client tenant dedie a l introspection', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.collectionVariables.set('introClientSecret', pm.response.json().oneTimePlainSecret);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Introspection - Un client tenant n apprend rien de plus que le jeton qu il detient",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/oauth2/introspect",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "oauth2",
+                "introspect"
+              ]
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "token",
+                  "value": "{{platform_access_token}}"
+                }
+              ]
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "bvt-intro-{{runId}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{introClientSecret}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "// SEC-HUNT-05 : la reponse ne contient que les claims du JWT, plus active, client_id et token_type.",
+                  "pm.test('200 - Introspection - Un client tenant n apprend rien de plus que le jeton qu il detient', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var body = pm.response.json();",
+                  "    var claims = takibo.jwt(pm.collectionVariables.get('platform_access_token'));",
+                  "    pm.expect(body.active).to.eql(true);",
+                  "    Object.keys(body).forEach(function (field) {",
+                  "        if (['active', 'client_id', 'token_type'].indexOf(field) < 0) {",
+                  "            pm.expect(claims, 'champ hors du JWT : ' + field).to.have.property(field);",
+                  "        }",
+                  "    });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "400 - Revocation - Un client tenant ne revoque pas le jeton d un autre client",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/oauth2/revoke",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "oauth2",
+                "revoke"
+              ]
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "token",
+                  "value": "{{platform_access_token}}"
+                }
+              ]
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "bvt-intro-{{runId}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{introClientSecret}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('400 - Revocation - Un client tenant ne revoque pas le jeton d un autre client', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Introspection - Le jeton plateforme reste actif apres la tentative",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/oauth2/introspect",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "oauth2",
+                "introspect"
+              ]
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "token",
+                  "value": "{{platform_access_token}}"
+                }
+              ]
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "postman-client"
+                },
+                {
+                  "key": "password",
+                  "value": "{{postmanSecret}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Introspection - Le jeton plateforme reste actif apres la tentative', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().active).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
