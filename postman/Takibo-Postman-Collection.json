@@ -2202,6 +2202,405 @@
           ]
         },
         {
+          "name": "201 - Utilisateur - Delegue au cycle de vie cree",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"lifecycle-delegate@takibo.io\",\n  \"rawPassword\": \"Deleg4te!Passw0rd\",\n  \"username\": \"lifecycle-delegate\",\n  \"firstName\": \"Dana\",\n  \"lastName\": \"Delegate\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('201 - Utilisateur - Delegue au cycle de vie cree', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.collectionVariables.set('lifecycleDelegateUserId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Role - R_SPACE_USER_ADMIN delegue",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{lifecycleDelegateUserId}}/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "{{lifecycleDelegateUserId}}",
+                "roles"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roleCode\": \"R_SPACE_USER_ADMIN\",\n  \"reason\": \"SEC-HUNT-01\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Role - R_SPACE_USER_ADMIN delegue', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Login delegue - Pouvoir de cycle de vie dans le token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"lifecycle-delegate@takibo.io\",\n  \"password\": \"Deleg4te!Passw0rd\",\n  \"orgCode\": \"{{orgCode}}\",\n  \"spaceCode\": \"{{spaceCode}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Login delegue - Pouvoir de cycle de vie dans le token', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var claims = takibo.jwt(pm.response.json().accessToken);",
+                  "    pm.expect(claims.permissions).to.include('P_SPACE_USERS_LIFECYCLE');",
+                  "    pm.expect(claims.roles).to.not.include('R_SPACE_ADMIN');",
+                  "});",
+                  "pm.collectionVariables.set('lifecycle_delegate_token', pm.response.json().accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "403 - Lifecycle - Le delegue ne desactive pas le proprietaire",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{lifecycle_delegate_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{founderUserId}}/deactivate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "{{founderUserId}}",
+                "deactivate"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "// SEC-HUNT-01 : la permission ouvre la surface, l autorite de la cible la borne.",
+                  "pm.test('403 - Lifecycle - Le delegue ne desactive pas le proprietaire', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "    takibo.assertErrorContract('USER_LIFECYCLE_AUTHORITY_REQUIRED');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "403 - Lifecycle - Le delegue ne suspend pas le proprietaire",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{lifecycle_delegate_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{founderUserId}}/suspend",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "{{founderUserId}}",
+                "suspend"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('403 - Lifecycle - Le delegue ne suspend pas le proprietaire', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "    takibo.assertErrorContract('USER_LIFECYCLE_AUTHORITY_REQUIRED');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Utilisateur - Le proprietaire reste ACTIVE apres les refus",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{founderUserId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "{{founderUserId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Utilisateur - Le proprietaire reste ACTIVE apres les refus', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().status).to.eql('ACTIVE');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "409 - Lifecycle - Le delegue ne se suspend pas lui-meme",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{lifecycle_delegate_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{lifecycleDelegateUserId}}/suspend",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "{{lifecycleDelegateUserId}}",
+                "suspend"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('409 - Lifecycle - Le delegue ne se suspend pas lui-meme', function () {",
+                  "    pm.response.to.have.status(409);",
+                  "    takibo.assertErrorContract('SELF_DEMOTION_DENIED');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "200 - Lifecycle - Le proprietaire suspend le delegue",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{orgCode}}/spaces/{{spaceCode}}/users/{{lifecycleDelegateUserId}}/suspend",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{orgCode}}",
+                "spaces",
+                "{{spaceCode}}",
+                "users",
+                "{{lifecycleDelegateUserId}}",
+                "suspend"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('200 - Lifecycle - Le proprietaire suspend le delegue', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().status).to.eql('SUSPENDED');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "404 - Lifecycle - Utilisateur inconnu non enumerable",
           "request": {
             "method": "POST",
