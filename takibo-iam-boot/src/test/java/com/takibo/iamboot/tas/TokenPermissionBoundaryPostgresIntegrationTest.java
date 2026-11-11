@@ -1,9 +1,10 @@
 package com.takibo.iamboot.tas;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.takibo.authorizationserver.infrastructure.springauthserver.properties.TasAuthorizationServerProperties;
 import com.takibo.identitycore.application.auth.port.HumanAccessTokenIssuer;
 import com.takibo.identitycore.domain.catalogrbac.TechnicalPermission;
+import com.takibo.securitymanagement.infrastructure.security.JwtAuthenticationFilter;
+import jakarta.servlet.ServletException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -12,12 +13,15 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.test.context.ActiveProfiles;
 
-import java.net.http.HttpResponse;
+import java.io.IOException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -56,6 +60,7 @@ class TokenPermissionBoundaryPostgresIntegrationTest extends TasPostgresBaseline
     @Autowired private HumanAccessTokenIssuer tokenIssuer;
     @Autowired private JwtEncoder jwtEncoder;
     @Autowired private TasAuthorizationServerProperties tasProperties;
+    @Autowired private JwtAuthenticationFilter jwtAuthenticationFilter;
 
     private TasHttpFixture fixture;
 
@@ -83,10 +88,17 @@ class TokenPermissionBoundaryPostgresIntegrationTest extends TasPostgresBaseline
     void a_permission_outside_the_catalog_never_becomes_an_authority() {
         String token = spaceToken(List.of("USER_READ", TechnicalPermission.SPACE_USERS_READ.code()));
 
-        assertThat(fixture.send("GET", "/debug/secure/user-read", token, Map.of(), null).statusCode())
-                .as("autorité brute USER_READ").isEqualTo(403);
         assertThat(authorities(token)).contains(TechnicalPermission.SPACE_USERS_READ.code())
                 .doesNotContain("USER_READ");
+    }
+
+    @Test
+    void a_permission_outside_the_catalog_opens_no_business_route() {
+        String rawOnly = spaceToken(List.of("USER_READ", "SPACE_USERS_READ", "p_space_users_read"));
+
+        assertThat(fixture.send("GET", USERS, rawOnly, Map.of(), null).statusCode())
+                .as("permissions brutes, hors catalogue").isEqualTo(403);
+        assertThat(authorities(rawOnly)).noneMatch(a -> a.contains("USERS_READ") || a.equals("USER_READ"));
     }
 
     @Test
@@ -117,15 +129,31 @@ class TokenPermissionBoundaryPostgresIntegrationTest extends TasPostgresBaseline
 
     // ---------- Outils ----------
 
-    /** Autorités vues par Spring Security, telles que l'ADP et les politiques les reçoivent. */
+    /**
+     * Autorités vues par Spring Security, telles que l'ADP et les politiques les reçoivent : le
+     * vrai {@link JwtAuthenticationFilter} de l'application traite le token (validation, filtres
+     * de rôles et de permissions, AuthorityFactory), sans aucun endpoint dédié aux tests.
+     */
     private List<String> authorities(String token) {
-        HttpResponse<String> response = fixture.send("GET", "/debug/secure/context", token, Map.of(), null);
-        assertThat(response.statusCode()).as("contexte : %s", response.body()).isEqualTo(200);
-        List<String> authorities = new ArrayList<>();
-        for (JsonNode authority : TasHttpFixture.body(response).path("authorities")) {
-            authorities.add(authority.asText());
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", USERS);
+        request.addHeader("Authorization", "Bearer " + token);
+        List<String> seen = new ArrayList<>();
+        boolean[] authenticated = {false};
+        try {
+            jwtAuthenticationFilter.doFilter(request, new MockHttpServletResponse(), (req, res) -> {
+                var authentication = SecurityContextHolder.getContext().getAuthentication();
+                authenticated[0] = authentication != null && authentication.isAuthenticated();
+                if (authentication != null) {
+                    authentication.getAuthorities().forEach(authority -> seen.add(authority.getAuthority()));
+                }
+            });
+        } catch (ServletException | IOException e) {
+            throw new IllegalStateException("Filtre d'authentification en échec", e);
+        } finally {
+            SecurityContextHolder.clearContext();
         }
-        return authorities;
+        assertThat(authenticated[0]).as("le token doit être authentifié par le filtre").isTrue();
+        return seen;
     }
 
     private String spaceToken(List<String> permissions) {

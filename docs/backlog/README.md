@@ -114,6 +114,7 @@ backlog. Ils ne partagent pas de séquencement : chacun se prend indépendamment
 | [TMS-VAL-01](../terminer/TMS-VAL-01-validation-rest-contracts.md) | Validation des contrats REST | **TERMINÉ** (vérifié 2026-09-09) |
 | [TMS-OAUTH-CLIENT-BOUNDARY-01](../terminer/TMS-OAUTH-CLIENT-BOUNDARY-01.md) | Aligner le registre OAuth sur les frontières PLATFORM / ORGANIZATION / SPACE | **TERMINÉ** (24/24 critères, 2026-09-11) |
 | [TMS-CLIENT-READ-01](TAKIBO_Recit_TMS_CLIENT_READ_01.md) | Lire les clients OAuth2 sans réexposer leurs secrets | à faire |
+| [SEC-TMS-07](SEC-TMS-07-refus-deterministe-sans-politique.md) | L'absence de politique n'est jamais une autorisation | en cours |
 
 Outillage de vérification associé :
 [TAKIBO_Plan_Collection_Postman_Canonique.md](TAKIBO_Plan_Collection_Postman_Canonique.md).

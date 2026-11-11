@@ -78,7 +78,6 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
 
                         .requestMatchers("/api/v1/**").access(policyBasedAuthorizationManager)
-                        .requestMatchers("/debug/secure/**").access(policyBasedAuthorizationManager)
 
                         // Fail-closed : une route absente de cette liste est refusée, même
                         // authentifiée. Un nouveau contrôleur doit être déclaré ici pour être servi.

@@ -17,6 +17,8 @@ import com.takibo.securitymanagement.domain.service.PolicyEvaluator;
 import com.takibo.securitymanagement.support.TokenPermissions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -82,6 +84,7 @@ class PolicyBasedAuthorizationManagerTest {
     @Test
     void createUser_withoutAdminRole_deniedByPolicy_beforeAdp() {
         givenAuthenticatedHuman(Set.of());
+        givenTheAdpWouldAllowIfConsulted();
 
         AuthorizationDecision decision = manager().authorize(() -> authentication, createUserRequest());
 
@@ -92,7 +95,34 @@ class PolicyBasedAuthorizationManagerTest {
     @Test
     void unknownTmsRoute_deniedByPolicy_beforeAdp_evenForOrgOwner() {
         givenAuthenticatedHuman(Set.of("R_ORG_OWNER"));
+        givenTheAdpWouldAllowIfConsulted();
         String path = "/api/v1/orgs/" + ORG + "/future-resource";
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", path);
+        request.setRequestURI(path);
+
+        AuthorizationDecision decision = manager().authorize(
+                () -> authentication, new RequestAuthorizationContext(request));
+
+        assertThat(decision.isGranted()).isFalse();
+        verify(adaptiveDecisionPort, never()).evaluate(any());
+    }
+
+    /**
+     * SEC-TMS-07 — TAKIBO sécurise par lui-même : une route qu'aucune politique ne gouverne est
+     * refusée par le socle déterministe, sans que l'ADP soit jamais consulté. L'ADP ne crée
+     * jamais l'autorité.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "/api/v1/future-surface",
+            "/api/v1/orgs/takibo-iam/members",
+            "/api/v1/orgs/takibo-iam/spaces/finance/audit"})
+    void ungovernedRoute_isDeniedByTheDeterministicCore_withoutEverConsultingTheAdp(String path) {
+        // Chemin complet jusqu'à l'ADP rendu possible, et ADP permissif : si le socle laissait la
+        // route sans décision, l'ADP serait consulté et accorderait l'accès. Le refus doit donc
+        // venir du socle lui-même, pas d'une panne intermédiaire.
+        givenAuthenticatedHuman(Set.of("R_ORG_OWNER", "R_SPACE_ADMIN"));
+        givenTheAdpWouldAllowIfConsulted();
         MockHttpServletRequest request = new MockHttpServletRequest("GET", path);
         request.setRequestURI(path);
 
@@ -106,6 +136,7 @@ class PolicyBasedAuthorizationManagerTest {
     @Test
     void encodedOrParameterizedTmsUuid_cannotBypassPolicy() {
         givenAuthenticatedHuman(Set.of("R_SPACE_ADMIN"));
+        givenTheAdpWouldAllowIfConsulted();
         String encodedOrg = ORG.replace("-", "%2D");
 
         for (String path : new String[]{
@@ -170,6 +201,7 @@ class PolicyBasedAuthorizationManagerTest {
     @Test
     void targetOrganization_isReadFromThePath_andAnotherOrganizationIsDenied_beforeAdp() {
         givenAuthenticatedHuman(Set.of("R_ORG_OWNER"));
+        givenTheAdpWouldAllowIfConsulted();
         String otherOrg = "99999999-0000-0000-0000-000000000009";
         String path = "/api/v1/orgs/" + otherOrg + "/spaces";
         MockHttpServletRequest request = new MockHttpServletRequest("GET", path);
@@ -264,6 +296,20 @@ class PolicyBasedAuthorizationManagerTest {
         assertThat(decision.isGranted()).isFalse();
         assertThat(context.getRequest().getAttribute("adp.challenge.required")).isEqualTo(true);
         assertThat(context.getRequest().getAttribute("adp.decision.response")).isSameAs(challenge);
+    }
+
+    /**
+     * SEC-TMS-07 : rend le chemin jusqu'à l'ADP praticable et l'ADP permissif. Sans cela, une
+     * décision qui atteindrait l'ADP échouerait plus tôt (vélocité absente) et serait refusée par
+     * repli fail-closed : un test « refusé avant l'ADP » resterait vert même si la politique
+     * laissait passer. Ici, seul le socle déterministe peut produire le refus attendu.
+     */
+    private void givenTheAdpWouldAllowIfConsulted() {
+        lenient().when(velocityTracker.getVelocity("user-1"))
+                .thenReturn(new RequestVelocityTracker.VelocitySnapshot(0, 0));
+        lenient().when(adaptiveDecisionPort.evaluate(any())).thenReturn(new DecisionResponse(
+                "would-allow", Decision.ALLOW, 0.0, 1.0, 0.0, "would allow if consulted",
+                null, List.of(), null, Instant.now(), 1));
     }
 
     private void givenPolicyPermitsAndAdpIsConsulted() {
