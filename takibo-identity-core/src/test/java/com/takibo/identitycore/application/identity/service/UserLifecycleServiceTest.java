@@ -5,6 +5,7 @@ import com.takibo.identitycore.application.identity.command.UpdateUserProfileCom
 import com.takibo.identitycore.application.identity.mapper.UserMapper;
 import com.takibo.identitycore.domain.exception.InvalidStatusTransitionException;
 import com.takibo.identitycore.domain.exception.UserAlreadyExistsException;
+import com.takibo.identitycore.domain.exception.UserLifecycleAuthorityException;
 import com.takibo.identitycore.domain.exception.UserNotFoundException;
 import com.takibo.identitycore.domain.model.Account;
 import com.takibo.identitycore.domain.model.EmailAddress;
@@ -54,6 +55,7 @@ class UserLifecycleServiceTest {
     @Mock private UserRepository userRepository;
     @Mock private AccountRepository accountRepository;
     @Mock private UserMapper userMapper;
+    @Mock private UserLifecycleAuthorityGuard authorityGuard;
 
     @InjectMocks
     private UserLifecycleService service;
@@ -193,6 +195,40 @@ class UserLifecycleServiceTest {
         assertThatThrownBy(() -> service.changeStatus(KEY, command))
                 .isInstanceOf(InvalidStatusTransitionException.class);
 
+        verify(userRepository, never()).save(any());
+    }
+
+    // ===== Autorité sur la cible (SEC-HUNT-01) =====
+
+    @Test
+    void everyRestrictiveTransition_isCheckedAgainstTheTargetAuthority() {
+        for (UserStatus target : new UserStatus[]{UserStatus.SUSPENDED, UserStatus.LOCKED, UserStatus.DEACTIVATED}) {
+            givenUserInSpace(UserStatus.ACTIVE);
+
+            service.changeStatus(KEY, new ChangeUserStatusCommand(USER_ID, target, null));
+        }
+
+        verify(authorityGuard, times(3)).assertMayRestrict(eq(KEY), any(User.class));
+    }
+
+    @Test
+    void reactivation_isNotARestriction() {
+        givenUserInSpace(UserStatus.SUSPENDED);
+
+        service.changeStatus(KEY, new ChangeUserStatusCommand(USER_ID, UserStatus.ACTIVE, null));
+
+        verifyNoInteractions(authorityGuard);
+    }
+
+    @Test
+    void refusedRestriction_nothingSaved() {
+        givenUserInSpace(UserStatus.ACTIVE);
+        doThrow(new UserLifecycleAuthorityException("owner")).when(authorityGuard).assertMayRestrict(eq(KEY), any());
+
+        ChangeUserStatusCommand command = new ChangeUserStatusCommand(USER_ID, UserStatus.DEACTIVATED, null);
+
+        assertThatThrownBy(() -> service.changeStatus(KEY, command))
+                .isInstanceOf(UserLifecycleAuthorityException.class);
         verify(userRepository, never()).save(any());
     }
 

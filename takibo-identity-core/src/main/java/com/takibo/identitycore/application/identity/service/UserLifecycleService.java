@@ -43,6 +43,7 @@ public class UserLifecycleService implements UserLifecycleCase {
     private final UserRepository userRepository;
     private final AccountRepository accountRepository;
     private final UserMapper userMapper;
+    private final UserLifecycleAuthorityGuard authorityGuard;
 
     @Override
     public UserResponse updateProfile(ResolvedSpaceKey key, UpdateUserProfileCommand command) {
@@ -71,6 +72,10 @@ public class UserLifecycleService implements UserLifecycleCase {
     public UserResponse changeStatus(ResolvedSpaceKey key, ChangeUserStatusCommand command) {
         guard(key);
         User user = requireUserInSpace(key, command.userId());
+        if (command.targetStatus().requiresRevocation()) {
+            // SEC-HUNT-01 : la permission ouvre la surface, l'autorité de la cible la borne.
+            authorityGuard.assertMayRestrict(key, user);
+        }
 
         // Le domaine refuse les transitions illégitimes (InvalidStatusTransitionException -> 409).
         User updated = user.changeStatus(command.targetStatus());

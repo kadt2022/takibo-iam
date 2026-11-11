@@ -11,6 +11,7 @@ import com.takibo.identitycore.domain.exception.RoleNotFoundException;
 import com.takibo.identitycore.domain.exception.RoleScopeEscalationException;
 import com.takibo.identitycore.domain.exception.RoleTypeNotAllowedException;
 import com.takibo.identitycore.domain.exception.SelfDemotionException;
+import com.takibo.identitycore.domain.exception.UserLifecycleAuthorityException;
 import com.takibo.identitycore.domain.exception.UserNotActiveException;
 import com.takibo.identitycore.domain.exception.UserNotMemberOfSpaceException;
 import com.takibo.identitycore.domain.status.UserStatus;
@@ -72,6 +73,8 @@ class SentinelRuleRegistrarTest {
                 409, SentinelErrorCode.LAST_SPACE_ADMIN_REMOVAL_DENIED);
         assertResolved(new SelfDemotionException("Cannot self-remove admin role"),
                 409, SentinelErrorCode.SELF_DEMOTION_DENIED);
+        assertResolved(new UserLifecycleAuthorityException("Owner cannot be restricted"),
+                403, SentinelErrorCode.USER_LIFECYCLE_AUTHORITY_REQUIRED);
     }
 
     @Test

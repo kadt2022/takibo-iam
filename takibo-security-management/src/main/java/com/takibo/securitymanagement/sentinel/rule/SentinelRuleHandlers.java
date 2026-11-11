@@ -249,6 +249,13 @@ public final class SentinelRuleHandlers {
         return response(HttpStatus.CONFLICT, SentinelErrorCode.SELF_DEMOTION_DENIED, ex.getMessage(), path, traceId);
     }
 
+    // 403, comme une escalade de scope : l'auteur n'a pas l'autorité requise sur cette cible.
+    static SentinelResponse ruleUserLifecycleAuthority(UserLifecycleAuthorityException ex, String path,
+                                                       String traceId) {
+        return response(HttpStatus.FORBIDDEN, SentinelErrorCode.USER_LIFECYCLE_AUTHORITY_REQUIRED,
+                ex.getMessage(), path, traceId);
+    }
+
     static SentinelResponse ruleBadCredentials(Throwable ex, String path, String traceId) {
         return response(HttpStatus.UNAUTHORIZED, SentinelErrorCode.BAD_CREDENTIALS, MSG_BAD_CREDENTIALS, path, traceId);
     }

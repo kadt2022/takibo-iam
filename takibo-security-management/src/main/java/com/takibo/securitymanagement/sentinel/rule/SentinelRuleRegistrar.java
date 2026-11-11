@@ -68,6 +68,7 @@ public final class SentinelRuleRegistrar {
         registry.register(RoleScopeEscalationException.class, SentinelRuleHandlers::ruleRoleScopeEscalation);
         registry.register(LastAdminRemovalException.class, SentinelRuleHandlers::ruleLastAdminRemoval);
         registry.register(SelfDemotionException.class, SentinelRuleHandlers::ruleSelfDemotion);
+        registry.register(UserLifecycleAuthorityException.class, SentinelRuleHandlers::ruleUserLifecycleAuthority);
 
         registry.register(SpaceGuardException.class, SentinelRuleHandlers::ruleSpaceGuard);
         registry.register(SpaceNotActiveException.class, SentinelRuleHandlers::ruleSpaceNotActive);
