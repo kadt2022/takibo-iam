@@ -78,6 +78,9 @@ public class AccountCredentialsRepositoryAdapter implements AccountCredentialsRe
     // (StaleStateException) sous des connexions concurrentes. Les expressions de SET lisent
     // l'état antérieur de la ligne ; RETURNING rend l'état postérieur.
 
+    private static final String ORG_ID = "orgId";
+    private static final String ACCOUNT_ID = "accountId";
+
     private static final String RESERVE = """
             UPDATE account_credentials
                SET failed_attempts = failed_attempts + 1,
@@ -120,8 +123,8 @@ public class AccountCredentialsRepositoryAdapter implements AccountCredentialsRe
                 .setParameter("maxFailedAttempts", maxFailedAttempts)
                 .setParameter("lockUntil", lockEnabled ? lockUntil : now)
                 .setParameter("now", now)
-                .setParameter("orgId", orgId.getValue())
-                .setParameter("accountId", accountId.getValue())
+                .setParameter(ORG_ID, orgId.getValue())
+                .setParameter(ACCOUNT_ID, accountId.getValue())
                 .getResultList();
         if (counters.isEmpty()) {
             return Optional.empty();
@@ -141,8 +144,8 @@ public class AccountCredentialsRepositoryAdapter implements AccountCredentialsRe
                 .setParameter("clearLock", reservation.locksAccount())
                 .setParameter("maxFailedAttempts", maxFailedAttempts)
                 .setParameter("now", now)
-                .setParameter("orgId", orgId.getValue())
-                .setParameter("accountId", accountId.getValue())
+                .setParameter(ORG_ID, orgId.getValue())
+                .setParameter(ACCOUNT_ID, accountId.getValue())
                 .executeUpdate();
     }
 
@@ -151,8 +154,8 @@ public class AccountCredentialsRepositoryAdapter implements AccountCredentialsRe
     public void clearFailedAttempts(OrganizationId orgId, AccountId accountId, Instant now) {
         em.createNativeQuery(CLEAR)
                 .setParameter("now", now)
-                .setParameter("orgId", orgId.getValue())
-                .setParameter("accountId", accountId.getValue())
+                .setParameter(ORG_ID, orgId.getValue())
+                .setParameter(ACCOUNT_ID, accountId.getValue())
                 .executeUpdate();
     }
 }

@@ -305,7 +305,7 @@ class LoginLockoutConcurrencyPostgresIntegrationTest extends TasPostgresBaseline
 
             List<Integer> statuses = burstWithOneValidLogin(30);
 
-            assertThat(statuses).as("tour %d", round).doesNotContain(500);
+            assertThat(statuses).as("tour %d", round).hasSize(31).doesNotContain(500);
             assertThat(hasLock()).as("tour %d : verrou posé si et seulement si le seuil est atteint", round)
                     .isEqualTo(failedAttempts() >= MAX_ATTEMPTS);
             assertThat(passwordChecksAgainstTheVictimHash()).as("tour %d", round)

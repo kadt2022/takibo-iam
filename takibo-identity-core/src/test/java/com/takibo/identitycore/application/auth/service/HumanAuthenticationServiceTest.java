@@ -37,7 +37,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -124,8 +123,8 @@ class HumanAuthenticationServiceTest {
         assertUniformFailure(() -> service.authenticate(contextOf(ORG_A), new HumanCredentials(EMAIL, "wrong")));
 
         // SEC-HUNT-02 : la tentative a été comptée avant la comparaison, et n'est ni annulée ni soldée.
-        verify(accountCredentialsRepository).reserveFailedAttempt(eq(new OrganizationId(ORG_A)), eq(accountA.getId()),
-                eq(5), eq(NOW.plusSeconds(900)), eq(NOW));
+        verify(accountCredentialsRepository).reserveFailedAttempt(new OrganizationId(ORG_A), accountA.getId(),
+                5, NOW.plusSeconds(900), NOW);
         verify(accountCredentialsRepository, never()).cancelFailedAttempt(any(), any(), any(), anyInt(), any());
         verify(accountCredentialsRepository, never()).clearFailedAttempts(any(), any(), any());
         verify(accountCredentialsRepository, never()).save(any(), any());
@@ -183,8 +182,8 @@ class HumanAuthenticationServiceTest {
 
         assertUniformFailure(() -> service.authenticate(contextOf(ORG_A), new HumanCredentials(EMAIL, "wrong")));
 
-        verify(accountCredentialsRepository).reserveFailedAttempt(eq(new OrganizationId(ORG_A)), eq(accountA.getId()),
-                eq(5), isNull(), eq(NOW));
+        verify(accountCredentialsRepository).reserveFailedAttempt(new OrganizationId(ORG_A), accountA.getId(),
+                5, null, NOW);
     }
 
     @Test
@@ -295,8 +294,8 @@ class HumanAuthenticationServiceTest {
         assertUniformFailure(() -> service.authenticate(contextOf(ORG_A), new HumanCredentials(EMAIL, "wrong")));
 
         // SEC-HUNT-02 : la tentative a été comptée avant la comparaison, et n'est ni annulée ni soldée.
-        verify(accountCredentialsRepository).reserveFailedAttempt(eq(new OrganizationId(ORG_A)), eq(accountA.getId()),
-                eq(5), eq(NOW.plusSeconds(900)), eq(NOW));
+        verify(accountCredentialsRepository).reserveFailedAttempt(new OrganizationId(ORG_A), accountA.getId(),
+                5, NOW.plusSeconds(900), NOW);
         verify(accountCredentialsRepository, never()).cancelFailedAttempt(any(), any(), any(), anyInt(), any());
         verify(accountCredentialsRepository, never()).clearFailedAttempts(any(), any(), any());
         verify(accountCredentialsRepository, never()).save(any(), any());
