@@ -239,6 +239,80 @@ class LoginLockoutConcurrencyPostgresIntegrationTest extends TasPostgresBaseline
         assertThat(isLocked()).isFalse();
     }
 
+    // ---------- Succès et échecs entrelacés (revue du Sage) ----------
+
+    /**
+     * Un verrou posé par de vrais échecs n'est jamais levé par un bon mot de passe qui arrive
+     * ensuite : sa réservation est refusée, le hash n'est même pas comparé.
+     */
+    @Test
+    void a_success_never_passes_a_lock_earned_by_real_failures() {
+        jdbc.update("UPDATE account_credentials SET failed_attempts = 4 WHERE org_id = ? AND account_id = ?",
+                organizationId, victimAccountId);
+        Instant now = Instant.now();
+        FailedAttemptReservation attacker = credentials.reserveFailedAttempt(new OrganizationId(organizationId),
+                AccountId.of(victimAccountId), MAX_ATTEMPTS, now.plusSeconds(2), now).orElseThrow();
+        assertThat(attacker.locksAccount()).as("5e vrai échec").isTrue();
+        clearInvocations(passwordHasher);
+
+        assertThat(login(VICTIM_EMAIL, PASSWORD).statusCode()).isEqualTo(401);
+
+        assertThat(passwordChecksAgainstTheVictimHash()).as("hash jamais comparé pendant le verrou").isZero();
+        assertThat(failedAttempts()).isEqualTo(MAX_ATTEMPTS);
+        assertThat(isLocked()).isTrue();
+    }
+
+    /**
+     * Un succès en cours de vérification compte provisoirement comme un échec. S'il porte le
+     * compteur au seuil, ou si un échec concurrent l'y porte, le verrou n'est pas mérité : il n'y
+     * a eu que 4 vrais échecs. Le succès le lève et remet le compteur à zéro, comme un succès
+     * séquentiel. Aucun entrelacement ne fait lever un verrou atteint par 5 vrais échecs, puisque
+     * plus aucune réservation n'est acceptée une fois le seuil atteint.
+     */
+    @Test
+    void a_late_success_only_lifts_a_lock_that_counted_its_own_attempt() {
+        jdbc.update("UPDATE account_credentials SET failed_attempts = 3 WHERE org_id = ? AND account_id = ?",
+                organizationId, victimAccountId);
+        Instant now = Instant.now();
+        OrganizationId org = new OrganizationId(organizationId);
+        AccountId account = AccountId.of(victimAccountId);
+
+        credentials.reserveFailedAttempt(org, account, MAX_ATTEMPTS, now.plusSeconds(2), now).orElseThrow();
+        FailedAttemptReservation attacker = credentials.reserveFailedAttempt(org, account, MAX_ATTEMPTS,
+                now.plusSeconds(2), now).orElseThrow();
+        assertThat(attacker.locksAccount()).isTrue();
+        assertThat(credentials.reserveFailedAttempt(org, account, MAX_ATTEMPTS, now.plusSeconds(2), now))
+                .as("toute tentative suivante est refusée tant que le succès est en vol").isEmpty();
+
+        credentials.clearFailedAttempts(org, account, now);
+
+        assertThat(failedAttempts()).isZero();
+        assertThat(isLocked()).isFalse();
+    }
+
+    /**
+     * Propriété sous charge réelle : 30 échecs et 1 bon mot de passe lancés ensemble, sur 5
+     * tours. Jamais de 500 ; l'état final est toujours cohérent (verrouillé si et seulement si
+     * le compteur atteint le seuil) ; le vrai hash n'est jamais comparé plus de 2 × seuil + 1 fois
+     * (un succès remet le compteur à zéro, comme en séquentiel).
+     */
+    @Test
+    void a_valid_login_amid_a_concurrent_burst_keeps_the_lockout_consistent() throws Exception {
+        for (int round = 1; round <= 5; round++) {
+            jdbc.update("UPDATE account_credentials SET failed_attempts = 0, locked_until = NULL"
+                    + " WHERE org_id = ? AND account_id = ?", organizationId, victimAccountId);
+            clearInvocations(passwordHasher);
+
+            List<Integer> statuses = burstWithOneValidLogin(30);
+
+            assertThat(statuses).as("tour %d", round).doesNotContain(500);
+            assertThat(hasLock()).as("tour %d : verrou posé si et seulement si le seuil est atteint", round)
+                    .isEqualTo(failedAttempts() >= MAX_ATTEMPTS);
+            assertThat(passwordChecksAgainstTheVictimHash()).as("tour %d", round)
+                    .isLessThanOrEqualTo(2L * MAX_ATTEMPTS + 1);
+        }
+    }
+
     // ---------- Outils ----------
 
     private List<Integer> burst(int size, String password) throws Exception {
@@ -265,6 +339,29 @@ class LoginLockoutConcurrencyPostgresIntegrationTest extends TasPostgresBaseline
         }
     }
 
+    private List<Integer> burstWithOneValidLogin(int failures) throws Exception {
+        ExecutorService pool = Executors.newFixedThreadPool(failures + 1);
+        try {
+            CountDownLatch start = new CountDownLatch(1);
+            List<Future<Integer>> futures = new ArrayList<>();
+            for (int i = 0; i <= failures; i++) {
+                String password = i == failures / 2 ? PASSWORD : WRONG;
+                futures.add(pool.submit(() -> {
+                    start.await();
+                    return login(VICTIM_EMAIL, password).statusCode();
+                }));
+            }
+            start.countDown();
+            List<Integer> statuses = new ArrayList<>();
+            for (Future<Integer> future : futures) {
+                statuses.add(future.get());
+            }
+            return statuses;
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
     private long passwordChecksAgainstTheVictimHash() {
         String hash = jdbc.queryForObject(
                 "SELECT password_hash FROM account_credentials WHERE org_id = ? AND account_id = ?",
@@ -278,6 +375,13 @@ class LoginLockoutConcurrencyPostgresIntegrationTest extends TasPostgresBaseline
     private int failedAttempts() {
         return jdbc.queryForObject("SELECT failed_attempts FROM account_credentials WHERE org_id = ? AND account_id = ?",
                 Integer.class, organizationId, victimAccountId);
+    }
+
+    /** Présence du verrou, indépendamment de son expiration (aucune dépendance au temps). */
+    private boolean hasLock() {
+        return Boolean.TRUE.equals(jdbc.queryForObject(
+                "SELECT locked_until IS NOT NULL FROM account_credentials WHERE org_id = ? AND account_id = ?",
+                Boolean.class, organizationId, victimAccountId));
     }
 
     private boolean isLocked() {

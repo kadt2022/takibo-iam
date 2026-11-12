@@ -80,6 +80,26 @@ Rouge avant correctif : 2 des 6 tests de bout en bout échouent sur `main` (rép
 mises à jour perdues). Contre le jar de `main`, la collection modifiée échoue : le bon mot de
 passe est accepté après la rafale.
 
+## 5. Succès et échecs entrelacés (revue du Sage)
+
+Question : un succès tardif peut-il neutraliser indûment le verrouillage ?
+
+Réponse, par construction : le verrou se pose dès que le compteur atteint le seuil, et ce compteur
+inclut la tentative valide encore en vol. Aucune réservation n'est acceptée au-delà. Un verrou
+présent pendant un succès en vol compte donc au plus `seuil − 1` vrais échecs : il n'est pas
+mérité, et le succès le lève en remettant le compteur à zéro, comme un succès séquentiel. Un
+verrou atteint par `seuil` vrais échecs ne peut pas coexister avec un succès en vol, et un bon
+mot de passe arrivé après lui est refusé sans comparaison du hash.
+
+Tests ajoutés (`LoginLockoutConcurrencyPostgresIntegrationTest`, 11 au total) :
+- `a_success_never_passes_a_lock_earned_by_real_failures` : 5 vrais échecs, puis le bon mot de
+  passe : 401, hash jamais comparé ;
+- `a_late_success_only_lifts_a_lock_that_counted_its_own_attempt` : entrelacement déterministe,
+  aucune tentative acceptée tant que le succès est en vol ;
+- `a_valid_login_amid_a_concurrent_burst_keeps_the_lockout_consistent` : 5 tours de 30 échecs et
+  1 succès simultanés ; jamais de 500, verrou posé si et seulement si le seuil est atteint, au
+  plus 2 × seuil + 1 comparaisons du vrai hash.
+
 ## 5. Limites et risques résiduels
 
 - **Succès concurrent** : un bon mot de passe remet le compteur à zéro, y compris les échecs
