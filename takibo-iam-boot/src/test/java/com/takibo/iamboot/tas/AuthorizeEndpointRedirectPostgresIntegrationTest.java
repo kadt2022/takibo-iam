@@ -124,7 +124,10 @@ class AuthorizeEndpointRedirectPostgresIntegrationTest extends TasPostgresBaseli
     @Test
     void a_web_client_with_an_unregistered_or_altered_redirect_uri_is_refused_on_the_spot() {
         for (String uri : new String[]{ATTACKER, WEB_REDIRECT + "/../phish", WEB_REDIRECT + "?next=" + ATTACKER,
-                "https://app.sec-tas-04.test.redirect-probe.invalid/callback"}) {
+                "https://app.sec-tas-04.test.redirect-probe.invalid/callback",
+                "https://app.sec-tas-04.test/%63allback", "HTTPS://APP.SEC-TAS-04.TEST/callback",
+                "https://app.sec-tas-04.test/callback%2F..%2Fphish", "https://app.sec-tas-04.test:443/callback",
+                "https://app.sec-tas-04.test@redirect-probe.invalid/callback"}) {
             HttpResponse<String> response = authorize(webRequest(uri));
 
             assertThat(response.statusCode()).as("redirect_uri=%s : %s", uri, response.body()).isEqualTo(400);
@@ -152,6 +155,23 @@ class AuthorizeEndpointRedirectPostgresIntegrationTest extends TasPostgresBaseli
         assertThat(response.statusCode()).as("scope openid refusé (OIDC désactivé)").isEqualTo(302);
         assertThat(response.headers().firstValue("Location")).get().asString()
                 .startsWith(WEB_REDIRECT + "?error=invalid_scope");
+    }
+
+    @Test
+    void a_hostile_state_cannot_inject_parameters_into_an_error_redirect() {
+        String hostile = "s&error=access_denied&redirect_uri=" + ATTACKER;
+        Map<String, String> parameters = webRequest(WEB_REDIRECT);
+        parameters.put("state", hostile);
+
+        HttpResponse<String> response = authorize(parameters);
+
+        assertThat(response.statusCode()).isEqualTo(302);
+        java.net.URI location = java.net.URI.create(response.headers().firstValue("Location").orElseThrow());
+        assertThat(location.getHost()).isEqualTo("app.sec-tas-04.test");
+        var query = org.springframework.web.util.UriComponentsBuilder.fromUri(location).build(true).getQueryParams();
+        assertThat(query.get("error")).containsExactly("invalid_scope");
+        assertThat(query).doesNotContainKey("redirect_uri");
+        assertThat(java.net.URLDecoder.decode(query.getFirst("state"), StandardCharsets.UTF_8)).isEqualTo(hostile);
     }
 
     @Test

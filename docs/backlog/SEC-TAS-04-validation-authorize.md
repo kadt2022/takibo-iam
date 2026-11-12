@@ -73,6 +73,20 @@ Les erreurs 400 de cet endpoint sont désormais écrites au format OAuth2
 Rouge avant correctif : 3 tests de bout en bout échouent sur `main` (deux 302 vers l'attaquant,
 un 500). Contre le jar de `main`, la collection modifiée échoue sur 6 assertions.
 
+## 5. Vérifications complémentaires (revue du Sage)
+
+- **Bouclage** : `127.0.0.1` et `[::1]` acceptent tout port (règle SAS, RFC 8252) ; `localhost`
+  est un nom, pas une adresse de bouclage : son port reste exigé.
+- **Encodage et casse** : `%63allback`, `callback%2F..%2Fphish`, `callback%20`, `callback/.`,
+  casse différente, port par défaut explicite, `?` ou fragment vides, `user@hôte` : tous refusés
+  (correspondance exacte, aucune normalisation).
+- **Redirection d'erreur** : un `state` hostile (`&error=…&redirect_uri=…#…`) est encodé ;
+  il ne peut ni ajouter de paramètre, ni remplacer `error`, ni introduire un fragment, et il
+  revient intact au client.
+
+Tests : `RegisteredRedirectUriErrorHandlerTest` (11), `AuthorizeEndpointRedirectPostgresIntegrationTest` (9).
+Aucun changement de production.
+
 ## 5. Limites et risques résiduels
 
 - L'oracle d'existence d'un `client_id` (400 « client inconnu » contre 400 `unauthorized_client`)

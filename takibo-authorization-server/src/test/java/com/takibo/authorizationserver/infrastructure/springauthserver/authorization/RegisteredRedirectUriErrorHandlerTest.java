@@ -40,6 +40,8 @@ class RegisteredRedirectUriErrorHandlerTest {
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                 .redirectUri(REGISTERED)
                 .redirectUri("http://127.0.0.1/native")
+                .redirectUri("http://[::1]/native")
+                .redirectUri("http://localhost/native")
                 .build());
         return new RegisteredRedirectUriErrorHandler(registeredClients, new OAuth2HttpErrorWriter(new ObjectMapper()));
     }
@@ -91,6 +93,42 @@ class RegisteredRedirectUriErrorHandlerTest {
     }
 
     @Test
+    void an_ipv6_loopback_uri_matches_its_registration_whatever_the_port() throws Exception {
+        assertThat(fail("web-client", "http://[::1]:51004/native").getStatus()).isEqualTo(302);
+        assertThat(fail("web-client", "http://[::1]:51004/other").getStatus()).isEqualTo(400);
+    }
+
+    @Test
+    void a_loopback_host_name_is_not_a_loopback_address_and_keeps_its_port() throws Exception {
+        assertThat(fail("web-client", "http://localhost/native").getStatus()).isEqualTo(302);
+        assertThat(fail("web-client", "http://localhost:51004/native").getStatus()).isEqualTo(400);
+    }
+
+    @Test
+    void encoded_or_case_variants_of_a_registered_uri_are_not_registered() throws Exception {
+        for (String variant : new String[]{"https://app.test/%63allback", "https://app.test/callback%2F..%2Fphish",
+                "HTTPS://APP.TEST/callback", "https://app.test/callback%20", "https://app.test/callback/.",
+                "https://app.test:443/callback", "https://app.test/callback?", "https://app.test/callback#x"}) {
+            assertWrittenOnTheSpot(fail("web-client", variant), "unauthorized_client");
+        }
+    }
+
+    @Test
+    void a_hostile_state_is_encoded_and_cannot_inject_parameters() throws Exception {
+        String hostile = "x&error=access_denied&redirect_uri=https://redirect-probe.invalid#frag";
+        MockHttpServletResponse response = failWithState("web-client", REGISTERED, hostile);
+
+        java.net.URI location = java.net.URI.create(response.getRedirectedUrl());
+        assertThat(location.getHost()).isEqualTo("app.test");
+        assertThat(location.getRawFragment()).isNull();
+        var query = org.springframework.web.util.UriComponentsBuilder.fromUri(location).build(true).getQueryParams();
+        assertThat(query.get("error")).containsExactly("unauthorized_client");
+        assertThat(query).doesNotContainKey("redirect_uri");
+        assertThat(java.net.URLDecoder.decode(query.getFirst("state"), java.nio.charset.StandardCharsets.UTF_8))
+                .isEqualTo(hostile);
+    }
+
+    @Test
     void a_variant_of_a_registered_uri_is_not_registered() {
         Set<String> registered = Set.of(REGISTERED);
 
@@ -101,10 +139,14 @@ class RegisteredRedirectUriErrorHandlerTest {
     }
 
     private MockHttpServletResponse fail(String clientId, String redirectUri) throws Exception {
+        return failWithState(clientId, redirectUri, "xyz");
+    }
+
+    private MockHttpServletResponse failWithState(String clientId, String redirectUri, String state) throws Exception {
         OAuth2AuthorizationCodeRequestAuthenticationToken request = new OAuth2AuthorizationCodeRequestAuthenticationToken(
                 "http://localhost/oauth2/authorize", clientId,
                 new AnonymousAuthenticationToken("key", "anonymous", AuthorityUtils.createAuthorityList("ROLE_ANONYMOUS")),
-                redirectUri, "xyz", Set.of(), Map.of());
+                redirectUri, state, Set.of(), Map.of());
         MockHttpServletResponse response = new MockHttpServletResponse();
         handler().onAuthenticationFailure(new MockHttpServletRequest(), response,
                 new OAuth2AuthorizationCodeRequestAuthenticationException(
