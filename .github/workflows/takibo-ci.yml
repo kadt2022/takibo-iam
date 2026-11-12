@@ -435,7 +435,7 @@ jobs:
         run: |
           mkdir -p build/newman
 
-          newman run postman/Takibo-Postman-Collection.json \
+          newman run postman/Takibo-Newman-Tests.json \
             --env-var baseUrl=http://127.0.0.1:${TAKIBO_APP_PORT} \
             --env-var postmanSecret="${TAKIBO_DEV_POSTMAN_SECRET}" \
             --timeout-request 15000 \

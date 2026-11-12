@@ -7,7 +7,7 @@
 Cette collection devient la **source unique de vérité E2E** de TAKIBO. Les trois tranches décrivent l’ordre d’implémentation, mais elles vivent dans une seule collection canonique :
 
 ```text
-postman/Takibo-Postman-Collection.json
+postman/Takibo-Newman-Tests.json
 ```
 
 ## Règles de construction

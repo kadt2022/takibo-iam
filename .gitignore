@@ -14,7 +14,7 @@ out/
 # Postman : seule la collection BVT unifiee est versionnee (la CI la joue via newman) ;
 # les environnements locaux (secrets) et scripts restent hors repo.
 postman/*
-!postman/Takibo-Postman-Collection.json
+!postman/Takibo-Newman-Tests.json
 .gradle-user/
 
 # Keep Gradle wrapper ONLY at root
