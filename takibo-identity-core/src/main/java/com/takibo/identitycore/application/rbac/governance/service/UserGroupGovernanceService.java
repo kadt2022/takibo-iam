@@ -1,5 +1,6 @@
 package com.takibo.identitycore.application.rbac.governance.service;
 
+import com.takibo.identitycore.domain.catalogrbac.TechnicalRole;
 import com.takibo.identitycore.application.rbac.governance.command.AddUserToGroupCommand;
 import com.takibo.identitycore.application.rbac.governance.command.RemoveUserFromGroupCommand;
 import com.takibo.identitycore.application.rbac.governance.mapper.UserRbacGovernanceMapper;
@@ -9,7 +10,6 @@ import com.takibo.identitycore.domain.catalogrbac.AuthorityPlan;
 import com.takibo.identitycore.domain.exception.DuplicateAssignmentException;
 import com.takibo.identitycore.domain.exception.GroupNotFoundException;
 import com.takibo.identitycore.domain.exception.GroupTypeNotAllowedException;
-import com.takibo.identitycore.domain.exception.LastAdminRemovalException;
 import com.takibo.identitycore.domain.exception.RoleScopeEscalationException;
 import com.takibo.identitycore.domain.exception.SelfDemotionException;
 import com.takibo.identitycore.domain.exception.UserNotFoundException;
@@ -64,6 +64,7 @@ public class UserGroupGovernanceService implements UserGroupGovernanceCase {
     private static final Set<String> ADMIN_GROUP_CODES = Set.of("G_ORG_ADMINS", "G_SPACE_ADMINS");
 
     private static final String SPACE_ADMINS_CODE = TechnicalGroup.SPACE_ADMINS.code();
+    private static final String SPACE_ADMIN_ROLE_CODE = TechnicalRole.SPACE_ADMIN.code();
 
     private final SpaceContextVerifier spaceContextVerifier;
     private final SpaceBoundaryGuard spaceBoundaryGuard;
@@ -73,6 +74,7 @@ public class UserGroupGovernanceService implements UserGroupGovernanceCase {
     private final GovernanceGroupAssignmentRepository memberships;
     private final GovernanceRoleAssignmentRepository roleAssignments;
     private final UserRbacGovernanceMapper mapper;
+    private final LastSpaceAdministratorGuard lastAdministratorGuard;
 
     @Override
     @Transactional(readOnly = true)
@@ -130,10 +132,11 @@ public class UserGroupGovernanceService implements UserGroupGovernanceCase {
             throw new SelfDemotionException(
                     "An administrator cannot leave " + group.code() + " by themselves on this surface");
         }
-        if (SPACE_ADMINS_CODE.equals(group.code())
-                && memberships.countIdentitiesInGroup(key.orgId(), key.spaceId(), SPACE_ADMINS_CODE) <= 1) {
-            throw new LastAdminRemovalException(
-                    "Cannot remove the last member of " + SPACE_ADMINS_CODE + " of the space");
+        if (SPACE_ADMINS_CODE.equals(group.code())) {
+            // SEC-HUNT-06 : invariant sur les administrateurs effectifs, sous verrou du Space.
+            lastAdministratorGuard.assertSpaceKeepsAnAdministrator(key, user, SPACE_ADMINS_CODE,
+                    () -> roleAssignments.existsAssignment(
+                            key.orgId(), key.spaceId(), targetAccountId, SPACE_ADMIN_ROLE_CODE));
         }
 
         // IAM 31 : le retrait cible le niveau où la ligne vit réellement.

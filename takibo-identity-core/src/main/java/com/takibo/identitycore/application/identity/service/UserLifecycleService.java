@@ -4,6 +4,7 @@ import com.takibo.identitycore.application.identity.command.ChangeUserStatusComm
 import com.takibo.identitycore.application.identity.command.UpdateUserProfileCommand;
 import com.takibo.identitycore.application.identity.mapper.UserMapper;
 import com.takibo.identitycore.application.identity.port.UserLifecycleCase;
+import com.takibo.identitycore.application.rbac.governance.service.LastSpaceAdministratorGuard;
 import com.takibo.identitycore.domain.exception.UserAlreadyExistsException;
 import com.takibo.identitycore.domain.exception.UserCreationException;
 import com.takibo.identitycore.domain.exception.UserNotFoundException;
@@ -43,6 +44,7 @@ public class UserLifecycleService implements UserLifecycleCase {
     private final UserRepository userRepository;
     private final AccountRepository accountRepository;
     private final UserMapper userMapper;
+    private final LastSpaceAdministratorGuard lastAdministratorGuard;
 
     @Override
     public UserResponse updateProfile(ResolvedSpaceKey key, UpdateUserProfileCommand command) {
@@ -71,6 +73,10 @@ public class UserLifecycleService implements UserLifecycleCase {
     public UserResponse changeStatus(ResolvedSpaceKey key, ChangeUserStatusCommand command) {
         guard(key);
         User user = requireUserInSpace(key, command.userId());
+        if (command.targetStatus().requiresRevocation()) {
+            // SEC-HUNT-06 : un Space garde toujours un administrateur effectif, cycle de vie compris.
+            lastAdministratorGuard.assertRestrictionKeepsAnAdministrator(key, user);
+        }
 
         // Le domaine refuse les transitions illégitimes (InvalidStatusTransitionException -> 409).
         User updated = user.changeStatus(command.targetStatus());
