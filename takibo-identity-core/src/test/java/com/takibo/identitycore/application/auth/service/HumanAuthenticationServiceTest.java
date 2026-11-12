@@ -8,6 +8,7 @@ import com.takibo.identitycore.domain.exception.AuthenticationFailedException;
 import com.takibo.identitycore.domain.model.Account;
 import com.takibo.identitycore.domain.model.AccountCredentials;
 import com.takibo.identitycore.domain.model.EmailAddress;
+import com.takibo.identitycore.domain.model.FailedAttemptReservation;
 import com.takibo.identitycore.domain.model.TakiboIdentity;
 import com.takibo.identitycore.domain.repository.AccountCredentialsRepository;
 import com.takibo.identitycore.domain.repository.AccountRepository;
@@ -20,7 +21,6 @@ import com.takibo.identitycore.integration.space.port.ResolvedOrgKey;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -35,7 +35,9 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -56,6 +58,7 @@ class HumanAuthenticationServiceTest {
     private static final String HASH_A = "$2a$hash-of-a";
     private static final String HASH_B = "$2a$hash-of-b";
     private static final String DUMMY_HASH = "$2a$dummy-timing-hash";
+    private static final FailedAttemptReservation RESERVED = new FailedAttemptReservation(1, false);
     private static final String UNIFORM_MESSAGE = "Impossible de valider cette connexion.";
     private static final Instant NOW = Instant.parse("2026-11-08T10:00:00Z");
 
@@ -94,6 +97,7 @@ class HumanAuthenticationServiceTest {
         assertThat(verified.accountId()).isEqualTo(accountA.getId().getValue());
         assertThat(verified.method()).isEqualTo(AuthenticationMethod.PASSWORD);
         assertThat(verified.authenticatedAt()).isEqualTo(NOW);
+        verify(accountCredentialsRepository).clearFailedAttempts(new OrganizationId(ORG_A), accountA.getId(), NOW);
         verify(accountCredentialsRepository, never()).save(any(), any());
     }
 
@@ -105,10 +109,8 @@ class HumanAuthenticationServiceTest {
 
         service.authenticate(contextOf(ORG_A), new HumanCredentials(EMAIL, PASSWORD_A));
 
-        ArgumentCaptor<AccountCredentials> saved = ArgumentCaptor.forClass(AccountCredentials.class);
-        verify(accountCredentialsRepository).save(saved.capture(), eq(ORG_A));
-        assertThat(saved.getValue().getFailedAttempts()).isZero();
-        assertThat(saved.getValue().getLockedUntil()).isNull();
+        verify(accountCredentialsRepository).clearFailedAttempts(new OrganizationId(ORG_A), accountA.getId(), NOW);
+        verify(accountCredentialsRepository, never()).cancelFailedAttempt(any(), any(), any(), anyInt(), any());
     }
 
     // ---------- Échecs uniformes ----------
@@ -120,9 +122,12 @@ class HumanAuthenticationServiceTest {
 
         assertUniformFailure(() -> service.authenticate(contextOf(ORG_A), new HumanCredentials(EMAIL, "wrong")));
 
-        ArgumentCaptor<AccountCredentials> saved = ArgumentCaptor.forClass(AccountCredentials.class);
-        verify(accountCredentialsRepository).save(saved.capture(), eq(ORG_A));
-        assertThat(saved.getValue().getFailedAttempts()).isEqualTo(1);
+        // SEC-HUNT-02 : la tentative a été comptée avant la comparaison, et n'est ni annulée ni soldée.
+        verify(accountCredentialsRepository).reserveFailedAttempt(new OrganizationId(ORG_A), accountA.getId(),
+                5, NOW.plusSeconds(900), NOW);
+        verify(accountCredentialsRepository, never()).cancelFailedAttempt(any(), any(), any(), anyInt(), any());
+        verify(accountCredentialsRepository, never()).clearFailedAttempts(any(), any(), any());
+        verify(accountCredentialsRepository, never()).save(any(), any());
     }
 
     @Test
@@ -155,6 +160,30 @@ class HumanAuthenticationServiceTest {
         assertUniformFailure(() -> service.authenticate(contextOf(ORG_A), new HumanCredentials(EMAIL, PASSWORD_A)));
 
         verify(passwordHasher, never()).matches(any(), any());
+        verify(accountCredentialsRepository, never()).reserveFailedAttempt(any(), any(), anyInt(), any(), any());
+    }
+
+    @Test
+    void an_account_locked_by_a_concurrent_attempt_fails_uniformly_without_checking_the_password() {
+        givenAccount(ORG_A, accountA, credentials(accountA, HASH_A).toBuilder().failedAttempts(4).build());
+        when(accountCredentialsRepository.reserveFailedAttempt(any(), any(), anyInt(), any(), any()))
+                .thenReturn(Optional.empty());
+
+        assertUniformFailure(() -> service.authenticate(contextOf(ORG_A), new HumanCredentials(EMAIL, PASSWORD_A)));
+
+        verify(passwordHasher, never()).matches(any(), any());
+    }
+
+    @Test
+    void without_a_lock_duration_no_lock_is_ever_requested() {
+        ReflectionTestUtils.setField(service, "lockSeconds", 0L);
+        givenAccount(ORG_A, accountA, credentials(accountA, HASH_A));
+        when(passwordHasher.matches("wrong", HASH_A)).thenReturn(false);
+
+        assertUniformFailure(() -> service.authenticate(contextOf(ORG_A), new HumanCredentials(EMAIL, "wrong")));
+
+        verify(accountCredentialsRepository).reserveFailedAttempt(new OrganizationId(ORG_A), accountA.getId(),
+                5, null, NOW);
     }
 
     @Test
@@ -222,6 +251,8 @@ class HumanAuthenticationServiceTest {
         assertUniformFailure(() -> service.authenticate(contextOf(ORG_A), new HumanCredentials(EMAIL, PASSWORD_A)));
 
         verify(passwordHasher).matches(PASSWORD_A, HASH_A);
+        verify(accountCredentialsRepository).cancelFailedAttempt(new OrganizationId(ORG_A), accountA.getId(), RESERVED, 5, NOW);
+        verify(accountCredentialsRepository, never()).clearFailedAttempts(any(), any(), any());
         verify(accountCredentialsRepository, never()).save(any(), any());
     }
 
@@ -234,6 +265,8 @@ class HumanAuthenticationServiceTest {
         assertUniformFailure(() -> service.authenticate(contextOf(ORG_A), new HumanCredentials(EMAIL, PASSWORD_A)));
 
         verify(passwordHasher).matches(PASSWORD_A, HASH_A);
+        verify(accountCredentialsRepository).cancelFailedAttempt(new OrganizationId(ORG_A), accountA.getId(), RESERVED, 5, NOW);
+        verify(accountCredentialsRepository, never()).clearFailedAttempts(any(), any(), any());
         verify(accountCredentialsRepository, never()).save(any(), any());
     }
 
@@ -247,6 +280,8 @@ class HumanAuthenticationServiceTest {
         assertUniformFailure(() -> service.authenticate(contextOf(ORG_A), new HumanCredentials(EMAIL, PASSWORD_A)));
 
         verify(passwordHasher).matches(PASSWORD_A, HASH_A);
+        verify(accountCredentialsRepository).cancelFailedAttempt(new OrganizationId(ORG_A), accountA.getId(), RESERVED, 5, NOW);
+        verify(accountCredentialsRepository, never()).clearFailedAttempts(any(), any(), any());
         verify(accountCredentialsRepository, never()).save(any(), any());
     }
 
@@ -258,9 +293,12 @@ class HumanAuthenticationServiceTest {
 
         assertUniformFailure(() -> service.authenticate(contextOf(ORG_A), new HumanCredentials(EMAIL, "wrong")));
 
-        ArgumentCaptor<AccountCredentials> saved = ArgumentCaptor.forClass(AccountCredentials.class);
-        verify(accountCredentialsRepository).save(saved.capture(), eq(ORG_A));
-        assertThat(saved.getValue().getFailedAttempts()).isEqualTo(1);
+        // SEC-HUNT-02 : la tentative a été comptée avant la comparaison, et n'est ni annulée ni soldée.
+        verify(accountCredentialsRepository).reserveFailedAttempt(new OrganizationId(ORG_A), accountA.getId(),
+                5, NOW.plusSeconds(900), NOW);
+        verify(accountCredentialsRepository, never()).cancelFailedAttempt(any(), any(), any(), anyInt(), any());
+        verify(accountCredentialsRepository, never()).clearFailedAttempts(any(), any(), any());
+        verify(accountCredentialsRepository, never()).save(any(), any());
     }
 
     @Test
@@ -328,6 +366,9 @@ class HumanAuthenticationServiceTest {
                 .thenReturn(Optional.of(account));
         when(accountCredentialsRepository.find(new OrganizationId(orgId), account.getId()))
                 .thenReturn(Optional.of(credentials));
+        lenient().when(accountCredentialsRepository.reserveFailedAttempt(
+                        eq(new OrganizationId(orgId)), eq(account.getId()), anyInt(), any(), any()))
+                .thenReturn(Optional.of(RESERVED));
     }
 
     private static void assertUniformFailure(org.assertj.core.api.ThrowableAssert.ThrowingCallable call) {

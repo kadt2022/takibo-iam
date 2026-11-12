@@ -9,6 +9,7 @@ import com.takibo.identitycore.domain.exception.AuthenticationFailedException;
 import com.takibo.identitycore.domain.model.Account;
 import com.takibo.identitycore.domain.model.AccountCredentials;
 import com.takibo.identitycore.domain.model.EmailAddress;
+import com.takibo.identitycore.domain.model.FailedAttemptReservation;
 import com.takibo.identitycore.domain.model.IdentityStatus;
 import com.takibo.identitycore.domain.model.TakiboIdentity;
 import com.takibo.identitycore.domain.repository.AccountCredentialsRepository;
@@ -24,6 +25,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.Assert;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -36,8 +38,9 @@ import java.util.UUID;
  * Toutes les causes d'échec lèvent la même {@link AuthenticationFailedException} ; la cause réelle ne vit que dans les
  * journaux, et un hash factice égalise le temps de réponse quand aucun hash réel n'existe.
  * <p>
- * Volontairement PAS de {@code @Transactional} : l'incrément de {@code failedAttempts} est
- * persisté dans la transaction du repository et doit survivre à l'échec levé juste après.
+ * Volontairement PAS de {@code @Transactional} : chaque écriture du compteur d'échecs est
+ * persistée dans sa propre transaction du repository et doit survivre à l'échec levé juste
+ * après ; la réservation doit aussi être visible des tentatives concurrentes dès son écriture.
  */
 @Service
 @RequiredArgsConstructor
@@ -92,25 +95,36 @@ public class HumanAuthenticationService implements HumanAuthenticationCase {
                     account.get().getId(), orgId);
             throw new AuthenticationFailedException();
         }
+        // SEC-HUNT-02 : la tentative est comptée AVANT la comparaison du mot de passe, par une
+        // écriture atomique. Sous une rafale concurrente, au plus maxFailedAttempts comparaisons
+        // ont lieu avant le verrou ; les suivantes sont refusées sans vérifier le hash.
+        Instant now = clock.instant();
+        Optional<FailedAttemptReservation> reservation = accountCredentialsRepository.reserveFailedAttempt(
+                organization, account.get().getId(), maxFailedAttempts,
+                lockSeconds > 0 ? now.plusSeconds(lockSeconds) : null, now);
+        if (reservation.isEmpty()) {
+            log.warn("Human authentication refused cause=account locked accountId={} orgId={}",
+                    account.get().getId(), orgId);
+            throw new AuthenticationFailedException();
+        }
         if (!passwordHasher.matches(credentials.password(), current.getPasswordHash().getHash())) {
-            accountCredentialsRepository.save(current.registerFailure(maxFailedAttempts, lockSeconds), orgId);
             log.warn("Human authentication refused cause=bad password accountId={} orgId={} attempts={}",
-                    account.get().getId(), orgId, current.getFailedAttempts() + 1);
+                    account.get().getId(), orgId, reservation.get().failedAttempts());
             throw new AuthenticationFailedException();
         }
         // IAM-REVOKE-01 : une identité absente ou non ACTIVE n'obtient aucune preuve. Contrôle
         // placé après le mot de passe : le coût du hash est déjà payé, aucun oracle temporel ; le
-        // refus ne touche pas au compteur d'échecs.
+        // refus ne touche pas au compteur d'échecs (la réservation est annulée).
         UUID accountId = account.get().getId().getValue();
         Optional<TakiboIdentity> identity = takiboIdentityRepository.findByOrgIdAndAccountId(orgId, accountId);
         if (identity.isEmpty() || identity.get().getIdentityStatus() != IdentityStatus.ACTIVE) {
+            accountCredentialsRepository.cancelFailedAttempt(organization, account.get().getId(),
+                    reservation.get(), maxFailedAttempts, clock.instant());
             log.warn("Human authentication refused cause=identity not active status={} accountId={} orgId={}",
                     identity.map(TakiboIdentity::getIdentityStatus).map(Enum::name).orElse("ABSENT"), accountId, orgId);
             throw new AuthenticationFailedException();
         }
-        if (current.getFailedAttempts() > 0 || current.getLockedUntil() != null) {
-            accountCredentialsRepository.save(current.registerSuccess(), orgId);
-        }
+        accountCredentialsRepository.clearFailedAttempts(organization, account.get().getId(), clock.instant());
         return new VerifiedHuman(orgId, accountId, AuthenticationMethod.PASSWORD, clock.instant());
     }
 
