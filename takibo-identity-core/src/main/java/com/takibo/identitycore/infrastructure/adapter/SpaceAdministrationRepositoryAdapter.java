@@ -23,10 +23,11 @@ public class SpaceAdministrationRepositoryAdapter implements SpaceAdministration
 
     private static final String LOCK = "SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))";
 
-    private static final String COUNT = """
+    /** Administrateurs effectifs ; le marqueur %s choisit l'Account visé ou exclu. */
+    private static final String EFFECTIVE = """
             SELECT COUNT(DISTINCT u.account_id) FROM users u
              WHERE u.org_id = :orgId AND u.space_id = :spaceId AND u.status = 'ACTIVE'
-               AND u.account_id <> :accountId
+               AND u.account_id %s :accountId
                AND (EXISTS (SELECT 1 FROM role_assignments r
                              WHERE r.org_id = u.org_id AND r.space_id = u.space_id
                                AND r.identity_type = 'ACCOUNT' AND r.identity_id = u.account_id
@@ -47,8 +48,18 @@ public class SpaceAdministrationRepositoryAdapter implements SpaceAdministration
 
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
+    public boolean isEffectiveAdministrator(UUID orgId, UUID spaceId, UUID accountId) {
+        return count(EFFECTIVE.formatted("="), orgId, spaceId, accountId) > 0;
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
     public long countEffectiveAdministratorsOtherThan(UUID orgId, UUID spaceId, UUID accountId) {
-        return ((Number) em.createNativeQuery(COUNT)
+        return count(EFFECTIVE.formatted("<>"), orgId, spaceId, accountId);
+    }
+
+    private long count(String sql, UUID orgId, UUID spaceId, UUID accountId) {
+        return ((Number) em.createNativeQuery(sql)
                 .setParameter("orgId", orgId)
                 .setParameter("spaceId", spaceId)
                 .setParameter("accountId", accountId)

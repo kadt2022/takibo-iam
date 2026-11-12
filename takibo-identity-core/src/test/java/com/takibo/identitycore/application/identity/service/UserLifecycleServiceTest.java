@@ -1,5 +1,7 @@
 package com.takibo.identitycore.application.identity.service;
 
+import com.takibo.identitycore.domain.exception.LastAdminRemovalException;
+import com.takibo.identitycore.application.rbac.governance.service.LastSpaceAdministratorGuard;
 import com.takibo.identitycore.application.identity.command.ChangeUserStatusCommand;
 import com.takibo.identitycore.application.identity.command.UpdateUserProfileCommand;
 import com.takibo.identitycore.application.identity.mapper.UserMapper;
@@ -54,6 +56,7 @@ class UserLifecycleServiceTest {
     @Mock private UserRepository userRepository;
     @Mock private AccountRepository accountRepository;
     @Mock private UserMapper userMapper;
+    @Mock private LastSpaceAdministratorGuard lastAdministratorGuard;
 
     @InjectMocks
     private UserLifecycleService service;
@@ -193,6 +196,38 @@ class UserLifecycleServiceTest {
         assertThatThrownBy(() -> service.changeStatus(KEY, command))
                 .isInstanceOf(InvalidStatusTransitionException.class);
 
+        verify(userRepository, never()).save(any());
+    }
+
+    // ===== Dernier administrateur effectif (SEC-HUNT-06) =====
+
+    @Test
+    void everyRestriction_checksTheLastEffectiveAdministrator() {
+        for (UserStatus target : new UserStatus[]{UserStatus.SUSPENDED, UserStatus.LOCKED, UserStatus.DEACTIVATED}) {
+            givenUserInSpace(UserStatus.ACTIVE);
+            service.changeStatus(KEY, new ChangeUserStatusCommand(USER_ID, target, null));
+        }
+
+        verify(lastAdministratorGuard, times(3)).assertRestrictionKeepsAnAdministrator(eq(KEY), any(User.class));
+    }
+
+    @Test
+    void reactivation_doesNotConsultTheLastAdministratorRule() {
+        givenUserInSpace(UserStatus.SUSPENDED);
+
+        service.changeStatus(KEY, new ChangeUserStatusCommand(USER_ID, UserStatus.ACTIVE, null));
+
+        verifyNoInteractions(lastAdministratorGuard);
+    }
+
+    @Test
+    void restrictingTheLastAdministrator_isRefused_nothingSaved() {
+        givenUserInSpace(UserStatus.ACTIVE);
+        doThrow(new LastAdminRemovalException("last")).when(lastAdministratorGuard)
+                .assertRestrictionKeepsAnAdministrator(eq(KEY), any());
+        ChangeUserStatusCommand command = new ChangeUserStatusCommand(USER_ID, UserStatus.DEACTIVATED, null);
+
+        assertThatThrownBy(() -> service.changeStatus(KEY, command)).isInstanceOf(LastAdminRemovalException.class);
         verify(userRepository, never()).save(any());
     }
 

@@ -52,10 +52,20 @@ Ce que l'invariant change, sans concurrence :
 - `UserRoleGovernanceService.removeRole` et `UserGroupGovernanceService.removeFromGroup`
   appellent la garde à la place de leurs comptes séparés. La suppression a lieu dans la même
   transaction, après la décision : aucune suppression partielle.
+- **Cycle de vie** (ajouté après la revue du Sage) : `UserLifecycleService.changeStatus` appelle
+  `assertRestrictionKeepsAnAdministrator` avant toute restriction (suspendre, verrouiller,
+  désactiver). Un administrateur effectif ne peut pas être restreint si aucun autre ne demeure ;
+  un utilisateur ordinaire n'est jamais concerné. Même verrou : une désactivation et un retrait
+  de rôle concurrents se sérialisent.
 
-Coordination avec SEC-HUNT-01 (#128), sans dépendance de branche : #128 empêche un délégué de
-restreindre un administrateur plus privilégié, ou de se restreindre lui-même. Ce récit protège
-l'administration effective contre les retraits de pouvoir.
+Coordination avec SEC-HUNT-01 (#128), sans dépendance de branche : #128 borne la restriction par
+l'autorité de la cible (403) ; ce récit garantit l'administration effective (409), sur les
+retraits de pouvoir comme sur le cycle de vie. Les deux PR modifient le même bloc de
+`UserLifecycleService.changeStatus` : la seconde fusionnée devra garder les deux contrôles, dans
+cet ordre (autorité, puis dernier administrateur). Cette résolution a été vérifiée sur une fusion
+locale #128 + #131 : `UserLifecycleProtectionPostgresIntegrationTest` 12/12,
+`LastSpaceAdministratorConcurrencyPostgresIntegrationTest` 12/12, `UserLifecycleServiceTest`
+16/16 ; le propriétaire, autorisé par #128, reçoit 409 sur le dernier administrateur effectif.
 
 ## 5. Tests
 
@@ -64,7 +74,7 @@ l'administration effective contre les retraits de pouvoir.
 | Unitaire | `LastSpaceAdministratorGuardTest` (5) | dernier administrateur, autre administrateur, autre voie, cible inactive, verrou avant toute lecture |
 | Unitaire | `UserRoleGovernanceServiceTest`, `UserGroupGovernanceServiceTest` | garde appelée avec la bonne autre voie ; rien n'est supprimé après un refus |
 | Unitaire | `SpaceAdministrationRepositoryAdapterTest` (2) | clé du verrou, compte excluant la cible |
-| Bout en bout PostgreSQL | `LastSpaceAdministratorConcurrencyPostgresIntegrationTest` (7) | 8 tours de retraits croisés concurrents, par rôle, par groupe et mixtes : toujours un 200 et un 409, un administrateur restant ; dernier administrateur effectif : 409 sans suppression ; héritage par le groupe ; administrateur désactivé |
+| Bout en bout PostgreSQL | `LastSpaceAdministratorConcurrencyPostgresIntegrationTest` (12) | 8 tours de retraits croisés concurrents, par rôle, par groupe et mixtes : toujours un 200 et un 409, un administrateur restant ; dernier administrateur effectif : 409 sans suppression ; héritage par le groupe ; administrateur désactivé ; cycle de vie : dernier administrateur (409, statut et version inchangés), autre administrateur restant (200), utilisateur ordinaire jamais bloqué, désactivations croisées concurrentes, désactivation concurrente d'un retrait de rôle |
 | Newman | dossier « 06 » (+11 requêtes) | retrait du groupe quand d'autres administrateurs demeurent ; retraits croisés concurrents ; restauration |
 
 Rouge sur `main` : 6 des 7 tests de bout en bout échouent (dont `200`/`200` au premier tour).
@@ -75,9 +85,6 @@ pouvoirs d'administration du Space, qu'il ne peut pas se retirer lui-même par l
 
 ## 6. Limites et risques résiduels
 
-- Le cycle de vie (`deactivate`) ne passe pas par cette garde : désactiver le dernier
-  administrateur reste possible pour un auteur de rang égal ou supérieur (après #128). À
-  arbitrer : étendre l'invariant au cycle de vie.
 - Le verrou est propre à PostgreSQL ; le dépôt ne migre que vers PostgreSQL.
 - `countIdentitiesHoldingRole` et `countIdentitiesInGroup` ne sont plus appelés par les services ;
   ils ne sont pas supprimés dans ce récit.

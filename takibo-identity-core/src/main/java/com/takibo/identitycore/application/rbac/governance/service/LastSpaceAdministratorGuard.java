@@ -25,7 +25,7 @@ import java.util.function.BooleanSupplier;
  */
 @Component
 @RequiredArgsConstructor
-class LastSpaceAdministratorGuard {
+public class LastSpaceAdministratorGuard {
 
     private final SpaceAdministrationRepository administration;
 
@@ -33,8 +33,8 @@ class LastSpaceAdministratorGuard {
      * @param targetKeepsAdministration vrai si la cible détient encore l'autre voie ; évalué
      *                                  après la prise du verrou
      */
-    void assertSpaceKeepsAnAdministrator(ResolvedSpaceKey key, User target, String removed,
-                                         BooleanSupplier targetKeepsAdministration) {
+    public void assertSpaceKeepsAnAdministrator(ResolvedSpaceKey key, User target, String removed,
+                                                BooleanSupplier targetKeepsAdministration) {
         administration.lockAdministrationOf(key.spaceId());
         if (target.getStatus() != UserStatus.ACTIVE || targetKeepsAdministration.getAsBoolean()) {
             return;
@@ -43,6 +43,24 @@ class LastSpaceAdministratorGuard {
         if (administration.countEffectiveAdministratorsOtherThan(key.orgId(), key.spaceId(), targetAccountId) == 0) {
             throw new LastAdminRemovalException(
                     "Cannot remove " + removed + ": the space would have no effective administrator left");
+        }
+    }
+
+    /**
+     * Restriction du cycle de vie (suspendre, verrouiller, désactiver) : une cible restreinte
+     * cesse d'être administrateur effectif. Refusée si elle l'était et qu'aucun autre ne demeure.
+     * Même verrou que les retraits de rôle et de groupe : les deux surfaces se sérialisent.
+     */
+    public void assertRestrictionKeepsAnAdministrator(ResolvedSpaceKey key, User target) {
+        administration.lockAdministrationOf(key.spaceId());
+        UUID targetAccountId = target.getAccountId().getValue();
+        if (target.getStatus() != UserStatus.ACTIVE
+                || !administration.isEffectiveAdministrator(key.orgId(), key.spaceId(), targetAccountId)) {
+            return;
+        }
+        if (administration.countEffectiveAdministratorsOtherThan(key.orgId(), key.spaceId(), targetAccountId) == 0) {
+            throw new LastAdminRemovalException(
+                    "Cannot restrict the last effective administrator of the space");
         }
     }
 }

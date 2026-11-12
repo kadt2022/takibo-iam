@@ -207,6 +207,72 @@ class LastSpaceAdministratorConcurrencyPostgresIntegrationTest extends TasPostgr
                 .statusCode()).as("seul administrateur actif : admin-a").isEqualTo(409);
     }
 
+    // ---------- Cycle de vie : la même règle, sous le même verrou ----------
+
+    @Test
+    void deactivating_the_last_effective_administrator_is_refused_and_nothing_changes() {
+        grantRole(adminA);
+        withoutFounderAdministration();
+        String before = stateOf(adminA);
+
+        int status = restrict(adminA, founderToken);
+
+        assertThat(status).as("désactiver le dernier administrateur effectif").isEqualTo(409);
+        assertThat(stateOf(adminA)).as("statut et version inchangés").isEqualTo(before);
+        assertThat(effectiveAdministrators()).isEqualTo(1);
+    }
+
+    @Test
+    void deactivating_an_administrator_while_another_remains_is_allowed() {
+        grantRole(adminA);
+        grantRole(adminB);
+        withoutFounderAdministration();
+
+        assertThat(restrict(adminB, founderToken)).isEqualTo(200);
+        assertThat(effectiveAdministrators()).isEqualTo(1);
+    }
+
+    @Test
+    void deactivating_an_ordinary_user_is_never_blocked_by_the_rule() {
+        withoutFounderAdministration();
+        String ordinary = employee("ordinary");
+
+        assertThat(effectiveAdministrators()).as("aucun administrateur effectif").isZero();
+        assertThat(restrict(ordinary, founderToken)).isEqualTo(200);
+    }
+
+    @Test
+    void two_administrators_deactivating_each_other_never_both_succeed() {
+        grantRole(adminA);
+        grantRole(adminB);
+        withoutFounderAdministration();
+        String tokenOfA = tokenOf("admin-a");
+        String tokenOfB = tokenOf("admin-b");
+
+        List<Integer> statuses = concurrently(
+                () -> restrict(adminB, tokenOfA),
+                () -> restrict(adminA, tokenOfB));
+
+        assertThat(statuses).containsExactlyInAnyOrder(200, 409);
+        assertThat(effectiveAdministrators()).isEqualTo(1);
+    }
+
+    @Test
+    void a_deactivation_and_a_role_removal_are_serialized_together() {
+        grantRole(adminA);
+        grantRole(adminB);
+        withoutFounderAdministration();
+        String tokenOfA = tokenOf("admin-a");
+        String tokenOfB = tokenOf("admin-b");
+
+        List<Integer> statuses = concurrently(
+                () -> removeRole(adminB, tokenOfA),
+                () -> restrict(adminA, tokenOfB));
+
+        assertThat(statuses).containsExactlyInAnyOrder(200, 409);
+        assertThat(effectiveAdministrators()).isEqualTo(1);
+    }
+
     // ---------- Outils ----------
 
     private List<Integer> concurrently(Supplier<Integer> first, Supplier<Integer> second) {
@@ -251,6 +317,16 @@ class LastSpaceAdministratorConcurrencyPostgresIntegrationTest extends TasPostgr
                 organizationId, spaceId)
                 + fixture.count("SELECT COUNT(*) FROM group_assignments WHERE org_id = ? AND space_id = ? AND group_code = 'G_SPACE_ADMINS'",
                 organizationId, spaceId);
+    }
+
+    private int restrict(String userId, String token) {
+        return fixture.postJson(USERS + "/" + userId + "/deactivate", token, "{\"reason\":\"SEC-HUNT-06\"}")
+                .statusCode();
+    }
+
+    private String stateOf(String userId) {
+        return jdbc.queryForObject("SELECT status || '#' || version FROM users WHERE id = ?", String.class,
+                UUID.fromString(userId));
     }
 
     private int removeRole(String userId, String token) {

@@ -16,6 +16,9 @@ public interface SpaceAdministrationRepository {
      */
     void lockAdministrationOf(UUID spaceId);
 
+    /** Vrai si l'Account est un administrateur effectif du Space. */
+    boolean isEffectiveAdministrator(UUID orgId, UUID spaceId, UUID accountId);
+
     /** Administrateurs effectifs du Space, l'Account donné exclu. */
     long countEffectiveAdministratorsOtherThan(UUID orgId, UUID spaceId, UUID accountId);
 }

@@ -83,6 +83,36 @@ class LastSpaceAdministratorGuardTest {
         org.assertj.core.api.Assertions.assertThat(readOtherPath).isTrue();
     }
 
+    @Test
+    void restricting_the_last_effective_administrator_is_refused() {
+        when(administration.isEffectiveAdministrator(ORG_ID, SPACE_ID, TARGET)).thenReturn(true);
+        when(administration.countEffectiveAdministratorsOtherThan(ORG_ID, SPACE_ID, TARGET)).thenReturn(0L);
+
+        assertThatThrownBy(() -> guard.assertRestrictionKeepsAnAdministrator(KEY, target(UserStatus.ACTIVE)))
+                .isInstanceOf(LastAdminRemovalException.class);
+        verify(administration).lockAdministrationOf(SPACE_ID);
+    }
+
+    @Test
+    void restricting_an_administrator_while_another_remains_is_allowed() {
+        when(administration.isEffectiveAdministrator(ORG_ID, SPACE_ID, TARGET)).thenReturn(true);
+        when(administration.countEffectiveAdministratorsOtherThan(ORG_ID, SPACE_ID, TARGET)).thenReturn(1L);
+
+        assertThatCode(() -> guard.assertRestrictionKeepsAnAdministrator(KEY, target(UserStatus.ACTIVE)))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void restricting_an_ordinary_or_inactive_user_never_counts_administrators() {
+        when(administration.isEffectiveAdministrator(ORG_ID, SPACE_ID, TARGET)).thenReturn(false);
+
+        assertThatCode(() -> guard.assertRestrictionKeepsAnAdministrator(KEY, target(UserStatus.ACTIVE)))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> guard.assertRestrictionKeepsAnAdministrator(KEY, target(UserStatus.SUSPENDED)))
+                .doesNotThrowAnyException();
+        verify(administration, never()).countEffectiveAdministratorsOtherThan(any(), any(), any());
+    }
+
     private static User target(UserStatus status) {
         User user = mock(User.class);
         lenient().when(user.getStatus()).thenReturn(status);

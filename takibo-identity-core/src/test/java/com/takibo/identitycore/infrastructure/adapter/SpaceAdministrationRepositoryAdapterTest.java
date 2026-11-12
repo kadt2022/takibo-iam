@@ -41,6 +41,15 @@ class SpaceAdministrationRepositoryAdapterTest {
     }
 
     @Test
+    void an_administrator_is_recognised_by_the_same_rule() {
+        when(em.createNativeQuery(contains("u.account_id = :accountId"))).thenReturn(query);
+        lenient().when(query.setParameter(anyString(), any())).thenReturn(query);
+        when(query.getSingleResult()).thenReturn(1L);
+
+        assertThat(adapter.isEffectiveAdministrator(ORG_ID, SPACE_ID, ACCOUNT_ID)).isTrue();
+    }
+
+    @Test
     void the_count_excludes_the_target_and_reads_both_paths() {
         when(em.createNativeQuery(contains("G_SPACE_ADMINS"))).thenReturn(query);
         lenient().when(query.setParameter(anyString(), any())).thenReturn(query);
