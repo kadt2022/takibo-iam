@@ -3,6 +3,7 @@
 **Statut** : EN REVUE — branche `fix/sec-hunt-05-introspection-boundary`  
 **Lot** : SECURITY FIX 01–05  
 **Conclusion** : **aucune divulgation non autorisée démontrée** ; aucun changement de comportement  
+**Décision de sécurité** : **OUVERTE** — droits d'introspection inter-tenant à trancher avant TAS-GRANTS-03-B / 04  
 **Origine** : SECURITY HUNT 01, découverte HUNT-05 (classée faible)  
 **Révision vérifiée** : `main@19998c4`
 
@@ -69,6 +70,14 @@ serveurs de ressources consulteront réellement l'introspection : faire du droit
 capacité explicite d'un client (RFC 7662 §4), puis restreindre les réponses à la frontière du
 client (§2.2). Le faire maintenant ajouterait du code et une règle sans aucun appelant légitime à
 protéger.
+
+### Décision laissée ouverte (revue du Sage)
+
+Cette PR ne ferme pas l'introspection inter-tenant ; elle fixe le contrat actuel. La doctrine
+n'est **pas** acceptée par défaut : la question « quels clients peuvent introspecter quels
+tokens » reste une décision de sécurité ouverte, à trancher avant les grants humains
+(TAS-GRANTS-03-B / 04), qui introduiront des refresh tokens opaques. Les tests de cette PR
+signaleront tout changement de comportement en attendant.
 
 ## 5. Tests
 
