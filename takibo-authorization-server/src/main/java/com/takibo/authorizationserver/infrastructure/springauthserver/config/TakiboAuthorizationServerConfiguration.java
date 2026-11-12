@@ -1,6 +1,8 @@
 package com.takibo.authorizationserver.infrastructure.springauthserver.config;
 
 import com.takibo.authorizationserver.infrastructure.springauthserver.properties.TasAuthorizationServerProperties;
+import com.takibo.authorizationserver.infrastructure.security.error.OAuth2HttpErrorWriter;
+import com.takibo.authorizationserver.infrastructure.springauthserver.authorization.RegisteredRedirectUriErrorHandler;
 import com.takibo.authorizationserver.infrastructure.springauthserver.client.TakiboJwtClientAssertionDecoderFactory;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -11,6 +13,7 @@ import org.springframework.security.config.annotation.web.configurers.oauth2.ser
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
 import org.springframework.security.oauth2.server.authorization.authentication.JwtClientAssertionAuthenticationProvider;
+import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -26,7 +29,9 @@ public class TakiboAuthorizationServerConfiguration {
     public SecurityFilterChain authorizationServerSecurityFilterChain(
             HttpSecurity http,
             TakiboJwtClientAssertionDecoderFactory jwtDecoderFactory,
-            CorsConfigurationSource corsConfigurationSource) {
+            CorsConfigurationSource corsConfigurationSource,
+            RegisteredClientRepository registeredClientRepository,
+            OAuth2HttpErrorWriter oAuth2HttpErrorWriter) {
         OAuth2AuthorizationServerConfigurer authorizationServerConfigurer = new OAuth2AuthorizationServerConfigurer();
         RequestMatcher endpointsMatcher = authorizationServerConfigurer.getEndpointsMatcher();
 
@@ -38,7 +43,12 @@ public class TakiboAuthorizationServerConfiguration {
                 .with(authorizationServerConfigurer, authorizationServer -> authorizationServer
                         .clientAuthentication(clientAuthentication -> clientAuthentication
                                 .authenticationProviders(providers -> configureJwtDecoderFactory(
-                                        providers, jwtDecoderFactory))))
+                                        providers, jwtDecoderFactory)))
+                        // SEC-TAS-04 : aucune erreur d'autorisation n'est envoyée vers une URI non
+                        // enregistrée (voir aussi AuthorizationCodeClientFilter, avant cette chaîne).
+                        .authorizationEndpoint(authorizationEndpoint -> authorizationEndpoint
+                                .errorResponseHandler(new RegisteredRedirectUriErrorHandler(
+                                        registeredClientRepository, oAuth2HttpErrorWriter))))
                 .authorizeHttpRequests(authorize -> authorize.anyRequest().authenticated())
                 .csrf(csrf -> csrf.ignoringRequestMatchers(endpointsMatcher));
 

@@ -5524,6 +5524,469 @@
           ]
         },
         {
+          "name": "400 - Authorize - Client machine vers une URI d attaquant refuse sur place",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/oauth2/authorize?response_type=code&client_id=bvt-client-{{runId}}&redirect_uri=https%3A%2F%2Fredirect-probe.invalid%2Fphish&state=bvt",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "oauth2",
+                "authorize"
+              ],
+              "query": [
+                {
+                  "key": "response_type",
+                  "value": "code"
+                },
+                {
+                  "key": "client_id",
+                  "value": "bvt-client-{{runId}}"
+                },
+                {
+                  "key": "redirect_uri",
+                  "value": "https%3A%2F%2Fredirect-probe.invalid%2Fphish"
+                },
+                {
+                  "key": "state",
+                  "value": "bvt"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "// SEC-TAS-04 : aucune URI non enregistree n'est une destination, meme pour une erreur.",
+                  "pm.test('400 - Authorize - Client machine vers une URI d attaquant refuse sur place', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "    pm.expect(pm.response.headers.has('Location'), 'aucune redirection').to.be.false;",
+                  "    pm.expect(pm.response.text()).to.not.include('redirect-probe');",
+                  "});",
+                  "pm.test('Erreur OAuth2 unauthorized_client ecrite sur place', function () {",
+                  "    pm.expect(pm.response.json().error).to.eql('unauthorized_client');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "followRedirects": false
+          }
+        },
+        {
+          "name": "400 - Authorize - Client machine sans redirect_uri refuse sans erreur 500",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/oauth2/authorize?response_type=code&client_id=bvt-client-{{runId}}&state=bvt",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "oauth2",
+                "authorize"
+              ],
+              "query": [
+                {
+                  "key": "response_type",
+                  "value": "code"
+                },
+                {
+                  "key": "client_id",
+                  "value": "bvt-client-{{runId}}"
+                },
+                {
+                  "key": "state",
+                  "value": "bvt"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "// SEC-TAS-04 : aucune URI non enregistree n'est une destination, meme pour une erreur.",
+                  "pm.test('400 - Authorize - Client machine sans redirect_uri refuse sans erreur 500', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "    pm.expect(pm.response.headers.has('Location'), 'aucune redirection').to.be.false;",
+                  "    pm.expect(pm.response.text()).to.not.include('redirect-probe');",
+                  "});",
+                  "pm.test('Erreur OAuth2 unauthorized_client ecrite sur place', function () {",
+                  "    pm.expect(pm.response.json().error).to.eql('unauthorized_client');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "followRedirects": false
+          }
+        },
+        {
+          "name": "400 - Authorize - Client plateforme vers une URI d attaquant refuse sur place",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/oauth2/authorize?response_type=code&client_id=postman-client&redirect_uri=https%3A%2F%2Fredirect-probe.invalid%2Fphish&state=bvt",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "oauth2",
+                "authorize"
+              ],
+              "query": [
+                {
+                  "key": "response_type",
+                  "value": "code"
+                },
+                {
+                  "key": "client_id",
+                  "value": "postman-client"
+                },
+                {
+                  "key": "redirect_uri",
+                  "value": "https%3A%2F%2Fredirect-probe.invalid%2Fphish"
+                },
+                {
+                  "key": "state",
+                  "value": "bvt"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "// SEC-TAS-04 : aucune URI non enregistree n'est une destination, meme pour une erreur.",
+                  "pm.test('400 - Authorize - Client plateforme vers une URI d attaquant refuse sur place', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "    pm.expect(pm.response.headers.has('Location'), 'aucune redirection').to.be.false;",
+                  "    pm.expect(pm.response.text()).to.not.include('redirect-probe');",
+                  "});",
+                  "pm.test('Erreur OAuth2 unauthorized_client ecrite sur place', function () {",
+                  "    pm.expect(pm.response.json().error).to.eql('unauthorized_client');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "followRedirects": false
+          }
+        },
+        {
+          "name": "400 - Authorize - Client inconnu refuse sur place",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/oauth2/authorize?response_type=code&client_id=bvt-inconnu-{{runId}}&redirect_uri=https%3A%2F%2Fredirect-probe.invalid%2Fphish",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "oauth2",
+                "authorize"
+              ],
+              "query": [
+                {
+                  "key": "response_type",
+                  "value": "code"
+                },
+                {
+                  "key": "client_id",
+                  "value": "bvt-inconnu-{{runId}}"
+                },
+                {
+                  "key": "redirect_uri",
+                  "value": "https%3A%2F%2Fredirect-probe.invalid%2Fphish"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "// SEC-TAS-04 : aucune URI non enregistree n'est une destination, meme pour une erreur.",
+                  "pm.test('400 - Authorize - Client inconnu refuse sur place', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "    pm.expect(pm.response.headers.has('Location'), 'aucune redirection').to.be.false;",
+                  "    pm.expect(pm.response.text()).to.not.include('redirect-probe');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "followRedirects": false
+          }
+        },
+        {
+          "name": "201 - Client - Client web authorization_code cree",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{founder_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orgs/{{organizationId}}/spaces/{{spaceId}}/clients",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orgs",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "clients"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientId\": \"bvt-web-{{runId}}\",\n  \"clientName\": \"BVT Web\",\n  \"clientType\": \"CONFIDENTIAL\",\n  \"grantTypes\": [\"authorization_code\"],\n  \"redirectUris\": [\"https://app.bvt.test/callback\"],\n  \"scopes\": [\"api.read\"]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "pm.test('201 - Client - Client web authorization_code cree', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "400 - Authorize - Client web vers une URI non enregistree refuse sur place",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/oauth2/authorize?response_type=code&client_id=bvt-web-{{runId}}&redirect_uri=https%3A%2F%2Fredirect-probe.invalid%2Fphish&state=bvt&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "oauth2",
+                "authorize"
+              ],
+              "query": [
+                {
+                  "key": "response_type",
+                  "value": "code"
+                },
+                {
+                  "key": "client_id",
+                  "value": "bvt-web-{{runId}}"
+                },
+                {
+                  "key": "redirect_uri",
+                  "value": "https%3A%2F%2Fredirect-probe.invalid%2Fphish"
+                },
+                {
+                  "key": "state",
+                  "value": "bvt"
+                },
+                {
+                  "key": "code_challenge",
+                  "value": "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+                },
+                {
+                  "key": "code_challenge_method",
+                  "value": "S256"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "// SEC-TAS-04 : aucune URI non enregistree n'est une destination, meme pour une erreur.",
+                  "pm.test('400 - Authorize - Client web vers une URI non enregistree refuse sur place', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "    pm.expect(pm.response.headers.has('Location'), 'aucune redirection').to.be.false;",
+                  "    pm.expect(pm.response.text()).to.not.include('redirect-probe');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "followRedirects": false
+          }
+        },
+        {
+          "name": "400 - Authorize - Client web vers une variante de son URI refuse sur place",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/oauth2/authorize?response_type=code&client_id=bvt-web-{{runId}}&redirect_uri=https%3A%2F%2Fapp.bvt.test%2Fcallback%3Fnext%3Dhttps%3A%2F%2Fredirect-probe.invalid&state=bvt&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "oauth2",
+                "authorize"
+              ],
+              "query": [
+                {
+                  "key": "response_type",
+                  "value": "code"
+                },
+                {
+                  "key": "client_id",
+                  "value": "bvt-web-{{runId}}"
+                },
+                {
+                  "key": "redirect_uri",
+                  "value": "https%3A%2F%2Fapp.bvt.test%2Fcallback%3Fnext%3Dhttps%3A%2F%2Fredirect-probe.invalid"
+                },
+                {
+                  "key": "state",
+                  "value": "bvt"
+                },
+                {
+                  "key": "code_challenge",
+                  "value": "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+                },
+                {
+                  "key": "code_challenge_method",
+                  "value": "S256"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "// SEC-TAS-04 : aucune URI non enregistree n'est une destination, meme pour une erreur.",
+                  "pm.test('400 - Authorize - Client web vers une variante de son URI refuse sur place', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "    pm.expect(pm.response.headers.has('Location'), 'aucune redirection').to.be.false;",
+                  "    pm.expect(pm.response.text()).to.not.include('redirect-probe');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "followRedirects": false
+          }
+        },
+        {
+          "name": "401 - Authorize - Client web avec son URI exige un utilisateur authentifie",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/oauth2/authorize?response_type=code&client_id=bvt-web-{{runId}}&redirect_uri=https%3A%2F%2Fapp.bvt.test%2Fcallback&state=bvt&scope=api.read&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "oauth2",
+                "authorize"
+              ],
+              "query": [
+                {
+                  "key": "response_type",
+                  "value": "code"
+                },
+                {
+                  "key": "client_id",
+                  "value": "bvt-web-{{runId}}"
+                },
+                {
+                  "key": "redirect_uri",
+                  "value": "https%3A%2F%2Fapp.bvt.test%2Fcallback"
+                },
+                {
+                  "key": "state",
+                  "value": "bvt"
+                },
+                {
+                  "key": "scope",
+                  "value": "api.read"
+                },
+                {
+                  "key": "code_challenge",
+                  "value": "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+                },
+                {
+                  "key": "code_challenge_method",
+                  "value": "S256"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('takiboHelpers'));",
+                  "// SEC-TAS-04 : aucune URI non enregistree n'est une destination, meme pour une erreur.",
+                  "pm.test('401 - Authorize - Client web avec son URI exige un utilisateur authentifie', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "    pm.expect(pm.response.headers.has('Location'), 'aucune redirection').to.be.false;",
+                  "    pm.expect(pm.response.text()).to.not.include('redirect-probe');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "followRedirects": false
+          }
+        },
+        {
           "name": "400 - Client - client_credentials refuse toute URI de redirection",
           "request": {
             "method": "POST",
