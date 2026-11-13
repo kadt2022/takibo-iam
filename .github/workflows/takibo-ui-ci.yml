@@ -41,7 +41,7 @@ jobs:
       backend: ${{ steps.detect.outputs.backend }}
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -101,7 +101,7 @@ jobs:
         working-directory: takibo-ui
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v6
         with:
@@ -129,7 +129,7 @@ jobs:
         working-directory: takibo-ui
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v6
         with:
@@ -182,7 +182,7 @@ jobs:
         working-directory: takibo-ui
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v6
         with:
@@ -204,7 +204,7 @@ jobs:
       pull-requests: read
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           # Historique complet : Sonar attribue le « nouveau code » à partir de git.
           fetch-depth: 0
@@ -261,7 +261,7 @@ jobs:
         working-directory: takibo-ui
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v6
         with:
@@ -297,7 +297,7 @@ jobs:
       contents: read
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-java@v5
         with:
